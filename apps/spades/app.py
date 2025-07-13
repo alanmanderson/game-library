@@ -1,6 +1,11 @@
 from flask import Flask
+from flask_sqlalchemy import SQLAlchemy
+
 
 app = Flask(__name__)
+
+app.config.from_object('config')
+db = SQLAlchemy(app)
 
 @app.route('/')
 def hello_world():
@@ -8,7 +13,3 @@ def hello_world():
 
 if __name__ == '__main__':
     app.run(debug=True)
-from flask_sqlalchemy import SQLAlchemy
-
-app.config.from_object('config')
-db = SQLAlchemy(app)
