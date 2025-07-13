@@ -1,13 +1,13 @@
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
 
 
 app = Flask(__name__)
 
 app.config.from_object('config')
 db = SQLAlchemy(app)
-
-@app.route('/')
+migrate = Migrate(app, db)
 def hello_world():
     return 'Hello, World!'
 
