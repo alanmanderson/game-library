@@ -54,6 +54,12 @@ Refer to `docs/design.md` for all architectural and design decisions. It is the 
 
 When making implementation choices (data modeling, API shape, WebSocket events, state transitions), consult `docs/design.md` first and stay consistent with the contracts defined there.
 
+## Code Style
+
+- Keep files short and focused. Split into more files rather than letting any single file grow large.
+- Keep functions simple and easy to follow.
+- Avoid unnecessary abstractions — prefer straightforward, direct code over layers of indirection. The overall design should stay simple.
+
 ## Pinochle Rules Reference
 
 Standard double-deck Pinochle uses 48 cards (two copies each of 9, 10, J, Q, K, A in all four suits). Typical variants are 4-player partnership or 3-player cutthroat.
