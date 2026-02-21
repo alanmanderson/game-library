@@ -1,9 +1,12 @@
+import random
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.websockets import WebSocket
 
+from app.engine.deck import SEATS, shuffle_and_deal
 from app.models.game import Game
 from app.models.user import User
 from app.websocket.connection_manager import manager
@@ -30,6 +33,8 @@ async def handle_message(
 
     if action == "SELECT_SEAT":
         await handle_select_seat(websocket, payload, room_code, user_id, db)
+    elif action == "START_GAME":
+        await handle_start_game(websocket, room_code, user_id, db)
     else:
         await manager.send_personal(websocket, {
             "event": "ERROR",
@@ -96,6 +101,97 @@ async def handle_select_seat(
     await manager.broadcast(room_code, {
         "event": "LOBBY_STATE_UPDATED",
         "payload": {"seats": seats},
+    })
+
+
+async def handle_start_game(
+    websocket: WebSocket,
+    room_code: str,
+    user_id: uuid.UUID,
+    db: AsyncSession,
+):
+    result = await db.execute(
+        select(Game).where(Game.room_code == room_code, Game.status == "IN_PROGRESS")
+    )
+    game = result.scalar_one_or_none()
+    if game is None:
+        await manager.send_personal(websocket, {
+            "event": "ERROR",
+            "payload": {"message": "Game not found"},
+        })
+        return
+
+    phase = (game.current_state_json or {}).get("phase")
+    if phase != "LOBBY_WAITING":
+        await manager.send_personal(websocket, {
+            "event": "ERROR",
+            "payload": {"message": "Game is not in the lobby phase"},
+        })
+        return
+
+    # Validate all 4 seats are occupied
+    for col in SEAT_COLUMNS.values():
+        if getattr(game, col) is None:
+            await manager.send_personal(websocket, {
+                "event": "ERROR",
+                "payload": {"message": "All seats must be occupied before starting"},
+            })
+            return
+
+    # Deal cards
+    player_hands = shuffle_and_deal()
+
+    # Pick random dealer; first bidder is to dealer's left
+    dealer_seat = random.choice(SEATS)
+    dealer_index = SEATS.index(dealer_seat)
+    first_bidder = SEATS[(dealer_index + 1) % 4]
+
+    # Build game state
+    game.current_state_json = {
+        "room_code": room_code,
+        "phase": "BIDDING",
+        "game_scores": {"NS": 0, "EW": 0},
+        "current_hand": {
+            "hand_number": 1,
+            "dealer_seat": dealer_seat,
+            "bidding": {
+                "winning_bid": None,
+                "winning_seat": None,
+                "is_shoot_the_moon": False,
+                "next_to_act_seat": first_bidder,
+                "passed_seats": [],
+            },
+        },
+        "player_hands": player_hands,
+    }
+    game.started_at = datetime.now(timezone.utc)
+    await db.flush()
+
+    # Build seat -> user_id mapping for targeted sends
+    seat_to_user_id = {
+        seat: getattr(game, col) for seat, col in SEAT_COLUMNS.items()
+    }
+
+    # Send private HAND_DEALT to each connected player
+    connections = manager.get_connections(room_code)
+    for conn in connections:
+        for seat, uid in seat_to_user_id.items():
+            if conn.user_id == uid:
+                await manager.send_personal(conn.websocket, {
+                    "event": "HAND_DEALT",
+                    "payload": {"cards": player_hands[seat]},
+                })
+                break
+
+    # Broadcast BIDDING_TURN
+    await manager.broadcast(room_code, {
+        "event": "BIDDING_TURN",
+        "payload": {
+            "current_highest_bid": None,
+            "highest_bidder_seat": None,
+            "next_to_act_seat": first_bidder,
+            "minimum_valid_bid": 20,
+        },
     })
 
 

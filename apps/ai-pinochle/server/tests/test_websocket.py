@@ -21,6 +21,35 @@ async def _create_game_and_get_token(client: AsyncClient, auth_headers: dict) ->
     return room_code, token
 
 
+async def _register_user(client: AsyncClient, username: str) -> str:
+    """Register a user and return their token."""
+    resp = await client.post(
+        "/auth/register",
+        json={"username": username, "password": "securepass123"},
+    )
+    return resp.json()["access_token"]
+
+
+async def _fill_seats_and_get_tokens(
+    client: AsyncClient, auth_headers: dict
+) -> tuple[str, list[str]]:
+    """Create a game, register 4 users, seat them all, return (room_code, [token1..4])."""
+    room_code, token1 = await _create_game_and_get_token(client, auth_headers)
+    tokens = [token1]
+    seats = ["NORTH", "EAST", "SOUTH", "WEST"]
+
+    for i in range(3):
+        tokens.append(await _register_user(client, f"player{i + 2}"))
+
+    sync_client = _sync_client()
+    for token, seat in zip(tokens, seats):
+        with sync_client.websocket_connect(f"/ws/{room_code}?token={token}") as ws:
+            ws.send_json({"action": "SELECT_SEAT", "payload": {"seat": seat}})
+            ws.receive_json()  # LOBBY_STATE_UPDATED
+
+    return room_code, tokens
+
+
 async def test_websocket_connect_and_select_seat(client: AsyncClient, auth_headers: dict):
     room_code, token = await _create_game_and_get_token(client, auth_headers)
 
@@ -133,3 +162,91 @@ async def test_websocket_reselect_same_seat(client: AsyncClient, auth_headers: d
         data = ws.receive_json()
         assert data["event"] == "LOBBY_STATE_UPDATED"
         assert data["payload"]["seats"]["EAST"] == "testplayer"
+
+
+async def test_start_game_success(client: AsyncClient, auth_headers: dict):
+    """Fill all 4 seats, START_GAME → receive HAND_DEALT then BIDDING_TURN."""
+    room_code, tokens = await _fill_seats_and_get_tokens(client, auth_headers)
+
+    sync_client = _sync_client()
+    with sync_client.websocket_connect(f"/ws/{room_code}?token={tokens[0]}") as ws:
+        ws.send_json({"action": "START_GAME", "payload": {}})
+        hand_dealt = ws.receive_json()
+        assert hand_dealt["event"] == "HAND_DEALT"
+        assert len(hand_dealt["payload"]["cards"]) == 12
+
+        bidding_turn = ws.receive_json()
+        assert bidding_turn["event"] == "BIDDING_TURN"
+        assert bidding_turn["payload"]["minimum_valid_bid"] == 20
+        assert bidding_turn["payload"]["current_highest_bid"] is None
+        assert bidding_turn["payload"]["next_to_act_seat"] in [
+            "NORTH", "EAST", "SOUTH", "WEST"
+        ]
+
+
+async def test_start_game_seats_not_full(client: AsyncClient, auth_headers: dict):
+    """Only 1 seat filled → ERROR."""
+    room_code, token = await _create_game_and_get_token(client, auth_headers)
+
+    sync_client = _sync_client()
+    with sync_client.websocket_connect(f"/ws/{room_code}?token={token}") as ws:
+        ws.send_json({"action": "SELECT_SEAT", "payload": {"seat": "NORTH"}})
+        ws.receive_json()  # LOBBY_STATE_UPDATED
+
+        ws.send_json({"action": "START_GAME", "payload": {}})
+        data = ws.receive_json()
+        assert data["event"] == "ERROR"
+        assert "seats must be occupied" in data["payload"]["message"].lower()
+
+
+async def test_start_game_wrong_phase(client: AsyncClient, auth_headers: dict):
+    """Game not in LOBBY_WAITING phase → ERROR."""
+    room_code, tokens = await _fill_seats_and_get_tokens(client, auth_headers)
+
+    sync_client = _sync_client()
+    # Start the game first
+    with sync_client.websocket_connect(f"/ws/{room_code}?token={tokens[0]}") as ws:
+        ws.send_json({"action": "START_GAME", "payload": {}})
+        ws.receive_json()  # HAND_DEALT
+        ws.receive_json()  # BIDDING_TURN
+
+    # Try to start again — phase is now BIDDING
+    with sync_client.websocket_connect(f"/ws/{room_code}?token={tokens[0]}") as ws:
+        ws.send_json({"action": "START_GAME", "payload": {}})
+        data = ws.receive_json()
+        assert data["event"] == "ERROR"
+        assert "lobby" in data["payload"]["message"].lower()
+
+
+async def test_start_game_unique_hands(client: AsyncClient, auth_headers: dict):
+    """All 4 players get different cards, 48 total."""
+    room_code, tokens = await _fill_seats_and_get_tokens(client, auth_headers)
+
+    sync_client = _sync_client()
+    all_cards = []
+    contexts = []
+    websockets = []
+    for token in tokens:
+        ctx = sync_client.websocket_connect(f"/ws/{room_code}?token={token}")
+        ws = ctx.__enter__()
+        contexts.append(ctx)
+        websockets.append(ws)
+
+    try:
+        websockets[0].send_json({"action": "START_GAME", "payload": {}})
+
+        for ws in websockets:
+            data = ws.receive_json()
+            assert data["event"] == "HAND_DEALT"
+            cards = data["payload"]["cards"]
+            assert len(cards) == 12
+            all_cards.extend(cards)
+
+        assert len(all_cards) == 48
+        from collections import Counter
+        counts = Counter(all_cards)
+        for card, count in counts.items():
+            assert count == 2, f"{card} appears {count} times, expected 2"
+    finally:
+        for ctx in contexts:
+            ctx.__exit__(None, None, None)
