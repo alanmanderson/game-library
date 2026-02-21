@@ -1,9 +1,19 @@
+from unittest.mock import patch
+
 import bcrypt
 from jose import jwt
 from sqlalchemy import select
 
 from app.config import settings
 from app.models.user import User
+
+GOOGLE_VERIFY = "app.api.auth.google_id_token.verify_oauth2_token"
+GOOGLE_SUB = "google-uid-12345"
+GOOGLE_EMAIL = "googleuser@gmail.com"
+
+
+def _google_id_info(sub=GOOGLE_SUB, email=GOOGLE_EMAIL):
+    return {"sub": sub, "email": email}
 
 
 async def test_register_success_201(client):
@@ -131,4 +141,50 @@ async def test_login_missing_username_422(client):
 
 async def test_login_missing_password_422(client):
     resp = await client.post("/auth/login", json={"username": "someone"})
+    assert resp.status_code == 422
+
+
+# --- Google auth tests ---
+
+
+async def test_google_auth_new_user_200(client):
+    with patch(GOOGLE_VERIFY, return_value=_google_id_info()):
+        resp = await client.post("/auth/google", json={"token": "valid-token"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["username"] == GOOGLE_EMAIL
+    assert data["email"] == GOOGLE_EMAIL
+    assert "access_token" in data
+
+
+async def test_google_auth_existing_user_200(client):
+    with patch(GOOGLE_VERIFY, return_value=_google_id_info()):
+        resp1 = await client.post("/auth/google", json={"token": "valid-token"})
+        resp2 = await client.post("/auth/google", json={"token": "valid-token"})
+    assert resp2.status_code == 200
+    assert resp1.json()["id"] == resp2.json()["id"]
+
+
+async def test_google_auth_returns_email(client):
+    with patch(GOOGLE_VERIFY, return_value=_google_id_info(email="custom@example.com")):
+        resp = await client.post("/auth/google", json={"token": "valid-token"})
+    assert resp.json()["email"] == "custom@example.com"
+
+
+async def test_google_auth_valid_jwt(client):
+    with patch(GOOGLE_VERIFY, return_value=_google_id_info()):
+        resp = await client.post("/auth/google", json={"token": "valid-token"})
+    data = resp.json()
+    payload = jwt.decode(data["access_token"], settings.secret_key, algorithms=["HS256"])
+    assert payload["sub"] == data["id"]
+
+
+async def test_google_auth_invalid_token_401(client):
+    with patch(GOOGLE_VERIFY, side_effect=ValueError("Invalid token")):
+        resp = await client.post("/auth/google", json={"token": "bad-token"})
+    assert resp.status_code == 401
+
+
+async def test_google_auth_missing_token_422(client):
+    resp = await client.post("/auth/google", json={})
     assert resp.status_code == 422
