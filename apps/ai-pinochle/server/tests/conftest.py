@@ -12,6 +12,7 @@ from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.models.base import Base
+from app.models.game import Game
 from app.models.user import User
 
 
@@ -23,6 +24,12 @@ User.__table__.c.created_at.default = None
 User.__table__.c.updated_at.server_default = None
 User.__table__.c.updated_at.default = None
 
+# Patch Game model column defaults for SQLite compatibility
+Game.__table__.c.id.server_default = None
+Game.__table__.c.id.default = None
+Game.__table__.c.ns_total_score.server_default = None
+Game.__table__.c.ew_total_score.server_default = None
+
 
 @event.listens_for(User, "init")
 def _set_user_defaults(target, args, kwargs):
@@ -33,6 +40,16 @@ def _set_user_defaults(target, args, kwargs):
         target.created_at = now
     if "updated_at" not in kwargs:
         target.updated_at = now
+
+
+@event.listens_for(Game, "init")
+def _set_game_defaults(target, args, kwargs):
+    if "id" not in kwargs:
+        target.id = uuid.uuid4()
+    if "ns_total_score" not in kwargs:
+        target.ns_total_score = 0
+    if "ew_total_score" not in kwargs:
+        target.ew_total_score = 0
 
 
 engine = create_async_engine("sqlite+aiosqlite://", echo=False)
@@ -70,3 +87,13 @@ async def client(db_session: AsyncSession):
         yield ac
 
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+async def auth_headers(client: AsyncClient) -> dict[str, str]:
+    resp = await client.post(
+        "/auth/register",
+        json={"username": "testplayer", "password": "securepass123"},
+    )
+    token = resp.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
