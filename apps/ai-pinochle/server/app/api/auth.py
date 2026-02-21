@@ -5,6 +5,7 @@ import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, status
 from jose import jwt
 from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +20,11 @@ class RegisterRequest(BaseModel):
     username: str = Field(min_length=3, max_length=30, pattern=r"^[a-zA-Z0-9_]+$")
     password: str = Field(min_length=8)
     email: EmailStr | None = None
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
 
 
 class AuthResponse(BaseModel):
@@ -54,6 +60,26 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
             detail = "email already taken"
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
 
+    access_token = _create_access_token(user.id)
+    return AuthResponse(
+        id=user.id,
+        username=user.username,
+        email=user.email,
+        access_token=access_token,
+    )
+
+
+@router.post("/login", response_model=AuthResponse)
+async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.username == body.username))
+    user = result.scalar_one_or_none()
+    if user is None or not bcrypt.checkpw(
+        body.password.encode(), user.password_hash.encode()
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="invalid username or password",
+        )
     access_token = _create_access_token(user.id)
     return AuthResponse(
         id=user.id,
