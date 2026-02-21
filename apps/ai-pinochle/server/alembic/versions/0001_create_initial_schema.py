@@ -17,15 +17,21 @@ down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-# PostgreSQL ENUM types defined once at module level so upgrade/downgrade share them.
-game_status_enum = sa.Enum("IN_PROGRESS", "COMPLETED", "ABANDONED", name="game_status")
-suit_enum = sa.Enum("CLUBS", "DIAMONDS", "HEARTS", "SPADES", name="suit")
+# Reference-only ENUM objects (create_type=False means SQLAlchemy never issues
+# CREATE/DROP TYPE for these; we manage the types explicitly via op.execute).
+game_status = postgresql.ENUM(
+    "IN_PROGRESS", "COMPLETED", "ABANDONED", name="game_status", create_type=False
+)
+suit = postgresql.ENUM(
+    "CLUBS", "DIAMONDS", "HEARTS", "SPADES", name="suit", create_type=False
+)
 
 
 def upgrade() -> None:
-    bind = op.get_bind()
-    game_status_enum.create(bind, checkfirst=True)
-    suit_enum.create(bind, checkfirst=True)
+    # Create ENUM types via raw SQL so Alembic's transactional DDL controls
+    # them cleanly and there is no double-create risk from SQLAlchemy events.
+    op.execute("CREATE TYPE game_status AS ENUM ('IN_PROGRESS', 'COMPLETED', 'ABANDONED')")
+    op.execute("CREATE TYPE suit AS ENUM ('CLUBS', 'DIAMONDS', 'HEARTS', 'SPADES')")
 
     # ------------------------------------------------------------------
     # users
@@ -72,12 +78,7 @@ def upgrade() -> None:
             server_default=sa.text("gen_random_uuid()"),
         ),
         sa.Column("room_code", sa.String(6), nullable=False),
-        sa.Column(
-            "status",
-            sa.Enum("IN_PROGRESS", "COMPLETED", "ABANDONED", name="game_status", create_type=False),
-            nullable=False,
-            server_default="IN_PROGRESS",
-        ),
+        sa.Column("status", game_status, nullable=False, server_default="IN_PROGRESS"),
         sa.Column(
             "north_player_id",
             postgresql.UUID(as_uuid=True),
@@ -143,11 +144,7 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.false(),
         ),
-        sa.Column(
-            "trump_suit",
-            sa.Enum("CLUBS", "DIAMONDS", "HEARTS", "SPADES", name="suit", create_type=False),
-            nullable=True,
-        ),
+        sa.Column("trump_suit", suit, nullable=True),
         sa.Column("ns_meld_score", sa.Integer(), nullable=True),
         sa.Column("ew_meld_score", sa.Integer(), nullable=True),
         sa.Column("ns_trick_score", sa.Integer(), nullable=True),
@@ -221,7 +218,7 @@ def upgrade() -> None:
             sa.ForeignKey("users.id", name="fk_tricks_won_by"),
             nullable=True,
         ),
-        # Card codes use single-letter rank (A/T/K/Q/J/9) + suit initial (H/S/D/C), e.g. "AH", "TS".
+        # Card codes: single-letter rank (A/T/K/Q/J/9) + suit initial (H/S/D/C), e.g. "AH", "TS".
         sa.Column("north_card", sa.String(2), nullable=True),
         sa.Column("east_card", sa.String(2), nullable=True),
         sa.Column("south_card", sa.String(2), nullable=True),
@@ -237,7 +234,5 @@ def downgrade() -> None:
     op.drop_table("hands")
     op.drop_table("games")
     op.drop_table("users")
-
-    bind = op.get_bind()
-    suit_enum.drop(bind, checkfirst=True)
-    game_status_enum.drop(bind, checkfirst=True)
+    op.execute("DROP TYPE IF EXISTS suit")
+    op.execute("DROP TYPE IF EXISTS game_status")
