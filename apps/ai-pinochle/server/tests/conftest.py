@@ -8,7 +8,7 @@ os.environ.setdefault("SECRET_KEY", "test-secret-key-for-unit-tests")
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import event
+from sqlalchemy import String, event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.models.base import Base
@@ -24,11 +24,12 @@ User.__table__.c.created_at.default = None
 User.__table__.c.updated_at.server_default = None
 User.__table__.c.updated_at.default = None
 
-# Patch Game model column defaults for SQLite compatibility
+# Patch Game model column defaults and enum type for SQLite compatibility
 Game.__table__.c.id.server_default = None
 Game.__table__.c.id.default = None
 Game.__table__.c.ns_total_score.server_default = None
 Game.__table__.c.ew_total_score.server_default = None
+Game.__table__.c.status.type = String()
 
 
 @event.listens_for(User, "init")
@@ -81,12 +82,17 @@ async def client(db_session: AsyncSession):
 
     app.dependency_overrides[get_db] = _override_get_db
 
+    # Allow WebSocket routes to reuse the test db session
+    test_session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    app.state._test_db_factory = test_session_factory
+
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
         yield ac
 
     app.dependency_overrides.clear()
+    del app.state._test_db_factory
 
 
 @pytest.fixture

@@ -1,8 +1,10 @@
 import random
 import string
+import uuid
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +18,13 @@ router = APIRouter()
 
 class CreateGameResponse(BaseModel):
     room_code: str
+
+
+class JoinGameResponse(BaseModel):
+    room_code: str
+    game_id: uuid.UUID
+    phase: str
+    seats: dict[str, str | None]
 
 
 def _generate_room_code() -> str:
@@ -43,3 +52,47 @@ async def create_game(
 
     # Extremely unlikely — all 10 attempts collided
     raise Exception("failed to generate unique room code")
+
+
+SEAT_COLUMNS = ["north", "east", "south", "west"]
+
+
+@router.post("/{room_code}/join", response_model=JoinGameResponse)
+async def join_game(
+    room_code: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Game).where(Game.room_code == room_code, Game.status == "IN_PROGRESS")
+    )
+    game = result.scalar_one_or_none()
+    if game is None:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    phase = (game.current_state_json or {}).get("phase")
+    if phase != "LOBBY_WAITING":
+        raise HTTPException(status_code=409, detail="Game already started")
+
+    seats: dict[str, str | None] = {}
+    player_ids = {
+        seat: getattr(game, f"{seat}_player_id") for seat in SEAT_COLUMNS
+    }
+
+    # Batch-fetch usernames for occupied seats
+    occupied_ids = [pid for pid in player_ids.values() if pid is not None]
+    id_to_username: dict[uuid.UUID, str] = {}
+    if occupied_ids:
+        rows = await db.execute(select(User).where(User.id.in_(occupied_ids)))
+        for u in rows.scalars():
+            id_to_username[u.id] = u.username
+
+    for seat, pid in player_ids.items():
+        seats[seat] = id_to_username.get(pid) if pid else None
+
+    return JoinGameResponse(
+        room_code=game.room_code,
+        game_id=game.id,
+        phase=phase,
+        seats=seats,
+    )

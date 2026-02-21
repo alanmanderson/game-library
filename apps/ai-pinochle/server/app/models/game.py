@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import ENUM, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -15,7 +15,10 @@ class Game(Base):
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
     room_code: Mapped[str] = mapped_column(String(6), unique=True, nullable=False)
-    status: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(
+        ENUM("IN_PROGRESS", "COMPLETED", "ABANDONED", name="game_status", create_type=False),
+        nullable=False,
+    )
     north_player_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
