@@ -130,11 +130,26 @@ The core loop ensuring all actions adhere to Pinochle rules. State lives in Redi
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
+| `POST` | `/auth/register` | Creates a new user account, returns JWT |
 | `POST` | `/auth/login` | Returns JWT |
 | `POST` | `/auth/google` | Returns JWT |
 | `GET` | `/users/{user_id}/stats` | Returns historical win/loss/trick records |
 | `POST` | `/games/create` | Initializes a game, returns `{ room_id: "A7BX" }` |
 | `POST` | `/games/{room_id}/join` | Validates room |
+
+#### `POST /auth/register`
+
+```json
+// Request body
+{ "username": "alice", "password": "s3cr3t!", "email": "alice@example.com" }
+
+// 201 Created
+{ "id": "uuid", "username": "alice", "email": "alice@example.com",
+  "access_token": "eyJ...", "token_type": "bearer" }
+
+// 409 Conflict — username or email already taken
+{ "detail": "username already taken" }
+```
 
 ### WebSocket Protocol (In-game JSON Payloads)
 
