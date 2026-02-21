@@ -1,0 +1,5 @@
+{
+  "name": "ai-pinochle",
+  "private": true,
+  "workspaces": ["mobile", "web", "shared"]
+}

@@ -4,7 +4,33 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-An AI-powered Pinochle card game (web-based, given the `/public` directory structure). No tech stack has been chosen yet.
+An AI-powered Pinochle card game. Tech stack: **React Native** (mobile, iOS + Android), **React** (web), **Python/FastAPI** (server).
+
+## Repository Structure
+
+```
+ai-pinochle/
+├── server/          # Python/FastAPI backend
+│   └── app/
+│       ├── api/         # REST routes (/auth, /games, /users)
+│       ├── websocket/   # WebSocket handlers + pub/sub
+│       ├── engine/      # Game engine & state machine
+│       ├── models/      # SQLAlchemy ORM models
+│       └── services/    # Redis client, auth helpers
+├── mobile/          # React Native app (iOS + Android)
+│   └── src/
+├── web/             # React web client
+│   └── src/
+├── shared/          # @pinochle/shared — TypeScript types for mobile + web
+│   └── src/
+│       ├── types/       # WebSocket event/payload types, card types
+│       └── constants/   # Card ranks/suits, game phase names, meld values
+├── docs/            # Project documentation (design.md, RULES.md)
+├── public/          # Card image assets (web-served; mobile loads via URL)
+└── package.json     # npm workspaces root (mobile, web, shared)
+```
+
+The `shared/` package is TypeScript-only. The Python server and JS clients share no runtime code.
 
 ## Card Assets
 
@@ -18,7 +44,7 @@ Note: As of project initialization, only 9s, 10s, and Aces are present (and only
 
 ## Design Decisions
 
-Refer to `design.md` for all architectural and design decisions. It is the source of truth for:
+Refer to `docs/design.md` for all architectural and design decisions. It is the source of truth for:
 - System architecture (thin client / authoritative server model)
 - Database schema (PostgreSQL tables: `users`, `games`, `hands`, `bids`, `tricks`)
 - Game engine state machine and its phases
@@ -26,7 +52,7 @@ Refer to `design.md` for all architectural and design decisions. It is the sourc
 - Redis state hydration and game resume flow
 - Lobby concurrency handling via `HSETNX`
 
-When making implementation choices (data modeling, API shape, WebSocket events, state transitions), consult `design.md` first and stay consistent with the contracts defined there.
+When making implementation choices (data modeling, API shape, WebSocket events, state transitions), consult `docs/design.md` first and stay consistent with the contracts defined there.
 
 ## Pinochle Rules Reference
 
