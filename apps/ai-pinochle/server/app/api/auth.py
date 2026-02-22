@@ -19,13 +19,12 @@ router = APIRouter()
 
 
 class RegisterRequest(BaseModel):
-    username: str = Field(min_length=3, max_length=30, pattern=r"^[a-zA-Z0-9_]+$")
+    email: EmailStr
     password: str = Field(min_length=8)
-    email: EmailStr | None = None
 
 
 class LoginRequest(BaseModel):
-    username: str
+    email: EmailStr
     password: str
 
 
@@ -52,19 +51,18 @@ def _create_access_token(user_id: uuid.UUID) -> str:
 @router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
 async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
     user = User(
-        username=body.username,
+        username=body.email,
         email=body.email,
         password_hash=bcrypt.hashpw(body.password.encode(), bcrypt.gensalt()).decode(),
     )
     db.add(user)
     try:
         await db.flush()
-    except IntegrityError as exc:
+    except IntegrityError:
         await db.rollback()
-        detail = "username already taken"
-        if exc.orig and "uq_users_email" in str(exc.orig):
-            detail = "email already taken"
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="email already taken"
+        )
 
     access_token = _create_access_token(user.id)
     return AuthResponse(
@@ -77,14 +75,14 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
 @router.post("/login", response_model=AuthResponse)
 async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.username == body.username))
+    result = await db.execute(select(User).where(User.email == body.email))
     user = result.scalar_one_or_none()
     if user is None or not bcrypt.checkpw(
         body.password.encode(), user.password_hash.encode()
     ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="invalid username or password",
+            detail="invalid email or password",
         )
     access_token = _create_access_token(user.id)
     return AuthResponse(

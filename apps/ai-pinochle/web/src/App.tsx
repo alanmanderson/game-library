@@ -8,7 +8,7 @@ function AppContent() {
   const { user } = useAuth();
 
   if (user) {
-    return <p>Welcome, {user.username}!</p>;
+    return <p>Welcome, {user.email}!</p>;
   }
 
   return <RegisterPage />;

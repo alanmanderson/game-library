@@ -13,26 +13,21 @@ interface RegisterResponse {
 }
 
 interface FieldErrors {
-  username?: string;
   password?: string;
   email?: string;
 }
 
-function validate(username: string, password: string, email: string): FieldErrors {
+function validate(email: string, password: string): FieldErrors {
   const errors: FieldErrors = {};
 
-  if (username.length < 3 || username.length > 30) {
-    errors.username = "Username must be 3-30 characters";
-  } else if (!/^[a-zA-Z0-9_]+$/.test(username)) {
-    errors.username = "Only letters, numbers, and underscores";
+  if (!email) {
+    errors.email = "Email is required";
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errors.email = "Invalid email address";
   }
 
   if (password.length < 8) {
     errors.password = "Password must be at least 8 characters";
-  }
-
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    errors.email = "Invalid email address";
   }
 
   return errors;
@@ -41,9 +36,8 @@ function validate(username: string, password: string, email: string): FieldError
 export function RegisterPage() {
   const { login } = useAuth();
 
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [serverError, setServerError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -52,16 +46,15 @@ export function RegisterPage() {
     e.preventDefault();
     setServerError("");
 
-    const errors = validate(username, password, email);
+    const errors = validate(email, password);
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) return;
 
     setSubmitting(true);
     try {
       const res = await post<RegisterResponse>("/auth/register", {
-        username,
+        email,
         password,
-        email: email || undefined,
       });
       login(res.access_token, {
         id: res.id,
@@ -106,16 +99,16 @@ export function RegisterPage() {
         <h1 className={styles.title}>Create Account</h1>
 
         <label className={styles.label}>
-          Username
+          Email
           <input
             className={styles.input}
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            autoComplete="username"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="email"
           />
-          {fieldErrors.username && (
-            <span className={styles.fieldError}>{fieldErrors.username}</span>
+          {fieldErrors.email && (
+            <span className={styles.fieldError}>{fieldErrors.email}</span>
           )}
         </label>
 
@@ -130,20 +123,6 @@ export function RegisterPage() {
           />
           {fieldErrors.password && (
             <span className={styles.fieldError}>{fieldErrors.password}</span>
-          )}
-        </label>
-
-        <label className={styles.label}>
-          Email <span className={styles.optional}>(optional)</span>
-          <input
-            className={styles.input}
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
-          />
-          {fieldErrors.email && (
-            <span className={styles.fieldError}>{fieldErrors.email}</span>
           )}
         </label>
 
