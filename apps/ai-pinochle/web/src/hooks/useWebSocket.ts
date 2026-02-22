@@ -12,6 +12,13 @@ interface UseWebSocketResult {
   connected: boolean;
 }
 
+function buildWsUrl(roomCode: string, token: string): string {
+  const path = `/ws/${roomCode}?token=${token}`;
+  if (WS_BASE) return `${WS_BASE}${path}`;
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  return `${proto}//${location.host}${path}`;
+}
+
 export function useWebSocket(
   roomCode: string,
   token: string,
@@ -21,9 +28,7 @@ export function useWebSocket(
   const [lastEvent, setLastEvent] = useState<WsEvent | null>(null);
 
   useEffect(() => {
-    const ws = new WebSocket(
-      `${WS_BASE}/ws/${roomCode}?token=${token}`,
-    );
+    const ws = new WebSocket(buildWsUrl(roomCode, token));
     wsRef.current = ws;
 
     ws.onopen = () => setConnected(true);
