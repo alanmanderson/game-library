@@ -1,3 +1,4 @@
+import copy
 import random
 import uuid
 from datetime import datetime, timezone
@@ -35,6 +36,8 @@ async def handle_message(
         await handle_select_seat(websocket, payload, room_code, user_id, db)
     elif action == "START_GAME":
         await handle_start_game(websocket, room_code, user_id, db)
+    elif action == "SUBMIT_BID":
+        await handle_submit_bid(websocket, payload, room_code, user_id, db)
     else:
         await manager.send_personal(websocket, {
             "event": "ERROR",
@@ -193,6 +196,156 @@ async def handle_start_game(
             "minimum_valid_bid": 20,
         },
     })
+
+
+def _next_active_bidder(current_seat: str, passed_seats: list[str]) -> str:
+    """Find next seat clockwise that hasn't passed."""
+    idx = SEATS.index(current_seat)
+    for offset in range(1, 5):
+        candidate = SEATS[(idx + offset) % 4]
+        if candidate not in passed_seats:
+            return candidate
+    raise ValueError("No active bidders remaining")
+
+
+async def handle_submit_bid(
+    websocket: WebSocket,
+    payload: dict,
+    room_code: str,
+    user_id: uuid.UUID,
+    db: AsyncSession,
+):
+    result = await db.execute(
+        select(Game).where(Game.room_code == room_code, Game.status == "IN_PROGRESS")
+    )
+    game = result.scalar_one_or_none()
+    if game is None:
+        await manager.send_personal(websocket, {
+            "event": "ERROR",
+            "payload": {"message": "Game not found"},
+        })
+        return
+
+    state = copy.deepcopy(game.current_state_json or {})
+    phase = state.get("phase")
+    if phase != "BIDDING":
+        await manager.send_personal(websocket, {
+            "event": "ERROR",
+            "payload": {"message": "Game is not in the bidding phase"},
+        })
+        return
+
+    hand = state["current_hand"]
+    bidding = hand["bidding"]
+    next_seat = bidding["next_to_act_seat"]
+
+    # Verify it's this player's turn
+    expected_user_id = getattr(game, SEAT_COLUMNS[next_seat])
+    if expected_user_id != user_id:
+        await manager.send_personal(websocket, {
+            "event": "ERROR",
+            "payload": {"message": "It is not your turn to bid"},
+        })
+        return
+
+    amount = payload.get("amount")
+    shoot_the_moon = payload.get("shoot_the_moon", False)
+    passed_seats = bidding["passed_seats"]
+    winning_bid = bidding["winning_bid"]
+    dealer_seat = hand["dealer_seat"]
+
+    if amount is None:
+        # Pass attempt
+        non_dealer_seats = [s for s in SEATS if s != dealer_seat]
+        all_others_passed = all(s in passed_seats for s in non_dealer_seats)
+        if next_seat == dealer_seat and all_others_passed and winning_bid is None:
+            await manager.send_personal(websocket, {
+                "event": "ERROR",
+                "payload": {"message": "Dealer must bid when all others have passed"},
+            })
+            return
+
+        passed_seats.append(next_seat)
+        bidding["passed_seats"] = passed_seats
+
+        if len(passed_seats) == 3:
+            if winning_bid is None:
+                bidding["winning_bid"] = 20
+                bidding["winning_seat"] = dealer_seat
+            state["phase"] = "NAMING_TRUMP"
+            game.current_state_json = state
+            await db.flush()
+
+            await manager.broadcast(room_code, {
+                "event": "BIDDING_COMPLETED",
+                "payload": {
+                    "winning_seat": bidding["winning_seat"],
+                    "winning_bid": bidding["winning_bid"],
+                    "is_shoot_the_moon": bidding["is_shoot_the_moon"],
+                },
+            })
+        else:
+            bidding["next_to_act_seat"] = _next_active_bidder(next_seat, passed_seats)
+            game.current_state_json = state
+            await db.flush()
+
+            minimum = (winning_bid + 1) if winning_bid is not None else 20
+            await manager.broadcast(room_code, {
+                "event": "BIDDING_TURN",
+                "payload": {
+                    "current_highest_bid": winning_bid,
+                    "highest_bidder_seat": bidding["winning_seat"],
+                    "next_to_act_seat": bidding["next_to_act_seat"],
+                    "minimum_valid_bid": minimum,
+                },
+            })
+    else:
+        if not isinstance(amount, int):
+            await manager.send_personal(websocket, {
+                "event": "ERROR",
+                "payload": {"message": "Bid amount must be an integer"},
+            })
+            return
+
+        minimum = (winning_bid + 1) if winning_bid is not None else 20
+        if amount < minimum:
+            await manager.send_personal(websocket, {
+                "event": "ERROR",
+                "payload": {"message": f"Bid must be at least {minimum}"},
+            })
+            return
+
+        bidding["winning_bid"] = amount
+        bidding["winning_seat"] = next_seat
+
+        if shoot_the_moon:
+            bidding["is_shoot_the_moon"] = True
+            state["phase"] = "NAMING_TRUMP"
+            game.current_state_json = state
+            await db.flush()
+
+            await manager.broadcast(room_code, {
+                "event": "BIDDING_COMPLETED",
+                "payload": {
+                    "winning_seat": next_seat,
+                    "winning_bid": amount,
+                    "is_shoot_the_moon": True,
+                },
+            })
+        else:
+            bidding["next_to_act_seat"] = _next_active_bidder(next_seat, passed_seats)
+            game.current_state_json = state
+            await db.flush()
+
+            await manager.broadcast(room_code, {
+                "event": "BIDDING_TURN",
+                "payload": {
+                    "current_highest_bid": amount,
+                    "highest_bidder_seat": next_seat,
+                    "next_to_act_seat": bidding["next_to_act_seat"],
+                    "minimum_valid_bid": amount + 1,
+                },
+            })
 
 
 async def _build_seats_dict(game: Game, db: AsyncSession) -> dict[str, str | None]:
