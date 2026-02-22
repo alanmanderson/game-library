@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "../auth/AuthContext.tsx";
 import { postAuth, ApiError } from "../api/client.ts";
+import { RoomPage } from "../room/RoomPage.tsx";
 import styles from "./LobbyPage.module.css";
 
 interface CreateResponse {
@@ -15,26 +16,25 @@ interface JoinResponse {
 export function LobbyPage() {
   const { user, token, logout } = useAuth();
 
+  const [roomCode, setRoomCode] = useState("");
+
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState("");
-  const [createdCode, setCreatedCode] = useState("");
 
   const [joinCode, setJoinCode] = useState("");
   const [joinLoading, setJoinLoading] = useState(false);
   const [joinError, setJoinError] = useState("");
-  const [joinResult, setJoinResult] = useState<JoinResponse | null>(null);
 
   async function handleCreate() {
     setCreateLoading(true);
     setCreateError("");
-    setCreatedCode("");
     try {
       const data = await postAuth<CreateResponse>(
         "/games/create",
         {},
         token!,
       );
-      setCreatedCode(data.room_code);
+      setRoomCode(data.room_code);
     } catch (err) {
       setCreateError(
         err instanceof ApiError ? err.detail : "Failed to create room",
@@ -49,14 +49,13 @@ export function LobbyPage() {
     if (!code) return;
     setJoinLoading(true);
     setJoinError("");
-    setJoinResult(null);
     try {
       const data = await postAuth<JoinResponse>(
         `/games/${code}/join`,
         {},
         token!,
       );
-      setJoinResult(data);
+      setRoomCode(data.room_code);
     } catch (err) {
       setJoinError(
         err instanceof ApiError ? err.detail : "Failed to join room",
@@ -64,6 +63,12 @@ export function LobbyPage() {
     } finally {
       setJoinLoading(false);
     }
+  }
+
+  if (roomCode) {
+    return (
+      <RoomPage roomCode={roomCode} onLeave={() => setRoomCode("")} />
+    );
   }
 
   return (
@@ -81,12 +86,6 @@ export function LobbyPage() {
             {createLoading ? "Creating..." : "Create Room"}
           </button>
           {createError && <p className={styles.error}>{createError}</p>}
-          {createdCode && (
-            <p className={styles.success}>
-              Room created:{" "}
-              <span className={styles.roomCode}>{createdCode}</span>
-            </p>
-          )}
         </div>
 
         <div className={styles.section}>
@@ -109,12 +108,6 @@ export function LobbyPage() {
             </button>
           </div>
           {joinError && <p className={styles.error}>{joinError}</p>}
-          {joinResult && (
-            <p className={styles.success}>
-              Joined room{" "}
-              <span className={styles.roomCode}>{joinResult.room_code}</span>
-            </p>
-          )}
         </div>
       </div>
 

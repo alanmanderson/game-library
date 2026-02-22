@@ -1,0 +1,152 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  padding: 2rem 1rem;
+}
+
+.roomCodeDisplay {
+  margin: 0 0 0.5rem;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: #333;
+}
+
+.roomLabel {
+  margin: 0 0 2rem;
+  font-size: 0.875rem;
+  color: #888;
+}
+
+.connectionStatus {
+  margin: 0 0 1.5rem;
+  font-size: 0.75rem;
+  color: #888;
+}
+
+.connectionDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 0.4rem;
+  vertical-align: middle;
+}
+
+.dotConnected {
+  background: #4caf50;
+}
+
+.dotDisconnected {
+  background: #f44336;
+}
+
+.seatsGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  width: 100%;
+  max-width: 400px;
+  margin-bottom: 1.5rem;
+}
+
+.seat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1.25rem;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.seatOccupied {
+  border-color: #4a90d9;
+  background: #e8f0fe;
+}
+
+.seatSelf {
+  border-color: #2e7d32;
+  background: #e8f5e9;
+}
+
+.seatLabel {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #888;
+}
+
+.seatPlayer {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.seatEmpty {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #aaa;
+}
+
+.sitButton {
+  padding: 0.375rem 1rem;
+  background: #4a90d9;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.sitButton:hover {
+  background: #357abd;
+}
+
+.error {
+  margin: 0 0 1rem;
+  padding: 0.75rem;
+  background: #fdecea;
+  color: #d32f2f;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
+}
+
+.startButton {
+  padding: 0.75rem 2rem;
+  background: #2e7d32;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 1.125rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 1rem;
+}
+
+.startButton:hover {
+  background: #1b5e20;
+}
+
+.leaveButton {
+  padding: 0.5rem 1rem;
+  background: none;
+  color: #888;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.leaveButton:hover {
+  background: #f5f5f5;
+}
