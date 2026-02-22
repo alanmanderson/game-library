@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.websockets import WebSocket
 
 from app.engine.deck import SEATS, shuffle_and_deal
+from app.engine.meld import calculate_melds
 from app.models.game import Game
 from app.models.user import User
 from app.websocket.connection_manager import manager
@@ -40,6 +41,8 @@ async def handle_message(
         await handle_submit_bid(websocket, payload, room_code, user_id, db)
     elif action == "DECLARE_TRUMP":
         await handle_declare_trump(websocket, payload, room_code, user_id, db)
+    elif action == "ACKNOWLEDGE_MELD":
+        await handle_acknowledge_meld(websocket, room_code, user_id, db)
     else:
         await manager.send_personal(websocket, {
             "event": "ERROR",
@@ -403,9 +406,28 @@ async def handle_declare_trump(
         return
 
     hand["trump_suit"] = suit
+
+    # Calculate melds for all players
+    player_hands = state["player_hands"]
+    player_melds = {}
+    team_meld = {"NS": 0, "EW": 0}
+
+    for seat_name in SEATS:
+        seat_hand = player_hands[seat_name]
+        melds = calculate_melds(seat_hand, suit)
+        total = sum(m["points"] for m in melds)
+        player_melds[seat_name] = {"melds": melds, "total": total}
+        team_meld[TEAM_FOR_SEAT[seat_name]] += total
+
+    hand["team_meld"] = team_meld
+    hand["player_melds"] = player_melds
+    hand["meld_acknowledged_seats"] = []
+
     state["phase"] = "SHOWING_MELD"
     game.current_state_json = state
     await db.flush()
+
+    bidding = hand["bidding"]
 
     await manager.broadcast(room_code, {
         "event": "TRUMP_NAMED",
@@ -413,10 +435,99 @@ async def handle_declare_trump(
             "trump_suit": suit,
             "declared_by_seat": winning_seat,
             "bidding_team": TEAM_FOR_SEAT[winning_seat],
-            "winning_bid": hand["bidding"]["winning_bid"],
-            "is_shoot_the_moon": hand["bidding"]["is_shoot_the_moon"],
+            "winning_bid": bidding["winning_bid"],
+            "is_shoot_the_moon": bidding["is_shoot_the_moon"],
         },
     })
+
+    await manager.broadcast(room_code, {
+        "event": "MELD_BROADCAST",
+        "payload": {
+            "trump_suit": suit,
+            "winning_bid": bidding["winning_bid"],
+            "is_shoot_the_moon": bidding["is_shoot_the_moon"],
+            "bidding_team": TEAM_FOR_SEAT[winning_seat],
+            "team_meld": team_meld,
+            "player_melds": player_melds,
+        },
+    })
+
+
+async def handle_acknowledge_meld(
+    websocket: WebSocket,
+    room_code: str,
+    user_id: uuid.UUID,
+    db: AsyncSession,
+):
+    result = await db.execute(
+        select(Game).where(Game.room_code == room_code, Game.status == "IN_PROGRESS")
+    )
+    game = result.scalar_one_or_none()
+    if game is None:
+        await manager.send_personal(websocket, {
+            "event": "ERROR",
+            "payload": {"message": "Game not found"},
+        })
+        return
+
+    state = copy.deepcopy(game.current_state_json or {})
+    phase = state.get("phase")
+    if phase != "SHOWING_MELD":
+        await manager.send_personal(websocket, {
+            "event": "ERROR",
+            "payload": {"message": "Game is not in the meld showing phase"},
+        })
+        return
+
+    # Find sender's seat
+    sender_seat = None
+    for seat, col in SEAT_COLUMNS.items():
+        if getattr(game, col) == user_id:
+            sender_seat = seat
+            break
+
+    if sender_seat is None:
+        await manager.send_personal(websocket, {
+            "event": "ERROR",
+            "payload": {"message": "You are not seated in this game"},
+        })
+        return
+
+    hand = state["current_hand"]
+    acked = hand["meld_acknowledged_seats"]
+
+    if sender_seat in acked:
+        await manager.send_personal(websocket, {
+            "event": "ERROR",
+            "payload": {"message": "You have already acknowledged meld"},
+        })
+        return
+
+    acked.append(sender_seat)
+    hand["meld_acknowledged_seats"] = acked
+
+    if len(acked) >= 4:
+        state["phase"] = "TRICK_PLAYING"
+        game.current_state_json = state
+        await db.flush()
+
+        await manager.broadcast(room_code, {
+            "event": "MELD_PHASE_COMPLETED",
+            "payload": {
+                "team_meld": hand["team_meld"],
+            },
+        })
+    else:
+        game.current_state_json = state
+        await db.flush()
+
+        await manager.broadcast(room_code, {
+            "event": "MELD_ACKNOWLEDGED",
+            "payload": {
+                "seat": sender_seat,
+                "acknowledged_seats": list(acked),
+            },
+        })
 
 
 async def _build_seats_dict(game: Game, db: AsyncSession) -> dict[str, str | None]:

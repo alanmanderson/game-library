@@ -683,6 +683,7 @@ async def test_declare_trump_transitions_phase(client: AsyncClient, sync_client:
             "payload": {"suit": "DIAMONDS"},
         })
         _drain_broadcast(websockets)  # TRUMP_NAMED
+        _drain_broadcast(websockets)  # MELD_BROADCAST
 
         # Try again — phase is now SHOWING_MELD
         websockets[winner_idx].send_json({
@@ -692,6 +693,126 @@ async def test_declare_trump_transitions_phase(client: AsyncClient, sync_client:
         data = websockets[winner_idx].receive_json()
         assert data["event"] == "ERROR"
         assert "trump naming" in data["payload"]["message"].lower()
+    finally:
+        for ctx in contexts:
+            ctx.__exit__(None, None, None)
+
+
+# ── Helpers for SHOWING_MELD tests ───────────────────────────────────
+
+
+def _declare_trump_and_get_meld(websockets, winner_idx, suit="HEARTS"):
+    """Send DECLARE_TRUMP and drain TRUMP_NAMED + MELD_BROADCAST.
+
+    Returns the MELD_BROADCAST payload.
+    """
+    websockets[winner_idx].send_json({
+        "action": "DECLARE_TRUMP",
+        "payload": {"suit": suit},
+    })
+    _drain_broadcast(websockets)  # TRUMP_NAMED
+    meld_msgs = _drain_broadcast(websockets)  # MELD_BROADCAST
+    return meld_msgs[0]["payload"]
+
+
+# ── MELD tests ────────────────────────────────────────────────────────
+
+
+async def test_declare_trump_broadcasts_meld(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
+    """DECLARE_TRUMP sends MELD_BROADCAST with trump_suit, team_meld, player_melds for all 4 seats."""
+    room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
+    websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
+    try:
+        _, winner_idx = _end_bidding_with_shoot(websockets, bt)
+        meld_payload = _declare_trump_and_get_meld(websockets, winner_idx, "HEARTS")
+
+        assert meld_payload["trump_suit"] == "HEARTS"
+        assert "team_meld" in meld_payload
+        assert "NS" in meld_payload["team_meld"]
+        assert "EW" in meld_payload["team_meld"]
+        assert "player_melds" in meld_payload
+        for seat in SEATS:
+            assert seat in meld_payload["player_melds"]
+            assert "melds" in meld_payload["player_melds"][seat]
+            assert "total" in meld_payload["player_melds"][seat]
+    finally:
+        for ctx in contexts:
+            ctx.__exit__(None, None, None)
+
+
+async def test_meld_team_totals_match_player_sums(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
+    """NS = NORTH + SOUTH totals, EW = EAST + WEST totals."""
+    room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
+    websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
+    try:
+        _, winner_idx = _end_bidding_with_shoot(websockets, bt)
+        meld_payload = _declare_trump_and_get_meld(websockets, winner_idx, "SPADES")
+
+        pm = meld_payload["player_melds"]
+        tm = meld_payload["team_meld"]
+        assert tm["NS"] == pm["NORTH"]["total"] + pm["SOUTH"]["total"]
+        assert tm["EW"] == pm["EAST"]["total"] + pm["WEST"]["total"]
+    finally:
+        for ctx in contexts:
+            ctx.__exit__(None, None, None)
+
+
+async def test_acknowledge_meld_all_four(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
+    """3 acks → MELD_ACKNOWLEDGED each, 4th ack → MELD_PHASE_COMPLETED."""
+    room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
+    websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
+    try:
+        _, winner_idx = _end_bidding_with_shoot(websockets, bt)
+        _declare_trump_and_get_meld(websockets, winner_idx)
+
+        # First 3 players acknowledge
+        for i in range(3):
+            websockets[i].send_json({"action": "ACKNOWLEDGE_MELD", "payload": {}})
+            msgs = _drain_broadcast(websockets)
+            assert msgs[0]["event"] == "MELD_ACKNOWLEDGED"
+            assert msgs[0]["payload"]["seat"] == SEATS[i]
+            assert len(msgs[0]["payload"]["acknowledged_seats"]) == i + 1
+
+        # 4th player acknowledges → MELD_PHASE_COMPLETED
+        websockets[3].send_json({"action": "ACKNOWLEDGE_MELD", "payload": {}})
+        msgs = _drain_broadcast(websockets)
+        assert msgs[0]["event"] == "MELD_PHASE_COMPLETED"
+        assert "team_meld" in msgs[0]["payload"]
+    finally:
+        for ctx in contexts:
+            ctx.__exit__(None, None, None)
+
+
+async def test_acknowledge_meld_duplicate(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
+    """Same player acks twice → ERROR."""
+    room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
+    websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
+    try:
+        _, winner_idx = _end_bidding_with_shoot(websockets, bt)
+        _declare_trump_and_get_meld(websockets, winner_idx)
+
+        websockets[0].send_json({"action": "ACKNOWLEDGE_MELD", "payload": {}})
+        _drain_broadcast(websockets)  # MELD_ACKNOWLEDGED
+
+        websockets[0].send_json({"action": "ACKNOWLEDGE_MELD", "payload": {}})
+        data = websockets[0].receive_json()
+        assert data["event"] == "ERROR"
+        assert "already" in data["payload"]["message"].lower()
+    finally:
+        for ctx in contexts:
+            ctx.__exit__(None, None, None)
+
+
+async def test_acknowledge_meld_wrong_phase(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
+    """ACKNOWLEDGE_MELD during BIDDING → ERROR."""
+    room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
+    websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
+    try:
+        # Still in BIDDING phase — haven't ended bidding
+        websockets[0].send_json({"action": "ACKNOWLEDGE_MELD", "payload": {}})
+        data = websockets[0].receive_json()
+        assert data["event"] == "ERROR"
+        assert "meld" in data["payload"]["message"].lower()
     finally:
         for ctx in contexts:
             ctx.__exit__(None, None, None)
