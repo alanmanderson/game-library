@@ -38,6 +38,8 @@ async def handle_message(
         await handle_start_game(websocket, room_code, user_id, db)
     elif action == "SUBMIT_BID":
         await handle_submit_bid(websocket, payload, room_code, user_id, db)
+    elif action == "DECLARE_TRUMP":
+        await handle_declare_trump(websocket, payload, room_code, user_id, db)
     else:
         await manager.send_personal(websocket, {
             "event": "ERROR",
@@ -346,6 +348,75 @@ async def handle_submit_bid(
                     "minimum_valid_bid": amount + 1,
                 },
             })
+
+
+VALID_SUITS = {"HEARTS", "DIAMONDS", "CLUBS", "SPADES"}
+
+TEAM_FOR_SEAT = {"NORTH": "NS", "SOUTH": "NS", "EAST": "EW", "WEST": "EW"}
+
+
+async def handle_declare_trump(
+    websocket: WebSocket,
+    payload: dict,
+    room_code: str,
+    user_id: uuid.UUID,
+    db: AsyncSession,
+):
+    result = await db.execute(
+        select(Game).where(Game.room_code == room_code, Game.status == "IN_PROGRESS")
+    )
+    game = result.scalar_one_or_none()
+    if game is None:
+        await manager.send_personal(websocket, {
+            "event": "ERROR",
+            "payload": {"message": "Game not found"},
+        })
+        return
+
+    state = copy.deepcopy(game.current_state_json or {})
+    phase = state.get("phase")
+    if phase != "NAMING_TRUMP":
+        await manager.send_personal(websocket, {
+            "event": "ERROR",
+            "payload": {"message": "Game is not in the trump naming phase"},
+        })
+        return
+
+    hand = state["current_hand"]
+    winning_seat = hand["bidding"]["winning_seat"]
+
+    # Only the bid winner can declare trump
+    expected_user_id = getattr(game, SEAT_COLUMNS[winning_seat])
+    if expected_user_id != user_id:
+        await manager.send_personal(websocket, {
+            "event": "ERROR",
+            "payload": {"message": "Only the bid winner can declare trump"},
+        })
+        return
+
+    suit = payload.get("suit", "").upper()
+    if suit not in VALID_SUITS:
+        await manager.send_personal(websocket, {
+            "event": "ERROR",
+            "payload": {"message": f"Invalid suit: {payload.get('suit')}"},
+        })
+        return
+
+    hand["trump_suit"] = suit
+    state["phase"] = "SHOWING_MELD"
+    game.current_state_json = state
+    await db.flush()
+
+    await manager.broadcast(room_code, {
+        "event": "TRUMP_NAMED",
+        "payload": {
+            "trump_suit": suit,
+            "declared_by_seat": winning_seat,
+            "bidding_team": TEAM_FOR_SEAT[winning_seat],
+            "winning_bid": hand["bidding"]["winning_bid"],
+            "is_shoot_the_moon": hand["bidding"]["is_shoot_the_moon"],
+        },
+    })
 
 
 async def _build_seats_dict(game: Game, db: AsyncSession) -> dict[str, str | None]:

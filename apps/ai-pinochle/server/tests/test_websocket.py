@@ -563,3 +563,135 @@ async def test_submit_bid_wrong_phase(client: AsyncClient, sync_client: TestClie
         data = ws.receive_json()
         assert data["event"] == "ERROR"
         assert "bidding" in data["payload"]["message"].lower()
+
+
+# ── Helpers for NAMING_TRUMP tests ──────────────────────────────────
+
+
+def _end_bidding_with_shoot(websockets, bt):
+    """First bidder shoots the moon to quickly end bidding. Returns (winner_seat, winner_idx)."""
+    bidder_seat = bt["next_to_act_seat"]
+    bidder_idx = SEATS.index(bidder_seat)
+    websockets[bidder_idx].send_json({
+        "action": "SUBMIT_BID",
+        "payload": {"amount": 20, "shoot_the_moon": True},
+    })
+    _drain_broadcast(websockets)  # BIDDING_COMPLETED
+    return bidder_seat, bidder_idx
+
+
+# ── DECLARE_TRUMP tests ────────────────────────────────────────────
+
+
+async def test_declare_trump_success(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
+    """Bid winner declares trump → TRUMP_NAMED broadcast."""
+    room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
+    websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
+    try:
+        winner_seat, winner_idx = _end_bidding_with_shoot(websockets, bt)
+
+        websockets[winner_idx].send_json({
+            "action": "DECLARE_TRUMP",
+            "payload": {"suit": "HEARTS"},
+        })
+
+        data = _drain_broadcast(websockets)[0]
+        assert data["event"] == "TRUMP_NAMED"
+        assert data["payload"]["trump_suit"] == "HEARTS"
+        assert data["payload"]["declared_by_seat"] == winner_seat
+        assert data["payload"]["winning_bid"] == 20
+        assert data["payload"]["is_shoot_the_moon"] is True
+        # Verify team mapping
+        expected_team = "NS" if winner_seat in ("NORTH", "SOUTH") else "EW"
+        assert data["payload"]["bidding_team"] == expected_team
+    finally:
+        for ctx in contexts:
+            ctx.__exit__(None, None, None)
+
+
+async def test_declare_trump_not_bid_winner(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
+    """Non-winner tries to declare trump → ERROR."""
+    room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
+    websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
+    try:
+        winner_seat, winner_idx = _end_bidding_with_shoot(websockets, bt)
+        wrong_idx = (winner_idx + 1) % 4
+
+        websockets[wrong_idx].send_json({
+            "action": "DECLARE_TRUMP",
+            "payload": {"suit": "SPADES"},
+        })
+
+        data = websockets[wrong_idx].receive_json()
+        assert data["event"] == "ERROR"
+        assert "bid winner" in data["payload"]["message"].lower()
+    finally:
+        for ctx in contexts:
+            ctx.__exit__(None, None, None)
+
+
+async def test_declare_trump_invalid_suit(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
+    """Invalid suit → ERROR."""
+    room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
+    websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
+    try:
+        _, winner_idx = _end_bidding_with_shoot(websockets, bt)
+
+        websockets[winner_idx].send_json({
+            "action": "DECLARE_TRUMP",
+            "payload": {"suit": "STARS"},
+        })
+
+        data = websockets[winner_idx].receive_json()
+        assert data["event"] == "ERROR"
+        assert "Invalid suit" in data["payload"]["message"]
+    finally:
+        for ctx in contexts:
+            ctx.__exit__(None, None, None)
+
+
+async def test_declare_trump_wrong_phase(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
+    """DECLARE_TRUMP during BIDDING → ERROR."""
+    room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
+    websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
+    try:
+        # Don't end bidding — still in BIDDING phase
+        bidder_idx = SEATS.index(bt["next_to_act_seat"])
+
+        websockets[bidder_idx].send_json({
+            "action": "DECLARE_TRUMP",
+            "payload": {"suit": "HEARTS"},
+        })
+
+        data = websockets[bidder_idx].receive_json()
+        assert data["event"] == "ERROR"
+        assert "trump naming" in data["payload"]["message"].lower()
+    finally:
+        for ctx in contexts:
+            ctx.__exit__(None, None, None)
+
+
+async def test_declare_trump_transitions_phase(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
+    """After declaring trump, a second DECLARE_TRUMP returns wrong-phase error."""
+    room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
+    websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
+    try:
+        _, winner_idx = _end_bidding_with_shoot(websockets, bt)
+
+        websockets[winner_idx].send_json({
+            "action": "DECLARE_TRUMP",
+            "payload": {"suit": "DIAMONDS"},
+        })
+        _drain_broadcast(websockets)  # TRUMP_NAMED
+
+        # Try again — phase is now SHOWING_MELD
+        websockets[winner_idx].send_json({
+            "action": "DECLARE_TRUMP",
+            "payload": {"suit": "SPADES"},
+        })
+        data = websockets[winner_idx].receive_json()
+        assert data["event"] == "ERROR"
+        assert "trump naming" in data["payload"]["message"].lower()
+    finally:
+        for ctx in contexts:
+            ctx.__exit__(None, None, None)
