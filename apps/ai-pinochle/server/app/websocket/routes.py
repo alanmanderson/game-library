@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -10,6 +11,8 @@ from app.database import AsyncSessionLocal
 from app.models.user import User
 from app.websocket.connection_manager import Connection, manager
 from app.websocket.handlers import handle_message
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -38,11 +41,18 @@ async def game_websocket(websocket: WebSocket, room_code: str):
     db_factory = getattr(websocket.app.state, "_test_db_factory", None)
 
     if db_factory:
-        async with db_factory() as db:
-            await _run_websocket(websocket, room_code, token, db)
+        db = db_factory()
     else:
-        async with AsyncSessionLocal() as db:
-            await _run_websocket(websocket, room_code, token, db)
+        db = AsyncSessionLocal()
+
+    session = await db.__aenter__()
+    try:
+        await _run_websocket(websocket, room_code, token, session)
+    finally:
+        try:
+            await db.__aexit__(None, None, None)
+        except Exception:
+            logger.debug("Session cleanup error (connection already closed)")
 
 
 async def _run_websocket(
@@ -62,4 +72,6 @@ async def _run_websocket(
             await handle_message(websocket, data, room_code, user.id, db)
             await db.commit()
     except WebSocketDisconnect:
+        pass
+    finally:
         manager.disconnect(room_code, websocket)

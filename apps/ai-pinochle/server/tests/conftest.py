@@ -58,9 +58,12 @@ engine = create_async_engine("sqlite+aiosqlite://", echo=False)
 
 @pytest.fixture(autouse=True)
 async def _setup_db():
+    from app.websocket.connection_manager import manager
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
+    manager.clear()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
 
@@ -93,6 +96,15 @@ async def client(db_session: AsyncSession):
 
     app.dependency_overrides.clear()
     del app.state._test_db_factory
+
+
+@pytest.fixture
+def sync_client():
+    from app.main import app
+    from starlette.testclient import TestClient
+
+    with TestClient(app) as tc:
+        yield tc
 
 
 @pytest.fixture

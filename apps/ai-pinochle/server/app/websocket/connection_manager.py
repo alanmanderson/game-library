@@ -1,7 +1,10 @@
+import logging
 import uuid
 from dataclasses import dataclass, field
 
 from starlette.websockets import WebSocket
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -29,11 +32,21 @@ class ConnectionManager:
         await websocket.send_json(message)
 
     async def broadcast(self, room_code: str, message: dict):
+        stale = []
         for conn in self._rooms.get(room_code, []):
-            await conn.websocket.send_json(message)
+            try:
+                await conn.websocket.send_json(message)
+            except Exception:
+                logger.warning("Removing stale connection for user %s", conn.user_id)
+                stale.append(conn.websocket)
+        for ws in stale:
+            self.disconnect(room_code, ws)
 
     def get_connections(self, room_code: str) -> list[Connection]:
         return self._rooms.get(room_code, [])
+
+    def clear(self):
+        self._rooms.clear()
 
 
 manager = ConnectionManager()
