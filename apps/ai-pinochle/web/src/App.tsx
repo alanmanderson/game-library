@@ -1,5 +1,8 @@
+import { GoogleOAuthProvider } from "@react-oauth/google";
 import { AuthProvider, useAuth } from "./auth/AuthContext.tsx";
 import { RegisterPage } from "./auth/RegisterPage.tsx";
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 function AppContent() {
   const { user } = useAuth();
@@ -13,8 +16,10 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </GoogleOAuthProvider>
   );
 }

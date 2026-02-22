@@ -1,5 +1,6 @@
 .container {
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
   min-height: 100vh;
@@ -77,4 +78,29 @@
 .button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  max-width: 400px;
+  margin: 0.5rem 0;
+  color: #888;
+  font-size: 0.875rem;
+}
+
+.divider::before,
+.divider::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid #ccc;
+}
+
+.googleButton {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  max-width: 400px;
 }

@@ -1,3 +1,4 @@
+import { GoogleLogin, type CredentialResponse } from "@react-oauth/google";
 import { type FormEvent, useState } from "react";
 import { ApiError, post } from "../api/client.ts";
 import { useAuth } from "./AuthContext.tsx";
@@ -78,6 +79,27 @@ export function RegisterPage() {
     }
   }
 
+  async function handleGoogleSuccess(response: CredentialResponse) {
+    if (!response.credential) return;
+    setServerError("");
+    try {
+      const res = await post<RegisterResponse>("/auth/google", {
+        token: response.credential,
+      });
+      login(res.access_token, {
+        id: res.id,
+        username: res.username,
+        email: res.email,
+      });
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setServerError(err.detail);
+      } else {
+        setServerError("Google sign-in failed. Please try again.");
+      }
+    }
+  }
+
   return (
     <div className={styles.container}>
       <form className={styles.form} onSubmit={handleSubmit}>
@@ -131,6 +153,17 @@ export function RegisterPage() {
           {submitting ? "Creating account..." : "Register"}
         </button>
       </form>
+
+      <div className={styles.divider}>
+        <span>or</span>
+      </div>
+
+      <div className={styles.googleButton}>
+        <GoogleLogin
+          onSuccess={handleGoogleSuccess}
+          onError={() => setServerError("Google sign-in failed. Please try again.")}
+        />
+      </div>
     </div>
   );
 }
