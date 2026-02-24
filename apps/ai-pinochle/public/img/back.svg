@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 112">
+  <rect width="80" height="112" rx="6" fill="#1a2744"/>
+  <rect x="4" y="4" width="72" height="104" rx="4" fill="none" stroke="#3a5a8c" stroke-width="1.5"/>
+  <rect x="8" y="8" width="64" height="96" rx="3" fill="none" stroke="#2a4570" stroke-width="0.75"/>
+  <!-- Diamond pattern -->
+  <g fill="#2a4570" opacity="0.6">
+    <polygon points="40,16 48,28 40,40 32,28"/>
+    <polygon points="20,28 28,40 20,52 12,40"/>
+    <polygon points="60,28 68,40 60,52 52,40"/>
+    <polygon points="40,40 48,52 40,64 32,52"/>
+    <polygon points="20,52 28,64 20,76 12,64"/>
+    <polygon points="60,52 68,64 60,76 52,64"/>
+    <polygon points="40,64 48,76 40,88 32,76"/>
+  </g>
+  <!-- Center diamond highlight -->
+  <polygon points="40,42 46,52 40,62 34,52" fill="#3a6aaa" opacity="0.5"/>
+</svg>

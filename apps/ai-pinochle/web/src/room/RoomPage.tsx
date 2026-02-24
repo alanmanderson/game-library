@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../auth/AuthContext.tsx";
 import { useWebSocket } from "../hooks/useWebSocket.ts";
+import { GamePage } from "../game/GamePage.tsx";
+import { getTableOrder } from "../game/tableOrder.ts";
 import styles from "./RoomPage.module.css";
 
 const SEATS = ["north", "east", "south", "west"] as const;
@@ -19,6 +21,14 @@ interface Props {
 
 type Seats = Record<string, string | null>;
 
+function normalizeSeats(raw: Record<string, string | null>): Seats {
+  const result: Seats = {};
+  for (const [key, value] of Object.entries(raw)) {
+    result[key.toLowerCase()] = value;
+  }
+  return result;
+}
+
 export function RoomPage({ roomCode, onLeave }: Props) {
   const { user, token } = useAuth();
   const { sendMessage, lastEvent, connected } = useWebSocket(
@@ -33,17 +43,23 @@ export function RoomPage({ roomCode, onLeave }: Props) {
     west: null,
   });
   const [error, setError] = useState("");
+  const [gameStarted, setGameStarted] = useState(false);
+  const [myHand, setMyHand] = useState<string[]>([]);
 
   useEffect(() => {
     if (!lastEvent) return;
 
     if (lastEvent.event === "LOBBY_STATE_UPDATED") {
       const payload = lastEvent.payload as { seats: Seats };
-      setSeats(payload.seats);
+      setSeats(normalizeSeats(payload.seats));
       setError("");
     } else if (lastEvent.event === "SEAT_CLAIM_FAILED") {
       const payload = lastEvent.payload as { reason: string };
       setError(payload.reason);
+    } else if (lastEvent.event === "HAND_DEALT") {
+      const payload = lastEvent.payload as { cards: string[] };
+      setMyHand(payload.cards);
+      setGameStarted(true);
     }
   }, [lastEvent]);
 
@@ -59,6 +75,32 @@ export function RoomPage({ roomCode, onLeave }: Props) {
   const allSeated = SEATS.every((s) => seats[s]);
   const username = user!.username;
 
+  const mySeat =
+    Object.entries(seats).find(([, occupant]) => occupant === username)?.[0] ?? null;
+
+  if (gameStarted && mySeat) {
+    return (
+      <GamePage
+        sendMessage={sendMessage}
+        lastEvent={lastEvent}
+        connected={connected}
+        roomCode={roomCode}
+        mySeat={mySeat.toUpperCase()}
+        initialHand={myHand}
+        seatPlayers={seats}
+        onLeave={onLeave}
+      />
+    );
+  }
+
+  const [bottom, left, top, right] = getTableOrder(mySeat);
+  const positions = [
+    { seat: top, position: "top" as const },
+    { seat: left, position: "left" as const },
+    { seat: right, position: "right" as const },
+    { seat: bottom, position: "bottom" as const },
+  ];
+
   return (
     <div className={styles.container}>
       <p className={styles.roomCodeDisplay}>{roomCode}</p>
@@ -73,15 +115,16 @@ export function RoomPage({ roomCode, onLeave }: Props) {
 
       {error && <p className={styles.error}>{error}</p>}
 
-      <div className={styles.seatsGrid}>
-        {SEATS.map((seat) => {
+      <div className={styles.table}>
+        {positions.map(({ seat, position }) => {
           const occupant = seats[seat];
           const isSelf = occupant === username;
+          const posClass = styles[`seat_${position}`];
 
           return (
             <div
               key={seat}
-              className={`${styles.seat} ${isSelf ? styles.seatSelf : occupant ? styles.seatOccupied : ""}`}
+              className={`${styles.seat} ${posClass} ${isSelf ? styles.seatSelf : occupant ? styles.seatOccupied : ""}`}
             >
               <p className={styles.seatLabel}>{SEAT_LABELS[seat]}</p>
               {occupant ? (

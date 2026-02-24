@@ -1,0 +1,30 @@
+.horizontalFan {
+  display: flex;
+  justify-content: center;
+}
+
+.horizontalFan img {
+  width: 50px;
+  height: 70px;
+  margin-left: -15px;
+}
+
+.horizontalFan img:first-child {
+  margin-left: 0;
+}
+
+.verticalFan {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.verticalFan img {
+  width: 36px;
+  height: 50px;
+  margin-top: -35px;
+}
+
+.verticalFan img:first-child {
+  margin-top: 0;
+}
