@@ -16,7 +16,9 @@ interface JoinResponse {
 export function LobbyPage() {
   const { user, token, logout } = useAuth();
 
-  const [roomCode, setRoomCode] = useState("");
+  const [roomCode, setRoomCode] = useState(
+    () => sessionStorage.getItem("roomCode") ?? "",
+  );
 
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState("");
@@ -34,7 +36,7 @@ export function LobbyPage() {
         {},
         token!,
       );
-      setRoomCode(data.room_code);
+      enterRoom(data.room_code);
     } catch (err) {
       setCreateError(
         err instanceof ApiError ? err.detail : "Failed to create room",
@@ -55,7 +57,7 @@ export function LobbyPage() {
         {},
         token!,
       );
-      setRoomCode(data.room_code);
+      enterRoom(data.room_code);
     } catch (err) {
       setJoinError(
         err instanceof ApiError ? err.detail : "Failed to join room",
@@ -65,9 +67,19 @@ export function LobbyPage() {
     }
   }
 
+  function enterRoom(code: string) {
+    sessionStorage.setItem("roomCode", code);
+    setRoomCode(code);
+  }
+
+  function leaveRoom() {
+    sessionStorage.removeItem("roomCode");
+    setRoomCode("");
+  }
+
   if (roomCode) {
     return (
-      <RoomPage roomCode={roomCode} onLeave={() => setRoomCode("")} />
+      <RoomPage roomCode={roomCode} onLeave={leaveRoom} />
     );
   }
 

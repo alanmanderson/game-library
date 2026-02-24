@@ -1,7 +1,7 @@
 import copy
 import random
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -104,6 +104,7 @@ async def handle_select_seat(
 
     setattr(game, col, user_id)
     await db.flush()
+    await db.refresh(game)
 
     seats = await _build_seats_dict(game, db)
     await manager.broadcast(room_code, {
@@ -172,7 +173,7 @@ async def handle_start_game(
         },
         "player_hands": player_hands,
     }
-    game.started_at = datetime.now(timezone.utc)
+    game.started_at = datetime.utcnow()
     await db.flush()
 
     # Build seat -> user_id mapping for targeted sends
@@ -254,7 +255,6 @@ async def handle_submit_bid(
         return
 
     amount = payload.get("amount")
-    shoot_the_moon = payload.get("shoot_the_moon", False)
     passed_seats = bidding["passed_seats"]
     winning_bid = bidding["winning_bid"]
     dealer_seat = hand["dealer_seat"]
@@ -323,34 +323,19 @@ async def handle_submit_bid(
         bidding["winning_bid"] = amount
         bidding["winning_seat"] = next_seat
 
-        if shoot_the_moon:
-            bidding["is_shoot_the_moon"] = True
-            state["phase"] = "NAMING_TRUMP"
-            game.current_state_json = state
-            await db.flush()
+        bidding["next_to_act_seat"] = _next_active_bidder(next_seat, passed_seats)
+        game.current_state_json = state
+        await db.flush()
 
-            await manager.broadcast(room_code, {
-                "event": "BIDDING_COMPLETED",
-                "payload": {
-                    "winning_seat": next_seat,
-                    "winning_bid": amount,
-                    "is_shoot_the_moon": True,
-                },
-            })
-        else:
-            bidding["next_to_act_seat"] = _next_active_bidder(next_seat, passed_seats)
-            game.current_state_json = state
-            await db.flush()
-
-            await manager.broadcast(room_code, {
-                "event": "BIDDING_TURN",
-                "payload": {
-                    "current_highest_bid": amount,
-                    "highest_bidder_seat": next_seat,
-                    "next_to_act_seat": bidding["next_to_act_seat"],
-                    "minimum_valid_bid": amount + 1,
-                },
-            })
+        await manager.broadcast(room_code, {
+            "event": "BIDDING_TURN",
+            "payload": {
+                "current_highest_bid": amount,
+                "highest_bidder_seat": next_seat,
+                "next_to_act_seat": bidding["next_to_act_seat"],
+                "minimum_valid_bid": amount + 1,
+            },
+        })
 
 
 VALID_SUITS = {"HEARTS", "DIAMONDS", "CLUBS", "SPADES"}
@@ -404,6 +389,10 @@ async def handle_declare_trump(
             "payload": {"message": f"Invalid suit: {payload.get('suit')}"},
         })
         return
+
+    shoot_the_moon = payload.get("shoot_the_moon", False)
+    if shoot_the_moon:
+        hand["bidding"]["is_shoot_the_moon"] = True
 
     hand["trump_suit"] = suit
 

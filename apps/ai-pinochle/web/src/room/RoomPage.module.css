@@ -43,14 +43,27 @@
   background: #f44336;
 }
 
-.seatsGrid {
+.table {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+  grid-template-areas:
+    ".     top    ."
+    "left  .      right"
+    ".     bottom .";
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: auto 1fr auto;
+  gap: 0.75rem;
   width: 100%;
-  max-width: 400px;
+  max-width: 460px;
+  min-height: 280px;
   margin-bottom: 1.5rem;
+  justify-items: center;
+  align-items: center;
 }
+
+.seat_top { grid-area: top; }
+.seat_left { grid-area: left; }
+.seat_right { grid-area: right; }
+.seat_bottom { grid-area: bottom; }
 
 .seat {
   display: flex;

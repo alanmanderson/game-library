@@ -1,0 +1,32 @@
+.hand {
+  display: flex;
+  justify-content: center;
+  padding: 1rem 0;
+  overflow-x: auto;
+}
+
+.card {
+  width: 80px;
+  height: 112px;
+  border-radius: 6px;
+  border: 2px solid #ccc;
+  background: #fff;
+  object-fit: contain;
+  margin-left: -20px;
+  transition: transform 0.15s, border-color 0.15s;
+  cursor: default;
+}
+
+.card:first-child {
+  margin-left: 0;
+}
+
+.card:hover {
+  transform: translateY(-8px);
+  z-index: 1;
+}
+
+.trump {
+  border-color: #ffd700;
+  box-shadow: 0 0 6px rgba(255, 215, 0, 0.5);
+}

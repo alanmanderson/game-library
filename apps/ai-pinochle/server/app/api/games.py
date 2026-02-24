@@ -70,9 +70,7 @@ async def join_game(
     if game is None:
         raise HTTPException(status_code=404, detail="Game not found")
 
-    phase = (game.current_state_json or {}).get("phase")
-    if phase != "LOBBY_WAITING":
-        raise HTTPException(status_code=409, detail="Game already started")
+    phase = (game.current_state_json or {}).get("phase", "LOBBY_WAITING")
 
     seats: dict[str, str | None] = {}
     player_ids = {
