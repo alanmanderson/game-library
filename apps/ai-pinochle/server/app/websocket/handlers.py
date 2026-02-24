@@ -23,6 +23,16 @@ SEAT_COLUMNS = {
 }
 
 
+async def _load_game(db: AsyncSession, room_code: str) -> Game | None:
+    """Load the active game, bypassing the SQLAlchemy identity map cache."""
+    result = await db.execute(
+        select(Game)
+        .where(Game.room_code == room_code, Game.status == "IN_PROGRESS")
+        .execution_options(populate_existing=True)
+    )
+    return result.scalar_one_or_none()
+
+
 async def handle_message(
     websocket: WebSocket,
     data: dict,
@@ -65,10 +75,7 @@ async def handle_select_seat(
         })
         return
 
-    result = await db.execute(
-        select(Game).where(Game.room_code == room_code, Game.status == "IN_PROGRESS")
-    )
-    game = result.scalar_one_or_none()
+    game = await _load_game(db, room_code)
     if game is None:
         await manager.send_personal(websocket, {
             "event": "ERROR",
@@ -119,10 +126,7 @@ async def handle_start_game(
     user_id: uuid.UUID,
     db: AsyncSession,
 ):
-    result = await db.execute(
-        select(Game).where(Game.room_code == room_code, Game.status == "IN_PROGRESS")
-    )
-    game = result.scalar_one_or_none()
+    game = await _load_game(db, room_code)
     if game is None:
         await manager.send_personal(websocket, {
             "event": "ERROR",
@@ -221,10 +225,7 @@ async def handle_submit_bid(
     user_id: uuid.UUID,
     db: AsyncSession,
 ):
-    result = await db.execute(
-        select(Game).where(Game.room_code == room_code, Game.status == "IN_PROGRESS")
-    )
-    game = result.scalar_one_or_none()
+    game = await _load_game(db, room_code)
     if game is None:
         await manager.send_personal(websocket, {
             "event": "ERROR",
@@ -350,10 +351,7 @@ async def handle_declare_trump(
     user_id: uuid.UUID,
     db: AsyncSession,
 ):
-    result = await db.execute(
-        select(Game).where(Game.room_code == room_code, Game.status == "IN_PROGRESS")
-    )
-    game = result.scalar_one_or_none()
+    game = await _load_game(db, room_code)
     if game is None:
         await manager.send_personal(websocket, {
             "event": "ERROR",
@@ -448,10 +446,7 @@ async def handle_acknowledge_meld(
     user_id: uuid.UUID,
     db: AsyncSession,
 ):
-    result = await db.execute(
-        select(Game).where(Game.room_code == room_code, Game.status == "IN_PROGRESS")
-    )
-    game = result.scalar_one_or_none()
+    game = await _load_game(db, room_code)
     if game is None:
         await manager.send_personal(websocket, {
             "event": "ERROR",

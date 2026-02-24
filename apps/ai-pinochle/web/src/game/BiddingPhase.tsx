@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import styles from "./BiddingPhase.module.css";
 
 interface BiddingState {
@@ -29,6 +29,10 @@ export function BiddingPhase({ biddingState, mySeat, sendMessage }: Props) {
   const { currentBid, highestBidderSeat, nextSeat, minBid } = biddingState;
   const isMyTurn = nextSeat === mySeat;
   const [bidAmount, setBidAmount] = useState(minBid);
+
+  useEffect(() => {
+    setBidAmount(minBid);
+  }, [minBid]);
 
   function handleBid() {
     sendMessage({ action: "SUBMIT_BID", payload: { amount: bidAmount } });

@@ -55,6 +55,7 @@ export function GamePage({
   mySeat,
   initialHand,
   seatPlayers,
+  onLeave,
 }: Props) {
   const [phase, setPhase] = useState<Phase>("BIDDING");
   const [hand] = useState<string[]>(initialHand);
@@ -68,11 +69,20 @@ export function GamePage({
   const [trumpSuit, setTrumpSuit] = useState<string | null>(null);
   const [meldData, setMeldData] = useState<MeldData | null>(null);
   const [acknowledgedSeats, setAcknowledgedSeats] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!lastEvent) return;
 
     const { event, payload } = lastEvent;
+
+    if (event === "ERROR") {
+      const p = payload as { message: string };
+      setError(p.message);
+      return;
+    }
+
+    setError(null);
 
     if (event === "BIDDING_TURN") {
       const p = payload as {
@@ -142,6 +152,9 @@ export function GamePage({
         <span
           className={`${styles.connectionDot} ${connected ? styles.dotConnected : styles.dotDisconnected}`}
         />
+        <button className={styles.leaveButton} onClick={onLeave}>
+          Leave
+        </button>
       </div>
 
       <div className={styles.topArea}>
@@ -155,6 +168,8 @@ export function GamePage({
       </div>
 
       <div className={styles.centerArea}>
+        {error && <p className={styles.error}>{error}</p>}
+
         {phase === "BIDDING" && (
           <BiddingPhase
             biddingState={biddingState}

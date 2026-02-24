@@ -93,3 +93,28 @@
   font-size: 1rem;
   color: #aaa;
 }
+
+.leaveButton {
+  padding: 0.25rem 0.6rem;
+  background: none;
+  color: #aaa;
+  border: 1px solid #555;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+
+.leaveButton:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ddd;
+}
+
+.error {
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 1rem;
+  background: rgba(244, 67, 54, 0.15);
+  color: #ff6b6b;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  text-align: center;
+}
