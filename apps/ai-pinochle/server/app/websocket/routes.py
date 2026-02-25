@@ -152,6 +152,38 @@ async def _send_game_state_on_reconnect(
             },
         })
 
+    elif phase == "PASSING_CARDS":
+        winning_seat = bidding.get("winning_seat")
+        card_passing = hand.get("card_passing", {})
+        await manager.send_personal(websocket, {
+            "event": "TRUMP_NAMED",
+            "payload": {
+                "trump_suit": hand.get("trump_suit"),
+                "declared_by_seat": winning_seat,
+                "bidding_team": TEAM_FOR_SEAT.get(winning_seat, ""),
+                "winning_bid": bidding.get("winning_bid"),
+                "is_shoot_the_moon": bidding.get("is_shoot_the_moon", False),
+            },
+        })
+        await manager.send_personal(websocket, {
+            "event": "PASSING_PHASE_STARTED",
+            "payload": {
+                "trump_suit": hand.get("trump_suit"),
+                "bidding_team": card_passing.get("bidding_team", ""),
+                "bidder_seat": card_passing.get("bidder_seat", ""),
+                "partner_seat": card_passing.get("partner_seat", ""),
+            },
+        })
+        submitted = card_passing.get("submitted", {})
+        if submitted:
+            await manager.send_personal(websocket, {
+                "event": "CARDS_PASSED",
+                "payload": {
+                    "seat": list(submitted.keys())[-1],
+                    "submitted_seats": list(submitted.keys()),
+                },
+            })
+
     elif phase == "SHOWING_MELD":
         winning_seat = bidding.get("winning_seat")
         await manager.send_personal(websocket, {

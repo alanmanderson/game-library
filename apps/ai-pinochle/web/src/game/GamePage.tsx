@@ -4,13 +4,14 @@ import { BiddingPhase } from "./BiddingPhase.tsx";
 import { TrumpPhase } from "./TrumpPhase.tsx";
 import { MeldPhase } from "./MeldPhase.tsx";
 import { TrickPhase } from "./TrickPhase.tsx";
+import { PassCardsPhase } from "./PassCardsPhase.tsx";
 import { HandResult } from "./HandResult.tsx";
 import { PlayerAvatar } from "./PlayerAvatar.tsx";
 import { OtherPlayerHand } from "./OtherPlayerHand.tsx";
 import { getTableOrder } from "./tableOrder.ts";
 import styles from "./GamePage.module.css";
 
-type Phase = "BIDDING" | "NAMING_TRUMP" | "SHOWING_MELD" | "TRICK_PLAYING" | "HAND_COMPLETE";
+type Phase = "BIDDING" | "NAMING_TRUMP" | "PASSING_CARDS" | "SHOWING_MELD" | "TRICK_PLAYING" | "HAND_COMPLETE";
 
 interface WsEvent {
   event: string;
@@ -55,6 +56,14 @@ interface HandResultData {
   biddingTeam: string;
   scoreDeltas: Record<string, number>;
   gameScores: Record<string, number>;
+}
+
+interface PassingState {
+  trumpSuit: string;
+  biddingTeam: string;
+  bidderSeat: string;
+  partnerSeat: string;
+  submittedSeats: string[];
 }
 
 interface Props {
@@ -103,6 +112,7 @@ export function GamePage({
   const [trickResult, setTrickResult] = useState<TrickResult | null>(null);
   const [handResult, setHandResult] = useState<HandResultData | null>(null);
   const [handResultAckedSeats, setHandResultAckedSeats] = useState<string[]>([]);
+  const [passingState, setPassingState] = useState<PassingState | null>(null);
 
   const trickTimerRef = useRef<number | null>(null);
 
@@ -174,6 +184,29 @@ export function GamePage({
     } else if (event === "TRUMP_NAMED") {
       const p = payload as { trump_suit: string };
       setTrumpSuit(p.trump_suit);
+    } else if (event === "PASSING_PHASE_STARTED") {
+      const p = payload as {
+        trump_suit: string;
+        bidding_team: string;
+        bidder_seat: string;
+        partner_seat: string;
+      };
+      setPassingState({
+        trumpSuit: p.trump_suit,
+        biddingTeam: p.bidding_team,
+        bidderSeat: p.bidder_seat,
+        partnerSeat: p.partner_seat,
+        submittedSeats: [],
+      });
+      setPhase("PASSING_CARDS");
+    } else if (event === "CARDS_PASSED") {
+      const p = payload as { seat: string; submitted_seats: string[] };
+      setPassingState((prev) =>
+        prev ? { ...prev, submittedSeats: p.submitted_seats } : prev
+      );
+    } else if (event === "CARDS_RECEIVED") {
+      const p = payload as { cards_received: string[]; new_hand: string[] };
+      setHand(p.new_hand);
     } else if (event === "MELD_BROADCAST") {
       const p = payload as {
         trump_suit: string;
@@ -367,6 +400,17 @@ export function GamePage({
           />
         )}
 
+        {phase === "PASSING_CARDS" && passingState && (
+          <PassCardsPhase
+            hand={hand}
+            mySeat={mySeat}
+            biddingTeam={passingState.biddingTeam}
+            submittedSeats={passingState.submittedSeats}
+            hasSubmitted={passingState.submittedSeats.includes(mySeat)}
+            sendMessage={sendMessage}
+          />
+        )}
+
         {phase === "SHOWING_MELD" && meldData && (
           <MeldPhase
             meldData={meldData}
@@ -404,12 +448,14 @@ export function GamePage({
       </div>
 
       <div className={styles.bottomArea}>
-        <HandDisplay
-          cards={hand}
-          trumpSuit={trumpSuit}
-          onCardClick={isMyTurn ? handleCardPlay : undefined}
-          legalCards={isMyTurn ? legalCards : undefined}
-        />
+        {phase !== "PASSING_CARDS" && (
+          <HandDisplay
+            cards={hand}
+            trumpSuit={trumpSuit}
+            onCardClick={isMyTurn ? handleCardPlay : undefined}
+            legalCards={isMyTurn ? legalCards : undefined}
+          />
+        )}
         {bottomPlayer && <PlayerAvatar username={bottomPlayer} />}
       </div>
     </div>
@@ -422,6 +468,8 @@ function phaseLabel(phase: Phase): string {
       return "Bidding Phase";
     case "NAMING_TRUMP":
       return "Naming Trump";
+    case "PASSING_CARDS":
+      return "Passing Cards";
     case "SHOWING_MELD":
       return "Meld Phase";
     case "TRICK_PLAYING":

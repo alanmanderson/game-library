@@ -55,7 +55,7 @@ Starting with the player to the dealer's left, each player either bids or passes
 The winning bidder declares one of the four suits as **trump**. All cards of that suit outrank all non-trump cards for the duration of the hand.
 
 ### Passing (Partnership)
-After trump is named, the winning bidder's partner passes **4 cards** face-down to the bidder. The bidder reviews them, then passes **4 different cards** back. This allows the partnership to consolidate strong melds and game-winning cards before melding.
+After trump is named, both partners on the bidding team simultaneously pass **3 cards** face-down to each other. Neither player sees what the other is passing until both have submitted. This allows the partnership to consolidate strong melds and game-winning cards before melding.
 
 ---
 

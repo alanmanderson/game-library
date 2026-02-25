@@ -58,6 +58,8 @@ async def handle_message(
         await handle_submit_bid(websocket, payload, room_code, user_id, db)
     elif action == "DECLARE_TRUMP":
         await handle_declare_trump(websocket, payload, room_code, user_id, db)
+    elif action == "PASS_CARDS":
+        await handle_pass_cards(websocket, payload, room_code, user_id, db)
     elif action == "ACKNOWLEDGE_MELD":
         await handle_acknowledge_meld(websocket, room_code, user_id, db)
     elif action == "PLAY_CARD":
@@ -354,6 +356,8 @@ VALID_SUITS = {"HEARTS", "DIAMONDS", "CLUBS", "SPADES"}
 
 TEAM_FOR_SEAT = {"NORTH": "NS", "SOUTH": "NS", "EAST": "EW", "WEST": "EW"}
 
+PARTNER_SEAT = {"NORTH": "SOUTH", "SOUTH": "NORTH", "EAST": "WEST", "WEST": "EAST"}
+
 
 async def handle_declare_trump(
     websocket: WebSocket,
@@ -405,23 +409,17 @@ async def handle_declare_trump(
 
     hand["trump_suit"] = suit
 
-    # Calculate melds for all players
-    player_hands = state["player_hands"]
-    player_melds = {}
-    team_meld = {"NS": 0, "EW": 0}
+    bidding_team = TEAM_FOR_SEAT[winning_seat]
+    partner_seat = PARTNER_SEAT[winning_seat]
 
-    for seat_name in SEATS:
-        seat_hand = player_hands[seat_name]
-        melds = calculate_melds(seat_hand, suit)
-        total = sum(m["points"] for m in melds)
-        player_melds[seat_name] = {"melds": melds, "total": total}
-        team_meld[TEAM_FOR_SEAT[seat_name]] += total
+    hand["card_passing"] = {
+        "bidding_team": bidding_team,
+        "bidder_seat": winning_seat,
+        "partner_seat": partner_seat,
+        "submitted": {},
+    }
 
-    hand["team_meld"] = team_meld
-    hand["player_melds"] = player_melds
-    hand["meld_acknowledged_seats"] = []
-
-    state["phase"] = "SHOWING_MELD"
+    state["phase"] = "PASSING_CARDS"
     game.current_state_json = state
     await db.flush()
 
@@ -432,23 +430,202 @@ async def handle_declare_trump(
         "payload": {
             "trump_suit": suit,
             "declared_by_seat": winning_seat,
-            "bidding_team": TEAM_FOR_SEAT[winning_seat],
+            "bidding_team": bidding_team,
             "winning_bid": bidding["winning_bid"],
             "is_shoot_the_moon": bidding["is_shoot_the_moon"],
         },
     })
 
     await manager.broadcast(room_code, {
-        "event": "MELD_BROADCAST",
+        "event": "PASSING_PHASE_STARTED",
         "payload": {
             "trump_suit": suit,
-            "winning_bid": bidding["winning_bid"],
-            "is_shoot_the_moon": bidding["is_shoot_the_moon"],
-            "bidding_team": TEAM_FOR_SEAT[winning_seat],
-            "team_meld": team_meld,
-            "player_melds": player_melds,
+            "bidding_team": bidding_team,
+            "bidder_seat": winning_seat,
+            "partner_seat": partner_seat,
         },
     })
+
+
+async def handle_pass_cards(
+    websocket: WebSocket,
+    payload: dict,
+    room_code: str,
+    user_id: uuid.UUID,
+    db: AsyncSession,
+):
+    game = await _load_game(db, room_code)
+    if game is None:
+        await manager.send_personal(websocket, {
+            "event": "ERROR",
+            "payload": {"message": "Game not found"},
+        })
+        return
+
+    state = copy.deepcopy(game.current_state_json or {})
+    if state.get("phase") != "PASSING_CARDS":
+        await manager.send_personal(websocket, {
+            "event": "ERROR",
+            "payload": {"message": "Game is not in the card passing phase"},
+        })
+        return
+
+    # Find sender's seat
+    sender_seat = None
+    for seat, col in SEAT_COLUMNS.items():
+        if getattr(game, col) == user_id:
+            sender_seat = seat
+            break
+
+    if sender_seat is None:
+        await manager.send_personal(websocket, {
+            "event": "ERROR",
+            "payload": {"message": "You are not seated in this game"},
+        })
+        return
+
+    hand = state["current_hand"]
+    card_passing = hand["card_passing"]
+    bidding_team = card_passing["bidding_team"]
+
+    # Only bidding team members can pass cards
+    if TEAM_FOR_SEAT[sender_seat] != bidding_team:
+        await manager.send_personal(websocket, {
+            "event": "ERROR",
+            "payload": {"message": "Only the bidding team passes cards"},
+        })
+        return
+
+    # Check if already submitted
+    if sender_seat in card_passing["submitted"]:
+        await manager.send_personal(websocket, {
+            "event": "ERROR",
+            "payload": {"message": "You have already submitted your cards"},
+        })
+        return
+
+    cards = payload.get("cards", [])
+    if not isinstance(cards, list) or len(cards) != 3:
+        await manager.send_personal(websocket, {
+            "event": "ERROR",
+            "payload": {"message": "You must pass exactly 3 cards"},
+        })
+        return
+
+    # Validate all cards are in sender's hand (copy-based for duplicate handling)
+    player_hand = list(state["player_hands"][sender_seat])
+    for card in cards:
+        if card in player_hand:
+            player_hand.remove(card)
+        else:
+            await manager.send_personal(websocket, {
+                "event": "ERROR",
+                "payload": {"message": f"Card {card} is not in your hand"},
+            })
+            return
+
+    card_passing["submitted"][sender_seat] = cards
+    submitted_seats = list(card_passing["submitted"].keys())
+
+    if len(submitted_seats) < 2:
+        # First partner submitted — save and notify
+        game.current_state_json = state
+        await db.flush()
+
+        await manager.broadcast(room_code, {
+            "event": "CARDS_PASSED",
+            "payload": {
+                "seat": sender_seat,
+                "submitted_seats": submitted_seats,
+            },
+        })
+    else:
+        # Both partners submitted — perform the swap
+        bidder_seat = card_passing["bidder_seat"]
+        partner_seat = card_passing["partner_seat"]
+        bidder_cards = card_passing["submitted"][bidder_seat]
+        partner_cards = card_passing["submitted"][partner_seat]
+
+        # Remove passed cards and add received cards
+        bidder_hand = list(state["player_hands"][bidder_seat])
+        partner_hand = list(state["player_hands"][partner_seat])
+
+        for card in bidder_cards:
+            bidder_hand.remove(card)
+        for card in partner_cards:
+            partner_hand.remove(card)
+
+        bidder_hand.extend(partner_cards)
+        partner_hand.extend(bidder_cards)
+
+        state["player_hands"][bidder_seat] = bidder_hand
+        state["player_hands"][partner_seat] = partner_hand
+
+        # Broadcast that second partner submitted
+        await manager.broadcast(room_code, {
+            "event": "CARDS_PASSED",
+            "payload": {
+                "seat": sender_seat,
+                "submitted_seats": submitted_seats,
+            },
+        })
+
+        # Send private CARDS_RECEIVED to each partner
+        seat_to_user_id = {
+            s: getattr(game, c) for s, c in SEAT_COLUMNS.items()
+        }
+        connections = manager.get_connections(room_code)
+        for conn in connections:
+            if conn.user_id == seat_to_user_id[bidder_seat]:
+                await manager.send_personal(conn.websocket, {
+                    "event": "CARDS_RECEIVED",
+                    "payload": {
+                        "cards_received": partner_cards,
+                        "new_hand": bidder_hand,
+                    },
+                })
+            elif conn.user_id == seat_to_user_id[partner_seat]:
+                await manager.send_personal(conn.websocket, {
+                    "event": "CARDS_RECEIVED",
+                    "payload": {
+                        "cards_received": bidder_cards,
+                        "new_hand": partner_hand,
+                    },
+                })
+
+        # Calculate melds on post-swap hands
+        trump_suit = hand["trump_suit"]
+        player_hands = state["player_hands"]
+        player_melds = {}
+        team_meld = {"NS": 0, "EW": 0}
+
+        for seat_name in SEATS:
+            seat_hand = player_hands[seat_name]
+            melds = calculate_melds(seat_hand, trump_suit)
+            total = sum(m["points"] for m in melds)
+            player_melds[seat_name] = {"melds": melds, "total": total}
+            team_meld[TEAM_FOR_SEAT[seat_name]] += total
+
+        hand["team_meld"] = team_meld
+        hand["player_melds"] = player_melds
+        hand["meld_acknowledged_seats"] = []
+
+        state["phase"] = "SHOWING_MELD"
+        game.current_state_json = state
+        await db.flush()
+
+        bidding = hand["bidding"]
+        await manager.broadcast(room_code, {
+            "event": "MELD_BROADCAST",
+            "payload": {
+                "trump_suit": trump_suit,
+                "winning_bid": bidding["winning_bid"],
+                "is_shoot_the_moon": bidding["is_shoot_the_moon"],
+                "bidding_team": bidding_team,
+                "team_meld": team_meld,
+                "player_melds": player_melds,
+            },
+        })
 
 
 async def handle_acknowledge_meld(

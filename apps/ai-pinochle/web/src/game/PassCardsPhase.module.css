@@ -1,0 +1,89 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.25rem;
+  color: #333;
+}
+
+.subtitle {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #555;
+}
+
+.cardGrid {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0.5rem 0;
+}
+
+.card {
+  width: 80px;
+  height: 112px;
+  border-radius: 6px;
+  border: 2px solid #ccc;
+  background: #fff;
+  object-fit: contain;
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.card:hover {
+  transform: translateY(-6px);
+  z-index: 1;
+}
+
+.selected {
+  border-color: #4caf50;
+  box-shadow: 0 0 8px rgba(76, 175, 80, 0.6);
+  transform: translateY(-12px);
+}
+
+.selected:hover {
+  transform: translateY(-14px);
+}
+
+.counter {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #555;
+}
+
+.submitButton {
+  padding: 0.625rem 2rem;
+  background: #2e7d32;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.submitButton:hover:not(:disabled) {
+  background: #1b5e20;
+}
+
+.submitButton:disabled {
+  background: #aaa;
+  cursor: default;
+}
+
+.waiting {
+  font-size: 0.875rem;
+  color: #888;
+  font-style: italic;
+}
+
+.progress {
+  font-size: 0.75rem;
+  color: #aaa;
+}
