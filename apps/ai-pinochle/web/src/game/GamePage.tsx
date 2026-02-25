@@ -102,6 +102,7 @@ export function GamePage({
   const [trickScores, setTrickScores] = useState<Record<string, number>>({ NS: 0, EW: 0 });
   const [trickResult, setTrickResult] = useState<TrickResult | null>(null);
   const [handResult, setHandResult] = useState<HandResultData | null>(null);
+  const [handResultAckedSeats, setHandResultAckedSeats] = useState<string[]>([]);
 
   const trickTimerRef = useRef<number | null>(null);
 
@@ -132,6 +133,20 @@ export function GamePage({
     if (event === "HAND_DEALT") {
       const p = payload as { cards: string[] };
       setHand(p.cards);
+      // Reset per-hand state for new hand
+      setHandResult(null);
+      setHandResultAckedSeats([]);
+      setBiddingResult(null);
+      setTrumpSuit(null);
+      setMeldData(null);
+      setAcknowledgedSeats([]);
+      setTrickNumber(1);
+      setCurrentTrick([]);
+      setTrickResult(null);
+      setTricksTaken({ NS: 0, EW: 0 });
+      setTrickScores({ NS: 0, EW: 0 });
+      setNextToActSeat(null);
+      setLegalCards([]);
     } else if (event === "BIDDING_TURN") {
       const p = payload as {
         current_highest_bid: number | null;
@@ -272,7 +287,11 @@ export function GamePage({
         scoreDeltas: p.score_deltas,
         gameScores: p.game_scores,
       });
+      setHandResultAckedSeats([]);
       setPhase("HAND_COMPLETE");
+    } else if (event === "HAND_RESULT_ACKNOWLEDGED") {
+      const p = payload as { acknowledged_seats: string[] };
+      setHandResultAckedSeats(p.acknowledged_seats);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastEvent]);
@@ -370,7 +389,12 @@ export function GamePage({
         )}
 
         {phase === "HAND_COMPLETE" && handResult && (
-          <HandResult result={handResult} />
+          <HandResult
+            result={handResult}
+            hasAcknowledged={handResultAckedSeats.includes(mySeat)}
+            acknowledgedSeats={handResultAckedSeats}
+            onAcknowledge={() => sendMessage({ action: "ACKNOWLEDGE_HAND_RESULT", payload: {} })}
+          />
         )}
       </div>
 

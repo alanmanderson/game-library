@@ -234,3 +234,30 @@ async def _send_game_state_on_reconnect(
                     "currently_winning": currently_winning,
                 },
             })
+
+    elif phase == "HAND_COMPLETE":
+        bidding = hand.get("bidding", {})
+        winning_seat = bidding.get("winning_seat")
+        trick_play = hand.get("trick_play", {})
+
+        await manager.send_personal(websocket, {
+            "event": "HAND_COMPLETED",
+            "payload": {
+                "trick_scores": trick_play.get("trick_scores", {}),
+                "team_meld": hand.get("team_meld", {}),
+                "bid": bidding.get("winning_bid"),
+                "bidding_team": TEAM_FOR_SEAT.get(winning_seat, ""),
+                "score_deltas": hand.get("score_deltas", {}),
+                "game_scores": state.get("game_scores", {}),
+            },
+        })
+
+        acked = hand.get("hand_result_acknowledged_seats", [])
+        if acked:
+            await manager.send_personal(websocket, {
+                "event": "HAND_RESULT_ACKNOWLEDGED",
+                "payload": {
+                    "seat": acked[-1],
+                    "acknowledged_seats": list(acked),
+                },
+            })

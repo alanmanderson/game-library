@@ -87,3 +87,28 @@
   font-size: 0.9rem;
   color: #eee;
 }
+
+.okButton {
+  padding: 0.625rem 2rem;
+  background: #2e7d32;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.okButton:hover:not(:disabled) {
+  background: #1b5e20;
+}
+
+.okButton:disabled {
+  background: #aaa;
+  cursor: default;
+}
+
+.ackProgress {
+  font-size: 0.75rem;
+  color: #888;
+}

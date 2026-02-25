@@ -11,9 +11,12 @@ interface HandResultData {
 
 interface Props {
   result: HandResultData;
+  hasAcknowledged: boolean;
+  acknowledgedSeats: string[];
+  onAcknowledge: () => void;
 }
 
-export function HandResult({ result }: Props) {
+export function HandResult({ result, hasAcknowledged, acknowledgedSeats, onAcknowledge }: Props) {
   const { trickScores, teamMeld, bid, biddingTeam, scoreDeltas, gameScores } = result;
   const otherTeam = biddingTeam === "NS" ? "EW" : "NS";
   const bidMade = scoreDeltas[biddingTeam] >= 0;
@@ -61,6 +64,17 @@ export function HandResult({ result }: Props) {
           <span>EW: <strong>{gameScores.EW}</strong></span>
         </div>
       </div>
+
+      <button
+        className={styles.okButton}
+        onClick={onAcknowledge}
+        disabled={hasAcknowledged}
+      >
+        {hasAcknowledged ? "Waiting..." : "OK"}
+      </button>
+      <span className={styles.ackProgress}>
+        {acknowledgedSeats.length}/4 ready
+      </span>
     </div>
   );
 }
