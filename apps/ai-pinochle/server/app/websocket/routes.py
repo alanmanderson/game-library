@@ -11,6 +11,8 @@ from app.database import AsyncSessionLocal
 from app.models.user import User
 from app.models.game import Game
 from app.websocket.connection_manager import Connection, manager
+from app.engine.meld import SUIT_LETTER
+from app.engine.tricks import card_suit, get_legal_cards, trick_winner
 from app.websocket.handlers import (
     handle_message,
     _build_seats_dict,
@@ -174,9 +176,61 @@ async def _send_game_state_on_reconnect(
             })
 
     elif phase == "TRICK_PLAYING":
+        trick_play = hand.get("trick_play", {})
+
         await manager.send_personal(websocket, {
             "event": "MELD_PHASE_COMPLETED",
             "payload": {
                 "team_meld": hand.get("team_meld", {}),
+                "first_to_act_seat": trick_play.get("led_seat"),
             },
         })
+
+        # Send current trick state (scores, trick number)
+        await manager.send_personal(websocket, {
+            "event": "TRICK_STATE",
+            "payload": {
+                "trick_number": trick_play.get("trick_number", 1),
+                "tricks_taken": trick_play.get("tricks_taken", {}),
+                "trick_scores": trick_play.get("trick_scores", {}),
+                "led_seat": trick_play.get("led_seat"),
+            },
+        })
+
+        # Replay cards played in the current trick
+        for card_entry in trick_play.get("cards_played", []):
+            await manager.send_personal(websocket, {
+                "event": "CARD_PLAYED",
+                "payload": {
+                    "seat": card_entry["seat"],
+                    "card": card_entry["card"],
+                    "next_to_act_seat": None,
+                },
+            })
+
+        # If it's this player's turn, send YOUR_TURN
+        if player_seat and player_seat == trick_play.get("next_to_act_seat"):
+            trump_letter = SUIT_LETTER.get(hand.get("trump_suit", ""), "")
+            cards_played = trick_play.get("cards_played", [])
+            player_hand = state.get("player_hands", {}).get(player_seat, [])
+
+            if cards_played:
+                led_suit = card_suit(cards_played[0]["card"])
+                currently_winning = trick_winner(cards_played, trump_letter)
+            else:
+                led_suit = None
+                currently_winning = None
+
+            legal_cards = get_legal_cards(player_hand, led_suit, trump_letter, cards_played)
+
+            await manager.send_personal(websocket, {
+                "event": "YOUR_TURN",
+                "payload": {
+                    "seat": player_seat,
+                    "legal_cards": legal_cards,
+                    "trick_number": trick_play.get("trick_number", 1),
+                    "led_suit": led_suit,
+                    "cards_played": cards_played,
+                    "currently_winning": currently_winning,
+                },
+            })

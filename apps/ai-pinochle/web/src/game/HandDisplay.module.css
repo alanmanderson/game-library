@@ -30,3 +30,23 @@
   border-color: #ffd700;
   box-shadow: 0 0 6px rgba(255, 215, 0, 0.5);
 }
+
+.legal {
+  border-color: #4caf50;
+  box-shadow: 0 0 8px rgba(76, 175, 80, 0.6);
+  cursor: pointer;
+}
+
+.legal:hover {
+  transform: translateY(-12px);
+  box-shadow: 0 0 12px rgba(76, 175, 80, 0.8);
+}
+
+.disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.disabled:hover {
+  transform: none;
+}

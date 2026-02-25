@@ -3,6 +3,8 @@ import styles from "./HandDisplay.module.css";
 interface Props {
   cards: string[];
   trumpSuit: string | null;
+  onCardClick?: (card: string) => void;
+  legalCards?: string[];
 }
 
 function cardToImage(code: string): string {
@@ -35,20 +37,32 @@ const SUIT_LETTER: Record<string, string> = {
   SPADES: "S",
 };
 
-export function HandDisplay({ cards, trumpSuit }: Props) {
+export function HandDisplay({ cards, trumpSuit, onCardClick, legalCards }: Props) {
   const trumpLetter = trumpSuit ? SUIT_LETTER[trumpSuit] ?? null : null;
   const sorted = sortHand(cards);
+  const interactive = !!(onCardClick && legalCards);
 
   return (
     <div className={styles.hand}>
       {sorted.map((card, i) => {
         const isTrump = trumpLetter && cardSuit(card) === trumpLetter;
+        const isLegal = !legalCards || legalCards.includes(card);
+        const clickable = interactive && isLegal;
+
+        const classes = [
+          styles.card,
+          interactive
+            ? isLegal ? styles.legal : styles.disabled
+            : isTrump ? styles.trump : "",
+        ].filter(Boolean).join(" ");
+
         return (
           <img
             key={`${card}-${i}`}
             src={cardToImage(card)}
             alt={card}
-            className={`${styles.card} ${isTrump ? styles.trump : ""}`}
+            className={classes}
+            onClick={clickable ? () => onCardClick!(card) : undefined}
           />
         );
       })}

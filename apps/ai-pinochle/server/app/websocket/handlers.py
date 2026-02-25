@@ -8,7 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.websockets import WebSocket
 
 from app.engine.deck import SEATS, shuffle_and_deal
-from app.engine.meld import calculate_melds
+from app.engine.meld import SUIT_LETTER, calculate_melds
+from app.engine.scoring import score_hand
+from app.engine.tricks import (
+    card_suit,
+    get_legal_cards,
+    trick_card_points,
+    trick_winner,
+)
 from app.models.game import Game
 from app.models.user import User
 from app.websocket.connection_manager import manager
@@ -53,6 +60,8 @@ async def handle_message(
         await handle_declare_trump(websocket, payload, room_code, user_id, db)
     elif action == "ACKNOWLEDGE_MELD":
         await handle_acknowledge_meld(websocket, room_code, user_id, db)
+    elif action == "PLAY_CARD":
+        await handle_play_card(websocket, payload, room_code, user_id, db)
     else:
         await manager.send_personal(websocket, {
             "event": "ERROR",
@@ -491,6 +500,16 @@ async def handle_acknowledge_meld(
     hand["meld_acknowledged_seats"] = acked
 
     if len(acked) >= 4:
+        bid_winner = hand["bidding"]["winning_seat"]
+        hand["trick_play"] = {
+            "trick_number": 1,
+            "next_to_act_seat": bid_winner,
+            "led_seat": bid_winner,
+            "cards_played": [],
+            "tricks_taken": {"NS": 0, "EW": 0},
+            "trick_scores": {"NS": 0, "EW": 0},
+        }
+
         state["phase"] = "TRICK_PLAYING"
         game.current_state_json = state
         await db.flush()
@@ -499,8 +518,11 @@ async def handle_acknowledge_meld(
             "event": "MELD_PHASE_COMPLETED",
             "payload": {
                 "team_meld": hand["team_meld"],
+                "first_to_act_seat": bid_winner,
             },
         })
+
+        await _send_your_turn(game, room_code, state, bid_winner)
     else:
         game.current_state_json = state
         await db.flush()
@@ -512,6 +534,218 @@ async def handle_acknowledge_meld(
                 "acknowledged_seats": list(acked),
             },
         })
+
+
+def _next_seat(seat: str) -> str:
+    """Return the next seat clockwise."""
+    idx = SEATS.index(seat)
+    return SEATS[(idx + 1) % 4]
+
+
+async def _send_your_turn(
+    game: Game, room_code: str, state: dict, seat: str
+) -> None:
+    """Send YOUR_TURN event to the player at the given seat."""
+    user_id = getattr(game, SEAT_COLUMNS[seat])
+    hand = state["current_hand"]
+    trick_play = hand["trick_play"]
+    cards_played = trick_play["cards_played"]
+    player_hand = state["player_hands"][seat]
+    trump_letter = SUIT_LETTER[hand["trump_suit"]]
+
+    if cards_played:
+        led_suit = card_suit(cards_played[0]["card"])
+        currently_winning = trick_winner(cards_played, trump_letter)
+    else:
+        led_suit = None
+        currently_winning = None
+
+    legal_cards = get_legal_cards(player_hand, led_suit, trump_letter, cards_played)
+
+    connections = manager.get_connections(room_code)
+    for conn in connections:
+        if conn.user_id == user_id:
+            await manager.send_personal(conn.websocket, {
+                "event": "YOUR_TURN",
+                "payload": {
+                    "seat": seat,
+                    "legal_cards": legal_cards,
+                    "trick_number": trick_play["trick_number"],
+                    "led_suit": led_suit,
+                    "cards_played": cards_played,
+                    "currently_winning": currently_winning,
+                },
+            })
+            break
+
+
+async def handle_play_card(
+    websocket: WebSocket,
+    payload: dict,
+    room_code: str,
+    user_id: uuid.UUID,
+    db: AsyncSession,
+):
+    game = await _load_game(db, room_code)
+    if game is None:
+        await manager.send_personal(websocket, {
+            "event": "ERROR",
+            "payload": {"message": "Game not found"},
+        })
+        return
+
+    state = copy.deepcopy(game.current_state_json or {})
+    if state.get("phase") != "TRICK_PLAYING":
+        await manager.send_personal(websocket, {
+            "event": "ERROR",
+            "payload": {"message": "Game is not in the trick playing phase"},
+        })
+        return
+
+    # Find sender's seat
+    sender_seat = None
+    for seat, col in SEAT_COLUMNS.items():
+        if getattr(game, col) == user_id:
+            sender_seat = seat
+            break
+
+    if sender_seat is None:
+        await manager.send_personal(websocket, {
+            "event": "ERROR",
+            "payload": {"message": "You are not seated in this game"},
+        })
+        return
+
+    hand = state["current_hand"]
+    trick_play = hand["trick_play"]
+
+    if sender_seat != trick_play["next_to_act_seat"]:
+        await manager.send_personal(websocket, {
+            "event": "ERROR",
+            "payload": {"message": "It is not your turn"},
+        })
+        return
+
+    card = payload.get("card")
+    if not card:
+        await manager.send_personal(websocket, {
+            "event": "ERROR",
+            "payload": {"message": "No card specified"},
+        })
+        return
+
+    player_hand = state["player_hands"][sender_seat]
+    trump_letter = SUIT_LETTER[hand["trump_suit"]]
+    cards_played = trick_play["cards_played"]
+    led_suit = card_suit(cards_played[0]["card"]) if cards_played else None
+    legal_cards = get_legal_cards(player_hand, led_suit, trump_letter, cards_played)
+
+    if card not in legal_cards:
+        await manager.send_personal(websocket, {
+            "event": "ERROR",
+            "payload": {"message": "That card is not a legal play"},
+        })
+        return
+
+    # Remove card from hand (first occurrence for duplicate handling)
+    player_hand.remove(card)
+    cards_played.append({"seat": sender_seat, "card": card})
+
+    if len(cards_played) < 4:
+        # Trick not complete — advance to next player
+        next_seat = _next_seat(sender_seat)
+        trick_play["next_to_act_seat"] = next_seat
+        game.current_state_json = state
+        await db.flush()
+
+        await manager.broadcast(room_code, {
+            "event": "CARD_PLAYED",
+            "payload": {
+                "seat": sender_seat,
+                "card": card,
+                "next_to_act_seat": next_seat,
+            },
+        })
+
+        await _send_your_turn(game, room_code, state, next_seat)
+    else:
+        # Trick complete
+        winner = trick_winner(cards_played, trump_letter)
+        winner_seat = winner["seat"]
+        winner_team = TEAM_FOR_SEAT[winner_seat]
+        points = trick_card_points(cards_played)
+        trick_number = trick_play["trick_number"]
+
+        if trick_number == 12:
+            points += 1
+
+        trick_play["trick_scores"][winner_team] += points
+        trick_play["tricks_taken"][winner_team] += 1
+
+        await manager.broadcast(room_code, {
+            "event": "CARD_PLAYED",
+            "payload": {
+                "seat": sender_seat,
+                "card": card,
+                "next_to_act_seat": None,
+            },
+        })
+
+        await manager.broadcast(room_code, {
+            "event": "TRICK_COMPLETED",
+            "payload": {
+                "trick_number": trick_number,
+                "winner_seat": winner_seat,
+                "cards_played": cards_played,
+                "trick_points": points,
+                "tricks_taken": trick_play["tricks_taken"],
+                "trick_scores": trick_play["trick_scores"],
+            },
+        })
+
+        if trick_number < 12:
+            # Set up next trick
+            trick_play["trick_number"] = trick_number + 1
+            trick_play["led_seat"] = winner_seat
+            trick_play["next_to_act_seat"] = winner_seat
+            trick_play["cards_played"] = []
+            game.current_state_json = state
+            await db.flush()
+
+            await _send_your_turn(game, room_code, state, winner_seat)
+        else:
+            # Hand complete — score the hand
+            bidding = hand["bidding"]
+            bid = bidding["winning_bid"]
+            bidding_team = TEAM_FOR_SEAT[bidding["winning_seat"]]
+
+            score_deltas = score_hand(
+                bid=bid,
+                bidding_team=bidding_team,
+                trick_scores=trick_play["trick_scores"],
+                tricks_taken=trick_play["tricks_taken"],
+                team_meld=hand["team_meld"],
+            )
+
+            game_scores = state["game_scores"]
+            game_scores["NS"] += score_deltas["NS"]
+            game_scores["EW"] += score_deltas["EW"]
+
+            state["phase"] = "HAND_COMPLETE"
+            game.current_state_json = state
+            await db.flush()
+
+            await manager.broadcast(room_code, {
+                "event": "HAND_COMPLETED",
+                "payload": {
+                    "trick_scores": trick_play["trick_scores"],
+                    "team_meld": hand["team_meld"],
+                    "bid": bid,
+                    "bidding_team": bidding_team,
+                    "score_deltas": score_deltas,
+                    "game_scores": game_scores,
+                },
+            })
 
 
 async def _build_seats_dict(game: Game, db: AsyncSession) -> dict[str, str | None]:
