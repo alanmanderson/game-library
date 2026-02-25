@@ -11,6 +11,7 @@ from app.database import AsyncSessionLocal
 from app.models.user import User
 from app.models.game import Game
 from app.websocket.connection_manager import Connection, manager
+from app.websocket.game_logger import log_event, log_message
 from app.engine.meld import SUIT_LETTER
 from app.engine.tricks import card_suit, get_legal_cards, trick_winner
 from app.websocket.handlers import (
@@ -73,6 +74,7 @@ async def _run_websocket(
 
     conn = Connection(websocket=websocket, user_id=user.id, username=user.username)
     await manager.connect(room_code, conn)
+    log_event(room_code, user.username, "connected")
 
     # Send current game state on connect
     result = await db.execute(
@@ -91,12 +93,14 @@ async def _run_websocket(
     try:
         while True:
             data = await websocket.receive_json()
+            log_message(room_code, "IN", user.username, data)
             await handle_message(websocket, data, room_code, user.id, db)
             await db.commit()
     except WebSocketDisconnect:
         pass
     finally:
         manager.disconnect(room_code, websocket)
+        log_event(room_code, user.username, "disconnected")
 
 
 async def _send_game_state_on_reconnect(

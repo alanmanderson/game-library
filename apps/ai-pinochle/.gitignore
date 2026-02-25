@@ -11,6 +11,9 @@ __pycache__/
 dist/
 .pytest_cache/
 
+# Logs
+logs/
+
 # macOS
 .DS_Store
 
