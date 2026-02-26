@@ -29,7 +29,7 @@ const SEAT_LABELS: Record<string, string> = {
 };
 
 function cardToImage(code: string): string {
-  return `/img/${code.toLowerCase()}.png`;
+  return `/img/${code}.png`;
 }
 
 function getPositionForSeat(

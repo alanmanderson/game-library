@@ -36,13 +36,11 @@ The `shared/` package is TypeScript-only. The Python server and JS clients share
 
 ## Card Assets
 
-Card images live in `public/img/` with the naming convention `{rank}{suit}.png`:
-- Ranks: `9`, `10`, `j`, `k`, `q`, `a`
-- Suits: `c` (clubs), `d` (diamonds), `h` (hearts), `s` (spades)
+Card images live in `public/img/` with the naming convention `{Rank}{Suit}.png`, matching the server's card codes:
+- Ranks: `9`, `10`, `J`, `K`, `Q`, `A`
+- Suits: `C` (clubs), `D` (diamonds), `H` (hearts), `S` (spades)
 
-Example: `public/img/ac.png` = Ace of Clubs, `public/img/10s.png` = Ten of Spades. A `back.svg` is also available for face-down cards. All 24 unique Pinochle cards are present.
-
-Note: Image filenames use **lowercase** (`ah.png`), while the server engine uses **uppercase** card codes (`AH`). Clients must lowercase when mapping codes to image paths.
+Example: `public/img/AC.png` = Ace of Clubs, `public/img/10S.png` = Ten of Spades. A `back.svg` is also available for face-down cards. All 24 unique Pinochle cards are present.
 
 ## Design Decisions
 

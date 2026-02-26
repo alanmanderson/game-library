@@ -18,7 +18,7 @@ const TEAM_FOR_SEAT: Record<string, string> = {
 };
 
 function cardToImage(code: string): string {
-  return `/img/${code.toLowerCase()}.png`;
+  return `/img/${code}.png`;
 }
 
 export function PassCardsPhase({

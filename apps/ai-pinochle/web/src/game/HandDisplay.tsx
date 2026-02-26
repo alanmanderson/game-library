@@ -8,7 +8,7 @@ interface Props {
 }
 
 function cardToImage(code: string): string {
-  return `/img/${code.toLowerCase()}.png`;
+  return `/img/${code}.png`;
 }
 
 function cardSuit(code: string): string {

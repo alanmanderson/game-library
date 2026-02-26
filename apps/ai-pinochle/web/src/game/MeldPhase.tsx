@@ -43,7 +43,7 @@ const SUIT_SYMBOLS: Record<string, string> = {
 const SEAT_ORDER = ["NORTH", "EAST", "SOUTH", "WEST"];
 
 function cardToImage(code: string): string {
-  return `/img/${code.toLowerCase()}.png`;
+  return `/img/${code}.png`;
 }
 
 export function MeldPhase({
