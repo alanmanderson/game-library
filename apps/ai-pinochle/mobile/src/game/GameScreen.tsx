@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView } from "react-native";
+import * as ScreenOrientation from "expo-screen-orientation";
 import { HandDisplay } from "./HandDisplay";
 import { BiddingPhase } from "./BiddingPhase";
 import { TrumpPhase } from "./TrumpPhase";
@@ -161,6 +162,18 @@ export function GameScreen({
 
   useEffect(() => {
     return () => cancelTrickTimer();
+  }, []);
+
+  // Lock to landscape when game screen mounts, restore portrait on unmount
+  useEffect(() => {
+    ScreenOrientation.lockAsync(
+      ScreenOrientation.OrientationLock.LANDSCAPE,
+    );
+    return () => {
+      ScreenOrientation.lockAsync(
+        ScreenOrientation.OrientationLock.PORTRAIT_UP,
+      );
+    };
   }, []);
 
   useEffect(() => {

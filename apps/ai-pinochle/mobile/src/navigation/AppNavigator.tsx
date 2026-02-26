@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import * as ScreenOrientation from "expo-screen-orientation";
 import { useAuth } from "../auth/AuthContext";
 import { RegisterScreen } from "../auth/RegisterScreen";
 import { LobbyScreen } from "../lobby/LobbyScreen";
@@ -18,6 +19,11 @@ const Stack = createNativeStackNavigator<RootStackParamList>() as any;
 
 export function AppNavigator() {
   const { user, loading } = useAuth();
+
+  // Lock portrait on app startup (GameScreen overrides to landscape when mounted)
+  useEffect(() => {
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+  }, []);
 
   if (loading) {
     return (
