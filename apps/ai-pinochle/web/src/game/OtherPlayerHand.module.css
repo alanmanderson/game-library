@@ -1,12 +1,16 @@
 .horizontalFan {
   display: flex;
   justify-content: center;
+  flex-shrink: 1;
+  min-width: 0;
 }
 
 .horizontalFan img {
   width: 50px;
+  min-width: 20px;
   height: 70px;
   margin-left: -15px;
+  flex-shrink: 1;
 }
 
 .horizontalFan img:first-child {

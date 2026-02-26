@@ -1,10 +1,10 @@
 .table {
   display: grid;
   grid-template-areas:
-    ".     top    ."
-    "left  center right"
-    ".     bottom .";
-  grid-template-columns: 120px 1fr 120px;
+    "top    top    top"
+    "left   center right"
+    "bottom bottom bottom";
+  grid-template-columns: 80px 1fr 80px;
   grid-template-rows: auto 1fr auto;
   min-height: 100vh;
   padding: 0.5rem;
@@ -15,8 +15,9 @@
 .topArea {
   grid-area: top;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   padding-top: 0.5rem;
 }
@@ -51,8 +52,9 @@
 .bottomArea {
   grid-area: bottom;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   padding-bottom: 0.5rem;
 }

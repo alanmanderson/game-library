@@ -376,8 +376,8 @@ export function GameScreen({
 
       {/* Top area - partner */}
       <View style={styles.topArea}>
-        {topPlayer && <PlayerAvatar username={topPlayer} />}
         <OtherPlayerHand position="top" cardCount={getOtherCardCount(top)} />
+        {topPlayer && <PlayerAvatar username={topPlayer} />}
       </View>
 
       {/* Middle row: left, center, right */}
@@ -470,6 +470,7 @@ export function GameScreen({
 
       {/* Bottom area - player's hand */}
       <View style={styles.bottomArea}>
+        {bottomPlayer && <PlayerAvatar username={bottomPlayer} />}
         {phase !== "PASSING_CARDS" && (
           <HandDisplay
             cards={hand}
@@ -478,7 +479,6 @@ export function GameScreen({
             legalCards={isMyTurn ? legalCards : undefined}
           />
         )}
-        {bottomPlayer && <PlayerAvatar username={bottomPlayer} />}
       </View>
     </SafeAreaView>
   );
@@ -518,8 +518,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   topArea: {
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 4,
+    gap: 6,
   },
   middleRow: {
     flex: 1,
@@ -537,9 +540,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   bottomArea: {
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     paddingBottom: 8,
-    gap: 4,
+    gap: 6,
   },
   error: {
     color: "#f44336",

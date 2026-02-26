@@ -326,8 +326,8 @@ export function GamePage({
       </div>
 
       <div className={styles.topArea}>
-        {topPlayer && <PlayerAvatar username={topPlayer} />}
         <OtherPlayerHand position="top" cardCount={getOtherCardCount(top)} />
+        {topPlayer && <PlayerAvatar username={topPlayer} />}
       </div>
 
       <div className={styles.leftArea}>
@@ -402,6 +402,7 @@ export function GamePage({
       </div>
 
       <div className={styles.bottomArea}>
+        {bottomPlayer && <PlayerAvatar username={bottomPlayer} />}
         {phase !== "PASSING_CARDS" && (
           <HandDisplay
             cards={hand}
@@ -410,7 +411,6 @@ export function GamePage({
             legalCards={isMyTurn ? legalCards : undefined}
           />
         )}
-        {bottomPlayer && <PlayerAvatar username={bottomPlayer} />}
       </div>
     </div>
   );
