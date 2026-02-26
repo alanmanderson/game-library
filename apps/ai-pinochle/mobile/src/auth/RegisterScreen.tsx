@@ -9,37 +9,10 @@ import {
   Platform,
   ScrollView,
 } from "react-native";
+import type { AuthResponse, FieldErrors } from "@pinochle/shared";
+import { validate } from "@pinochle/shared";
 import { ApiError, post } from "../api/client";
 import { useAuth } from "./AuthContext";
-
-interface AuthResponse {
-  id: string;
-  username: string;
-  email: string | null;
-  access_token: string;
-  token_type: string;
-}
-
-interface FieldErrors {
-  password?: string;
-  email?: string;
-}
-
-function validate(email: string, password: string): FieldErrors {
-  const errors: FieldErrors = {};
-
-  if (!email) {
-    errors.email = "Email is required";
-  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    errors.email = "Invalid email address";
-  }
-
-  if (password.length < 8) {
-    errors.password = "Password must be at least 8 characters";
-  }
-
-  return errors;
-}
 
 export function RegisterScreen() {
   const { login } = useAuth();

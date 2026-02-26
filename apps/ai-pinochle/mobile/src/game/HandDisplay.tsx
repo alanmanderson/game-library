@@ -1,5 +1,6 @@
 import React from "react";
 import { View, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
+import { cardSuit, sortHand, SUIT_LETTER } from "@pinochle/shared";
 import { CardImage } from "./CardImage";
 
 interface Props {
@@ -8,40 +9,6 @@ interface Props {
   onCardClick?: (card: string) => void;
   legalCards?: string[];
 }
-
-function cardSuit(code: string): string {
-  return code.slice(-1);
-}
-
-function cardRank(code: string): string {
-  return code.slice(0, -1);
-}
-
-const SUIT_ORDER: Record<string, number> = { C: 0, D: 1, H: 2, S: 3 };
-const RANK_ORDER: Record<string, number> = {
-  "9": 0,
-  J: 1,
-  Q: 2,
-  K: 3,
-  "10": 4,
-  A: 5,
-};
-
-function sortHand(cards: string[]): string[] {
-  return [...cards].sort((a, b) => {
-    const suitDiff =
-      (SUIT_ORDER[cardSuit(a)] ?? 0) - (SUIT_ORDER[cardSuit(b)] ?? 0);
-    if (suitDiff !== 0) return suitDiff;
-    return (RANK_ORDER[cardRank(a)] ?? 0) - (RANK_ORDER[cardRank(b)] ?? 0);
-  });
-}
-
-const SUIT_LETTER: Record<string, string> = {
-  HEARTS: "H",
-  DIAMONDS: "D",
-  CLUBS: "C",
-  SPADES: "S",
-};
 
 export function HandDisplay({
   cards,

@@ -1,30 +1,13 @@
 import { useState } from "react";
+import type { BiddingResult } from "@pinochle/shared";
+import { SUITS, SEAT_LABELS } from "@pinochle/shared";
 import styles from "./TrumpPhase.module.css";
-
-interface BiddingResult {
-  winningSeat: string;
-  winningBid: number;
-}
 
 interface Props {
   biddingResult: BiddingResult;
   isBidWinner: boolean;
   sendMessage: (msg: Record<string, unknown>) => void;
 }
-
-const SUITS = [
-  { key: "HEARTS", symbol: "\u2665", color: "#d32f2f" },
-  { key: "DIAMONDS", symbol: "\u2666", color: "#d32f2f" },
-  { key: "CLUBS", symbol: "\u2663", color: "#333" },
-  { key: "SPADES", symbol: "\u2660", color: "#333" },
-];
-
-const SEAT_LABELS: Record<string, string> = {
-  NORTH: "North",
-  EAST: "East",
-  SOUTH: "South",
-  WEST: "West",
-};
 
 export function TrumpPhase({ biddingResult, isBidWinner, sendMessage }: Props) {
   const [shootTheMoon, setShootTheMoon] = useState(false);

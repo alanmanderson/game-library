@@ -6,26 +6,9 @@ import {
   StyleSheet,
   ScrollView,
 } from "react-native";
+import type { MeldData } from "@pinochle/shared";
+import { SEAT_LABELS, SUIT_SYMBOLS, SEAT_ORDER } from "@pinochle/shared";
 import { CardImage } from "./CardImage";
-
-interface Meld {
-  name: string;
-  cards: string[];
-  points: number;
-}
-
-interface PlayerMeld {
-  melds: Meld[];
-  total: number;
-}
-
-interface MeldData {
-  trumpSuit: string;
-  winningBid: number;
-  biddingTeam: string;
-  teamMeld: Record<string, number>;
-  playerMelds: Record<string, PlayerMeld>;
-}
 
 interface Props {
   meldData: MeldData;
@@ -33,22 +16,6 @@ interface Props {
   hasAcknowledged: boolean;
   sendMessage: (msg: Record<string, unknown>) => void;
 }
-
-const SEAT_LABELS: Record<string, string> = {
-  NORTH: "North",
-  EAST: "East",
-  SOUTH: "South",
-  WEST: "West",
-};
-
-const SUIT_SYMBOLS: Record<string, string> = {
-  HEARTS: "\u2665",
-  DIAMONDS: "\u2666",
-  CLUBS: "\u2663",
-  SPADES: "\u2660",
-};
-
-const SEAT_ORDER = ["NORTH", "EAST", "SOUTH", "WEST"];
 
 export function MeldPhase({
   meldData,

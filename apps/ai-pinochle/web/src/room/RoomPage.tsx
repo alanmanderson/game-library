@@ -1,25 +1,15 @@
 import { useState, useEffect } from "react";
+import type { Seats } from "@pinochle/shared";
+import { SEATS, SEAT_LABELS_LOWER, getTableOrder } from "@pinochle/shared";
 import { useAuth } from "../auth/AuthContext.tsx";
 import { useWebSocket } from "../hooks/useWebSocket.ts";
 import { GamePage } from "../game/GamePage.tsx";
-import { getTableOrder } from "../game/tableOrder.ts";
 import styles from "./RoomPage.module.css";
-
-const SEATS = ["north", "east", "south", "west"] as const;
-
-const SEAT_LABELS: Record<string, string> = {
-  north: "North",
-  east: "East",
-  south: "South",
-  west: "West",
-};
 
 interface Props {
   roomCode: string;
   onLeave: () => void;
 }
-
-type Seats = Record<string, string | null>;
 
 function normalizeSeats(raw: Record<string, string | null>): Seats {
   const result: Seats = {};
@@ -126,7 +116,7 @@ export function RoomPage({ roomCode, onLeave }: Props) {
               key={seat}
               className={`${styles.seat} ${posClass} ${isSelf ? styles.seatSelf : occupant ? styles.seatOccupied : ""}`}
             >
-              <p className={styles.seatLabel}>{SEAT_LABELS[seat]}</p>
+              <p className={styles.seatLabel}>{SEAT_LABELS_LOWER[seat]}</p>
               {occupant ? (
                 <p className={styles.seatPlayer}>{occupant}</p>
               ) : (

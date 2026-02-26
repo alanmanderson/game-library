@@ -6,6 +6,7 @@ import {
   StyleSheet,
   ScrollView,
 } from "react-native";
+import { TEAM_FOR_SEAT } from "@pinochle/shared";
 import { CardImage } from "./CardImage";
 
 interface Props {
@@ -16,13 +17,6 @@ interface Props {
   hasSubmitted: boolean;
   sendMessage: (msg: Record<string, unknown>) => void;
 }
-
-const TEAM_FOR_SEAT: Record<string, string> = {
-  NORTH: "NS",
-  SOUTH: "NS",
-  EAST: "EW",
-  WEST: "EW",
-};
 
 export function PassCardsPhase({
   hand,

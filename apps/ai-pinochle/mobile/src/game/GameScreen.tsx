@@ -1,6 +1,18 @@
 import React, { useState, useEffect, useRef } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView } from "react-native";
 import * as ScreenOrientation from "expo-screen-orientation";
+import type {
+  Phase,
+  WsEvent,
+  BiddingState,
+  BiddingResult,
+  MeldData,
+  CardPlayed,
+  TrickResult,
+  HandResultData,
+  PassingState,
+} from "@pinochle/shared";
+import { CARDS_PER_PLAYER, getTableOrder } from "@pinochle/shared";
 import { HandDisplay } from "./HandDisplay";
 import { BiddingPhase } from "./BiddingPhase";
 import { TrumpPhase } from "./TrumpPhase";
@@ -10,71 +22,6 @@ import { PassCardsPhase } from "./PassCardsPhase";
 import { HandResult } from "./HandResult";
 import { PlayerAvatar } from "./PlayerAvatar";
 import { OtherPlayerHand } from "./OtherPlayerHand";
-import { getTableOrder } from "./tableOrder";
-
-type Phase =
-  | "BIDDING"
-  | "NAMING_TRUMP"
-  | "PASSING_CARDS"
-  | "SHOWING_MELD"
-  | "TRICK_PLAYING"
-  | "HAND_COMPLETE";
-
-interface WsEvent {
-  event: string;
-  payload: Record<string, unknown>;
-}
-
-interface BiddingState {
-  currentBid: number | null;
-  highestBidderSeat: string | null;
-  nextSeat: string;
-  minBid: number;
-}
-
-interface BiddingResult {
-  winningSeat: string;
-  winningBid: number;
-}
-
-interface MeldData {
-  trumpSuit: string;
-  winningBid: number;
-  biddingTeam: string;
-  teamMeld: Record<string, number>;
-  playerMelds: Record<
-    string,
-    { melds: { name: string; cards: string[]; points: number }[]; total: number }
-  >;
-}
-
-interface CardPlayed {
-  seat: string;
-  card: string;
-}
-
-interface TrickResultData {
-  trickNumber: number;
-  winnerSeat: string;
-  trickPoints: number;
-}
-
-interface HandResultData {
-  trickScores: Record<string, number>;
-  teamMeld: Record<string, number>;
-  bid: number;
-  biddingTeam: string;
-  scoreDeltas: Record<string, number>;
-  gameScores: Record<string, number>;
-}
-
-interface PassingState {
-  trumpSuit: string;
-  biddingTeam: string;
-  bidderSeat: string;
-  partnerSeat: string;
-  submittedSeats: string[];
-}
 
 interface Props {
   sendMessage: (msg: Record<string, unknown>) => void;
@@ -86,8 +33,6 @@ interface Props {
   seatPlayers: Record<string, string | null>;
   onLeave: () => void;
 }
-
-const CARDS_PER_PLAYER = 12;
 
 function phaseLabel(phase: Phase): string {
   switch (phase) {
@@ -144,7 +89,7 @@ export function GameScreen({
     NS: 0,
     EW: 0,
   });
-  const [trickResult, setTrickResult] = useState<TrickResultData | null>(null);
+  const [trickResult, setTrickResult] = useState<TrickResult | null>(null);
   const [handResult, setHandResult] = useState<HandResultData | null>(null);
   const [handResultAckedSeats, setHandResultAckedSeats] = useState<string[]>(
     [],

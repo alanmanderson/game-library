@@ -7,24 +7,14 @@ import {
   SafeAreaView,
 } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import type { Seats } from "@pinochle/shared";
+import { SEATS, SEAT_LABELS_LOWER, getTableOrder } from "@pinochle/shared";
 import { useAuth } from "../auth/AuthContext";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { GameScreen } from "../game/GameScreen";
-import { getTableOrder } from "../game/tableOrder";
 import type { RootStackParamList } from "../navigation/AppNavigator";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Room">;
-
-const SEATS = ["north", "east", "south", "west"] as const;
-
-const SEAT_LABELS: Record<string, string> = {
-  north: "North",
-  east: "East",
-  south: "South",
-  west: "West",
-};
-
-type Seats = Record<string, string | null>;
 
 function normalizeSeats(raw: Record<string, string | null>): Seats {
   const result: Seats = {};
@@ -146,7 +136,7 @@ export function RoomScreen({ route, navigation }: Props) {
                 occupant && !isSelf ? styles.seatOccupied : null,
               ]}
             >
-              <Text style={styles.seatLabel}>{SEAT_LABELS[seat]}</Text>
+              <Text style={styles.seatLabel}>{SEAT_LABELS_LOWER[seat]}</Text>
               {occupant ? (
                 <Text style={styles.seatPlayer}>{occupant}</Text>
               ) : (

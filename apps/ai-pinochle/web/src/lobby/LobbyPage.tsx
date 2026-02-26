@@ -1,17 +1,9 @@
 import { useState } from "react";
+import type { CreateResponse, JoinResponse } from "@pinochle/shared";
 import { useAuth } from "../auth/AuthContext.tsx";
 import { postAuth, ApiError } from "../api/client.ts";
 import { RoomPage } from "../room/RoomPage.tsx";
 import styles from "./LobbyPage.module.css";
-
-interface CreateResponse {
-  room_code: string;
-}
-
-interface JoinResponse {
-  room_code: string;
-  seats: Record<string, string | null>;
-}
 
 export function LobbyPage() {
   const { user, token, logout } = useAuth();

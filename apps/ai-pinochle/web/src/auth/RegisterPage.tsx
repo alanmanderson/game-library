@@ -1,37 +1,10 @@
 import { GoogleLogin, type CredentialResponse } from "@react-oauth/google";
 import { type FormEvent, useState } from "react";
+import type { AuthResponse, FieldErrors } from "@pinochle/shared";
+import { validate } from "@pinochle/shared";
 import { ApiError, post } from "../api/client.ts";
 import { useAuth } from "./AuthContext.tsx";
 import styles from "./RegisterPage.module.css";
-
-interface RegisterResponse {
-  id: string;
-  username: string;
-  email: string | null;
-  access_token: string;
-  token_type: string;
-}
-
-interface FieldErrors {
-  password?: string;
-  email?: string;
-}
-
-function validate(email: string, password: string): FieldErrors {
-  const errors: FieldErrors = {};
-
-  if (!email) {
-    errors.email = "Email is required";
-  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    errors.email = "Invalid email address";
-  }
-
-  if (password.length < 8) {
-    errors.password = "Password must be at least 8 characters";
-  }
-
-  return errors;
-}
 
 export function RegisterPage() {
   const { login } = useAuth();
@@ -52,7 +25,7 @@ export function RegisterPage() {
 
     setSubmitting(true);
     try {
-      const res = await post<RegisterResponse>("/auth/register", {
+      const res = await post<AuthResponse>("/auth/register", {
         email,
         password,
       });
@@ -76,7 +49,7 @@ export function RegisterPage() {
     if (!response.credential) return;
     setServerError("");
     try {
-      const res = await post<RegisterResponse>("/auth/google", {
+      const res = await post<AuthResponse>("/auth/google", {
         token: response.credential,
       });
       login(res.access_token, {

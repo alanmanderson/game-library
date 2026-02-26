@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { TEAM_FOR_SEAT } from "@pinochle/shared";
 import styles from "./PassCardsPhase.module.css";
 
 interface Props {
@@ -9,13 +10,6 @@ interface Props {
   hasSubmitted: boolean;
   sendMessage: (msg: Record<string, unknown>) => void;
 }
-
-const TEAM_FOR_SEAT: Record<string, string> = {
-  NORTH: "NS",
-  SOUTH: "NS",
-  EAST: "EW",
-  WEST: "EW",
-};
 
 function cardToImage(code: string): string {
   return `/img/${code}.png`;

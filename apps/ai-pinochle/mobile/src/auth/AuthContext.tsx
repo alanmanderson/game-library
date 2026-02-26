@@ -7,17 +7,7 @@ import React, {
   type ReactNode,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-
-interface User {
-  id: string;
-  username: string;
-  email: string | null;
-}
-
-interface AuthState {
-  token: string | null;
-  user: User | null;
-}
+import type { User, AuthState } from "@pinochle/shared";
 
 type AuthAction =
   | { type: "LOGIN_SUCCESS"; token: string; user: User }

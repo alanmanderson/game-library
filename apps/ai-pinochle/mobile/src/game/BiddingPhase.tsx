@@ -1,25 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
-
-interface BiddingState {
-  currentBid: number | null;
-  highestBidderSeat: string | null;
-  nextSeat: string;
-  minBid: number;
-}
+import type { BiddingState } from "@pinochle/shared";
+import { SEAT_LABELS } from "@pinochle/shared";
 
 interface Props {
   biddingState: BiddingState;
   mySeat: string;
   sendMessage: (msg: Record<string, unknown>) => void;
 }
-
-const SEAT_LABELS: Record<string, string> = {
-  NORTH: "North",
-  EAST: "East",
-  SOUTH: "South",
-  WEST: "West",
-};
 
 function seatLabel(seat: string): string {
   return SEAT_LABELS[seat] ?? seat;

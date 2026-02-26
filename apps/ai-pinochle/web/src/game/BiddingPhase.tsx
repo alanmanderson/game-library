@@ -1,25 +1,13 @@
 import { useState, useEffect } from "react";
+import type { BiddingState } from "@pinochle/shared";
+import { SEAT_LABELS } from "@pinochle/shared";
 import styles from "./BiddingPhase.module.css";
-
-interface BiddingState {
-  currentBid: number | null;
-  highestBidderSeat: string | null;
-  nextSeat: string;
-  minBid: number;
-}
 
 interface Props {
   biddingState: BiddingState;
   mySeat: string;
   sendMessage: (msg: Record<string, unknown>) => void;
 }
-
-const SEAT_LABELS: Record<string, string> = {
-  NORTH: "North",
-  EAST: "East",
-  SOUTH: "South",
-  WEST: "West",
-};
 
 function seatLabel(seat: string): string {
   return SEAT_LABELS[seat] ?? seat;

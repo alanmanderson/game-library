@@ -4,17 +4,7 @@ import {
   useReducer,
   type ReactNode,
 } from "react";
-
-interface User {
-  id: string;
-  username: string;
-  email: string | null;
-}
-
-interface AuthState {
-  token: string | null;
-  user: User | null;
-}
+import type { User, AuthState } from "@pinochle/shared";
 
 type AuthAction =
   | { type: "LOGIN_SUCCESS"; token: string; user: User }

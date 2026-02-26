@@ -1,18 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import type { WsEvent, UseWebSocketResult } from "@pinochle/shared";
+import { RECONNECT_DELAYS } from "@pinochle/shared";
 import { WS_BASE } from "../config";
-
-interface WsEvent {
-  event: string;
-  payload: Record<string, unknown>;
-}
-
-interface UseWebSocketResult {
-  sendMessage: (msg: Record<string, unknown>) => void;
-  lastEvent: WsEvent | null;
-  connected: boolean;
-}
-
-const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 10000];
 
 function buildWsUrl(roomCode: string, token: string): string {
   return `${WS_BASE}/ws/${roomCode}?token=${token}`;

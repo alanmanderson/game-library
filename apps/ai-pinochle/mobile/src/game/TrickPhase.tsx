@@ -1,17 +1,8 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
+import type { CardPlayed, TrickResult } from "@pinochle/shared";
+import { SEAT_LABELS } from "@pinochle/shared";
 import { CardImage } from "./CardImage";
-
-interface CardPlayed {
-  seat: string;
-  card: string;
-}
-
-interface TrickResult {
-  trickNumber: number;
-  winnerSeat: string;
-  trickPoints: number;
-}
 
 interface Props {
   trickNumber: number;
@@ -22,13 +13,6 @@ interface Props {
   trickResult: TrickResult | null;
   mySeat: string;
 }
-
-const SEAT_LABELS: Record<string, string> = {
-  NORTH: "North",
-  EAST: "East",
-  SOUTH: "South",
-  WEST: "West",
-};
 
 function getPositionForSeat(
   seat: string,

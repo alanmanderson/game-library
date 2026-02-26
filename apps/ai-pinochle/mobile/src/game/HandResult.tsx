@@ -1,14 +1,6 @@
 import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
-
-interface HandResultData {
-  trickScores: Record<string, number>;
-  teamMeld: Record<string, number>;
-  bid: number;
-  biddingTeam: string;
-  scoreDeltas: Record<string, number>;
-  gameScores: Record<string, number>;
-}
+import type { HandResultData } from "@pinochle/shared";
 
 interface Props {
   result: HandResultData;

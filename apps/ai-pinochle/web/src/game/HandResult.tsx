@@ -1,13 +1,5 @@
+import type { HandResultData } from "@pinochle/shared";
 import styles from "./HandResult.module.css";
-
-interface HandResultData {
-  trickScores: Record<string, number>;
-  teamMeld: Record<string, number>;
-  bid: number;
-  biddingTeam: string;
-  scoreDeltas: Record<string, number>;
-  gameScores: Record<string, number>;
-}
 
 interface Props {
   result: HandResultData;

@@ -1,4 +1,16 @@
 import { useState, useEffect, useRef } from "react";
+import type {
+  Phase,
+  WsEvent,
+  BiddingState,
+  BiddingResult,
+  MeldData,
+  CardPlayed,
+  TrickResult,
+  HandResultData,
+  PassingState,
+} from "@pinochle/shared";
+import { CARDS_PER_PLAYER, getTableOrder } from "@pinochle/shared";
 import { HandDisplay } from "./HandDisplay.tsx";
 import { BiddingPhase } from "./BiddingPhase.tsx";
 import { TrumpPhase } from "./TrumpPhase.tsx";
@@ -8,63 +20,7 @@ import { PassCardsPhase } from "./PassCardsPhase.tsx";
 import { HandResult } from "./HandResult.tsx";
 import { PlayerAvatar } from "./PlayerAvatar.tsx";
 import { OtherPlayerHand } from "./OtherPlayerHand.tsx";
-import { getTableOrder } from "./tableOrder.ts";
 import styles from "./GamePage.module.css";
-
-type Phase = "BIDDING" | "NAMING_TRUMP" | "PASSING_CARDS" | "SHOWING_MELD" | "TRICK_PLAYING" | "HAND_COMPLETE";
-
-interface WsEvent {
-  event: string;
-  payload: Record<string, unknown>;
-}
-
-interface BiddingState {
-  currentBid: number | null;
-  highestBidderSeat: string | null;
-  nextSeat: string;
-  minBid: number;
-}
-
-interface BiddingResult {
-  winningSeat: string;
-  winningBid: number;
-}
-
-interface MeldData {
-  trumpSuit: string;
-  winningBid: number;
-  biddingTeam: string;
-  teamMeld: Record<string, number>;
-  playerMelds: Record<string, { melds: { name: string; cards: string[]; points: number }[]; total: number }>;
-}
-
-interface CardPlayed {
-  seat: string;
-  card: string;
-}
-
-interface TrickResult {
-  trickNumber: number;
-  winnerSeat: string;
-  trickPoints: number;
-}
-
-interface HandResultData {
-  trickScores: Record<string, number>;
-  teamMeld: Record<string, number>;
-  bid: number;
-  biddingTeam: string;
-  scoreDeltas: Record<string, number>;
-  gameScores: Record<string, number>;
-}
-
-interface PassingState {
-  trumpSuit: string;
-  biddingTeam: string;
-  bidderSeat: string;
-  partnerSeat: string;
-  submittedSeats: string[];
-}
 
 interface Props {
   sendMessage: (msg: Record<string, unknown>) => void;
@@ -76,8 +32,6 @@ interface Props {
   seatPlayers: Record<string, string | null>;
   onLeave: () => void;
 }
-
-const CARDS_PER_PLAYER = 12;
 
 export function GamePage({
   sendMessage,

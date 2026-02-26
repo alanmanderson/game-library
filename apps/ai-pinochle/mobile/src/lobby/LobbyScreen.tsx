@@ -8,20 +8,12 @@ import {
   ScrollView,
 } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import type { CreateResponse, JoinResponse } from "@pinochle/shared";
 import { useAuth } from "../auth/AuthContext";
 import { postAuth, ApiError } from "../api/client";
 import type { RootStackParamList } from "../navigation/AppNavigator";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Lobby">;
-
-interface CreateResponse {
-  room_code: string;
-}
-
-interface JoinResponse {
-  room_code: string;
-  seats: Record<string, string | null>;
-}
 
 export function LobbyScreen({ navigation }: Props) {
   const { user, token, logout } = useAuth();
