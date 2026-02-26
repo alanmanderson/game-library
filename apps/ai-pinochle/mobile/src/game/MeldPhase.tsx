@@ -6,15 +6,30 @@ import {
   StyleSheet,
   ScrollView,
 } from "react-native";
-import type { MeldData } from "@pinochle/shared";
+import type { MeldData, Meld } from "@pinochle/shared";
 import { SEAT_LABELS, SUIT_SYMBOLS, SEAT_ORDER } from "@pinochle/shared";
-import { CardImage } from "./CardImage";
 
 interface Props {
   meldData: MeldData;
   acknowledgedSeats: string[];
   hasAcknowledged: boolean;
   sendMessage: (msg: Record<string, unknown>) => void;
+}
+
+const SUIT_LETTER_TO_SYMBOL: Record<string, string> = {
+  H: "\u2665",
+  D: "\u2666",
+  C: "\u2663",
+  S: "\u2660",
+};
+
+function formatMeld(m: Meld): string {
+  const suits = new Set(m.cards.map((c) => c.slice(-1)));
+  if (suits.size === 1) {
+    const symbol = SUIT_LETTER_TO_SYMBOL[[...suits][0]] ?? "";
+    return `${m.name} (${symbol}): ${m.points}`;
+  }
+  return `${m.name}: ${m.points}`;
 }
 
 export function MeldPhase({
@@ -72,16 +87,9 @@ export function MeldPhase({
                 <Text style={styles.noMelds}>No melds</Text>
               ) : (
                 pm.melds.map((m, i) => (
-                  <View key={i} style={styles.meldItem}>
-                    <Text style={styles.meldName}>
-                      {m.name} ({m.points})
-                    </Text>
-                    <View style={styles.meldCards}>
-                      {m.cards.map((c, j) => (
-                        <CardImage key={j} card={c} width={30} height={42} />
-                      ))}
-                    </View>
-                  </View>
+                  <Text key={i} style={styles.meldText}>
+                    {formatMeld(m)}
+                  </Text>
                 ))
               )}
             </View>
@@ -160,17 +168,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontStyle: "italic",
   },
-  meldItem: {
-    marginTop: 4,
-  },
-  meldName: {
+  meldText: {
     color: "#ccc",
     fontSize: 12,
-    marginBottom: 2,
-  },
-  meldCards: {
-    flexDirection: "row",
-    gap: 2,
+    marginTop: 2,
   },
   ackButton: {
     backgroundColor: "#2e7d32",

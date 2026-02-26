@@ -76,28 +76,8 @@
 }
 
 .meldItem {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.meldName {
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-size: 0.8rem;
   color: #555;
-}
-
-.meldCards {
-  display: flex;
-  gap: 2px;
-}
-
-.meldCardImg {
-  width: 36px;
-  height: 50px;
-  border-radius: 3px;
-  border: 1px solid #ddd;
-  object-fit: contain;
 }
 
 .ackButton {

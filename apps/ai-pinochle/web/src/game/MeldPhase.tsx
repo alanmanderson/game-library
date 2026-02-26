@@ -1,4 +1,4 @@
-import type { MeldData } from "@pinochle/shared";
+import type { MeldData, Meld } from "@pinochle/shared";
 import { SEAT_LABELS, SUIT_SYMBOLS, SEAT_ORDER } from "@pinochle/shared";
 import styles from "./MeldPhase.module.css";
 
@@ -9,8 +9,20 @@ interface Props {
   sendMessage: (msg: Record<string, unknown>) => void;
 }
 
-function cardToImage(code: string): string {
-  return `/img/${code}.png`;
+const SUIT_LETTER_TO_SYMBOL: Record<string, string> = {
+  H: "\u2665",
+  D: "\u2666",
+  C: "\u2663",
+  S: "\u2660",
+};
+
+function formatMeld(m: Meld): string {
+  const suits = new Set(m.cards.map((c) => c.slice(-1)));
+  if (suits.size === 1) {
+    const symbol = SUIT_LETTER_TO_SYMBOL[[...suits][0]] ?? "";
+    return `${m.name} (${symbol}): ${m.points}`;
+  }
+  return `${m.name}: ${m.points}`;
 }
 
 export function MeldPhase({
@@ -61,19 +73,7 @@ export function MeldPhase({
                 <ul className={styles.meldList}>
                   {pm.melds.map((m, i) => (
                     <li key={i} className={styles.meldItem}>
-                      <span className={styles.meldName}>
-                        {m.name} ({m.points})
-                      </span>
-                      <div className={styles.meldCards}>
-                        {m.cards.map((c, j) => (
-                          <img
-                            key={j}
-                            src={cardToImage(c)}
-                            alt={c}
-                            className={styles.meldCardImg}
-                          />
-                        ))}
-                      </div>
+                      {formatMeld(m)}
                     </li>
                   ))}
                 </ul>
