@@ -1,389 +1,359 @@
-# Pinochle Multiplayer Mobile Game: Architecture Specification
+# Pinochle Multiplayer Game: Architecture & Implementation
 
 ## 1. High-Level Architecture
 
-The system uses a **thin client, authoritative server** model to ensure competitive integrity, prevent cheating, and handle asynchronous mobile connectivity.
+The system uses a **thin client, authoritative server** model. The server validates all moves, calculates scores, and controls information visibility (each player only sees their own hand).
 
-### Client-Side (Mobile App)
+### Clients
 
-- **Auth & Profile UI:** Handles login (UN/PW, Google Auth) and displays user statistics.
-- **Matchmaking & Lobby UI:** Manages game creation/joining via 4-6 letter (no numbers) Game IDs and seat selection (North, East, South, West).
-- **Game Board UI (Asset Manager):** The image-based rendering engine for the 48-card deck, avatars, and animations.
-- **Network Synchronization Client:** Wraps REST API calls for out-of-game actions and manages the WebSocket connection for real-time game state updates.
+- **React Web App** (`web/`) — browser-based client.
+- **React Native App** (`mobile/`) — iOS and Android.
 
-### Server-Side (Backend)
+Both clients share TypeScript types and constants via the `shared/` package.
 
-- **API Gateway / Auth Service:** Handles REST requests, validates tokens, and serves historical stats.
-- **Lobby & Room Manager:** Generates unique Room IDs and manages concurrent seat selection.
-- **WebSocket Pub/Sub Manager:** Maintains persistent TCP connections, routing client actions to game instances and broadcasting state updates.
-- **Pinochle Game Engine (Source of Truth):** Validates all moves, calculates scores, limits information sent to clients (only sending a player's own hand), and drives the state machine.
+### Server (`server/app/`)
+
+- **FastAPI** application with async SQLAlchemy (PostgreSQL).
+- **REST API** (`api/`) — authentication and game creation/joining.
+- **WebSocket** (`websocket/`) — real-time game play. One persistent connection per player per game.
+- **Game Engine** (`engine/`) — pure-logic modules for dealing, bidding, meld calculation, trick play, and scoring. No I/O or database dependencies.
 
 ### Data Persistence
 
-- **In-Memory Store (Redis):** Holds the active, real-time game state for lightning-fast reads/writes during active play.
-- **Relational Database (PostgreSQL):** The permanent system of record for users, match history, deep analytics, and paused game states.
+All state lives in **PostgreSQL**. There is no Redis layer. Active game state is stored as a JSONB blob in `games.current_state_json` and updated after every valid action.
 
 ---
 
 ## 2. Database Schema (PostgreSQL)
 
-The database is normalized to support deep statistical queries (e.g., win rates, trick-taking success, bid history) and allows games to be paused and resumed days later via State Hydration.
+Only two tables exist. All per-hand state (bidding, tricks, melds, scores) lives inside `current_state_json` rather than normalized tables.
 
 ### `users`
-Authentication and profiles.
 
-| Column | Type |
-|--------|------|
-| `id` | UUID, PK |
-| `username` | VARCHAR, Unique |
-| `email` | VARCHAR, Unique, Nullable |
-| `password_hash` | VARCHAR, Nullable |
-| `google_auth_id` | VARCHAR, Unique, Nullable |
-| `created_at` | TIMESTAMP |
-| `updated_at` | TIMESTAMP |
-| `deleted_at` | TIMESTAMP, Nullable (soft deletes) |
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | UUID, PK | Default `gen_random_uuid()` |
+| `username` | VARCHAR, UNIQUE, NOT NULL | Set to email on registration |
+| `email` | VARCHAR, UNIQUE, Nullable | |
+| `password_hash` | VARCHAR, Nullable | bcrypt hash; null for Google-only accounts |
+| `google_auth_id` | VARCHAR, UNIQUE, Nullable | Google OAuth subject ID |
+| `created_at` | TIMESTAMP | |
+| `updated_at` | TIMESTAMP | |
+| `deleted_at` | TIMESTAMP, Nullable | Soft delete |
 
 ### `games`
-Tracks overall match data.
 
-| Column | Type |
-|--------|------|
-| `id` | UUID, PK |
-| `room_code` | VARCHAR(6) |
-| `status` | ENUM: `IN_PROGRESS`, `COMPLETED`, `ABANDONED` |
-| `north_player_id` | UUID, FK |
-| `east_player_id` | UUID, FK |
-| `south_player_id` | UUID, FK |
-| `west_player_id` | UUID, FK |
-| `ns_total_score` | INT |
-| `ew_total_score` | INT |
-| `current_state_json` | JSONB — stores active state to resume paused games |
-| `started_at` | TIMESTAMP |
-| `ended_at` | TIMESTAMP |
-
-### `hands`
-High-level summary of each round.
-
-| Column | Type |
-|--------|------|
-| `id` | UUID, PK |
-| `game_id` | UUID, FK |
-| `hand_number` | INT |
-| `winning_bidder_id` | UUID, FK |
-| `winning_bid_amount` | INT |
-| `is_shoot_the_moon` | BOOLEAN, Default False |
-| `trump_suit` | ENUM |
-| `ns_meld_score` | INT |
-| `ew_meld_score` | INT |
-| `ns_trick_score` | INT |
-| `ew_trick_score` | INT |
-| `is_set` | BOOLEAN |
-
-### `bids`
-Tracks the bidding war for a specific hand.
-
-| Column | Type |
-|--------|------|
-| `id` | UUID, PK |
-| `hand_id` | UUID, FK |
-| `player_id` | UUID, FK |
-| `bid_amount` | INT, Nullable (null = pass) |
-| `is_shoot_the_moon` | BOOLEAN, Default False |
-| `bid_sequence` | INT |
-
-### `tricks`
-Tracks the individual 12 rounds of card-playing per hand.
-
-| Column | Type |
-|--------|------|
-| `id` | UUID, PK |
-| `hand_id` | UUID, FK |
-| `trick_number` | INT (1–12) |
-| `led_by_player_id` | UUID, FK |
-| `won_by_player_id` | UUID, FK |
-| `north_card` | VARCHAR(2) |
-| `east_card` | VARCHAR(2) |
-| `south_card` | VARCHAR(2) |
-| `west_card` | VARCHAR(2) |
-| `trick_points` | INT |
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | UUID, PK | Default `gen_random_uuid()` |
+| `room_code` | VARCHAR(6), UNIQUE, NOT NULL | 4 uppercase letters (e.g., `"ABCD"`) |
+| `status` | ENUM: `IN_PROGRESS`, `COMPLETED`, `ABANDONED` | |
+| `north_player_id` | UUID, FK → `users.id`, Nullable | |
+| `east_player_id` | UUID, FK → `users.id`, Nullable | |
+| `south_player_id` | UUID, FK → `users.id`, Nullable | |
+| `west_player_id` | UUID, FK → `users.id`, Nullable | |
+| `ns_total_score` | INT, Default 0 | |
+| `ew_total_score` | INT, Default 0 | |
+| `current_state_json` | JSON, Nullable | Full game state snapshot |
+| `started_at` | DATETIME, Nullable | Set when first hand is dealt |
+| `ended_at` | DATETIME, Nullable | |
 
 ---
 
 ## 3. Game Engine State Machine
 
-The core loop ensuring all actions adhere to Pinochle rules. State lives in Redis while active and flushes to Postgres (`current_state_json`) when players disconnect.
+### Phases
 
-1. **`LOBBY_WAITING`** — Room created. Host triggers `START_GAME` once all 4 seats are occupied.
-2. **`DEALING`** — Server instantaneous state. Shuffles and assigns 12 cards per player.
-3. **`BIDDING`** — Players submit bids, pass, or declare a "Shoot the Moon" bid. Ends when 3 players pass, or immediately on a successful Shoot the Moon bid.
-4. **`NAMING_TRUMP`** — Winning bidder declares the trump suit.
-5. **`SHOWING_MELD`** — Server calculates and broadcasts all melds. Players must send `ACKNOWLEDGE_MELD` before gameplay begins.
-6. **`TRICK_PLAYING`** — The core 12-trick loop. Server determines legal cards, awaits a valid `PLAY_CARD` action, and determines the trick winner.
-7. **`HAND_SCORING`** — Server tallies points. Applies Shoot the Moon win/loss condition if applicable, or checks if the bidding team was set. Updates game score. Transitions to `GAME_OVER` if a team hits the winning threshold, else loops to `DEALING`.
-8. **`GAME_OVER`** — Match complete. Permanent data finalized in PostgreSQL.
+| Phase | Description | Advances When |
+|-------|-------------|---------------|
+| `LOBBY_WAITING` | Room created, players selecting seats | Host sends `START_GAME` with all 4 seats filled |
+| `BIDDING` | Players bid clockwise, starting left of dealer | 3 players pass |
+| `NAMING_TRUMP` | Bid winner declares trump suit | `DECLARE_TRUMP` received |
+| `PASSING_CARDS` | Bidding team partners swap 3 cards each | Both partners submit |
+| `SHOWING_MELD` | Server calculates melds; all players acknowledge | All 4 send `ACKNOWLEDGE_MELD` |
+| `TRICK_PLAYING` | 12-trick loop with legal card enforcement | All 12 tricks complete |
+| `HAND_COMPLETE` | Hand scored; awaiting acknowledgment | All 4 send `ACKNOWLEDGE_HAND_RESULT` |
+
+After `HAND_COMPLETE`, the game loops back to `BIDDING` with a new dealer (one seat clockwise).
+
+### `current_state_json` Structure
+
+```json
+{
+  "room_code": "ABCD",
+  "phase": "TRICK_PLAYING",
+  "game_scores": { "NS": 85, "EW": 62 },
+  "player_hands": {
+    "NORTH": ["AH", "10H", "KS", ...],
+    "EAST": [...],
+    "SOUTH": [...],
+    "WEST": [...]
+  },
+  "current_hand": {
+    "hand_number": 4,
+    "dealer_seat": "EAST",
+    "bidding": {
+      "winning_bid": 25,
+      "winning_seat": "SOUTH",
+      "is_shoot_the_moon": false,
+      "next_to_act_seat": "WEST",
+      "passed_seats": ["NORTH", "EAST", "WEST"]
+    },
+    "trump_suit": "HEARTS",
+    "card_passing": {
+      "bidding_team": "NS",
+      "bidder_seat": "SOUTH",
+      "partner_seat": "NORTH",
+      "submitted": {
+        "SOUTH": ["9S", "JD", "QC"],
+        "NORTH": ["9H", "10D", "AC"]
+      }
+    },
+    "player_melds": {
+      "NORTH": {
+        "melds": [
+          { "name": "Run", "cards": ["AH", "10H", "KH", "QH", "JH"], "points": 15 }
+        ],
+        "total": 15
+      },
+      "EAST": { "melds": [], "total": 0 },
+      "SOUTH": { "melds": [...], "total": 10 },
+      "WEST": { "melds": [...], "total": 0 }
+    },
+    "team_meld": { "NS": 25, "EW": 0 },
+    "meld_acknowledged_seats": ["NORTH", "EAST", "SOUTH", "WEST"],
+    "trick_play": {
+      "trick_number": 7,
+      "led_seat": "SOUTH",
+      "next_to_act_seat": "WEST",
+      "cards_played": [
+        { "seat": "SOUTH", "card": "AS" },
+        { "seat": "WEST", "card": "9S" }
+      ],
+      "tricks_taken": { "NS": 4, "EW": 2 },
+      "trick_scores": { "NS": 15, "EW": 6 }
+    },
+    "score_deltas": { "NS": 40, "EW": 6 },
+    "hand_result_acknowledged_seats": []
+  }
+}
+```
+
+Fields are added progressively — `card_passing` exists only during/after `PASSING_CARDS`, `trick_play` only during/after `TRICK_PLAYING`, etc.
+
+### Card Notation
+
+Format: `{Rank}{Suit}` — e.g., `"AH"`, `"10S"`, `"9C"`, `"KD"`.
+
+- **Ranks:** `A`, `10`, `K`, `Q`, `J`, `9`
+- **Suits:** `H` (hearts), `S` (spades), `D` (diamonds), `C` (clubs)
+
+### Scoring Rules
+
+**Trick card points:** A = 1, 10 = 1, K = 1, Q = 0, J = 0, 9 = 0. Last trick (trick 12) earns +1 bonus. Total available per hand: 25 points.
+
+**Hand scoring:**
+- **Bidding team:** if they took zero tricks, score negative bid (set). Otherwise, total = meld + trick points. If total ≥ bid, score the total. If total < bid, score negative bid (set).
+- **Non-bidding team:** if they took any tricks, score their meld + trick points. If zero tricks, score 0.
+
+### Meld Types
+
+| Meld | Cards | Points | Double Points |
+|------|-------|--------|---------------|
+| Run | A-10-K-Q-J of trump | 15 | 150 (Double Run) |
+| Aces Around | A of each suit | 10 | 100 |
+| Kings Around | K of each suit | 8 | 80 |
+| Queens Around | Q of each suit | 6 | 60 |
+| Jacks Around | J of each suit | 4 | 40 |
+| Pinochle | JD + QS | 4 | 30 (Double Pinochle) |
+| Royal Marriage | K + Q of trump | 4 | — |
+| Marriage | K + Q of non-trump | 2 | — |
+| Dix | 9 of trump | 1 each | — |
+
+"Double" versions require two of every card in the meld.
+
+### Legal Card Rules (Trick Play)
+
+1. **Must follow suit** if able.
+2. **If can't follow suit, must trump** if able.
+3. **If neither, play anything.**
+4. **Must head the trick** — if any legal candidate would win the current trick, you must play one that wins.
 
 ---
 
 ## 4. API & WebSocket Contracts
 
-### REST API (Out-of-game)
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/auth/register` | Creates a new user account, returns JWT |
-| `POST` | `/auth/login` | Returns JWT |
-| `POST` | `/auth/google` | Returns JWT |
-| `GET` | `/users/{user_id}/stats` | Returns historical win/loss/trick records |
-| `POST` | `/games/create` | Initializes a game, returns `{ room_id: "A7BX" }` |
-| `POST` | `/games/{room_id}/join` | Validates room |
+### REST API
 
 #### `POST /auth/register`
 
 ```json
-// Request body
-{ "username": "alice", "password": "s3cr3t!", "email": "alice@example.com" }
+// Request
+{ "email": "alice@example.com", "password": "s3cr3t!" }
 
 // 201 Created
-{ "id": "uuid", "username": "alice", "email": "alice@example.com",
+{ "id": "uuid", "username": "alice@example.com", "email": "alice@example.com",
   "access_token": "eyJ...", "token_type": "bearer" }
 
-// 409 Conflict — username or email already taken
-{ "detail": "username already taken" }
+// 409 Conflict
+{ "detail": "email already taken" }
 ```
 
-### WebSocket Protocol (In-game JSON Payloads)
-
-#### Lobby & Setup
+#### `POST /auth/login`
 
 ```json
-// Client -> Server
+// Request
+{ "email": "alice@example.com", "password": "s3cr3t!" }
+
+// 200 OK — same AuthResponse shape as register
+
+// 401 Unauthorized
+{ "detail": "invalid email or password" }
+```
+
+#### `POST /auth/google`
+
+```json
+// Request
+{ "token": "<Google OAuth token>" }
+
+// 200 OK — same AuthResponse shape (creates account on first login)
+
+// 401 Unauthorized
+{ "detail": "invalid Google token" }
+```
+
+#### `POST /games/create` (authenticated)
+
+```json
+// 201 Created
+{ "room_code": "ABCD" }
+```
+
+#### `POST /games/{room_code}/join` (authenticated)
+
+```json
+// 200 OK
+{
+  "room_code": "ABCD",
+  "game_id": "uuid",
+  "phase": "LOBBY_WAITING",
+  "seats": {
+    "north": "alice@example.com",
+    "east": null,
+    "south": null,
+    "west": null
+  }
+}
+```
+
+### WebSocket Connection
+
+Connect to `ws://<host>/ws/{room_code}?token=<jwt>`.
+
+On connect, server sends `LOBBY_STATE_UPDATED` with current seats and replays phase-appropriate state for reconnecting players (see Section 5).
+
+### WebSocket Actions (Client → Server)
+
+All client messages: `{ "action": "<ACTION>", "payload": { ... } }`
+
+#### `SELECT_SEAT`
+
+```json
 { "action": "SELECT_SEAT", "payload": { "seat": "NORTH" } }
+```
 
-// Client -> Server (Host only)
+Phase: `LOBBY_WAITING`. Unseats the player from any other seat first. If the seat is already occupied by someone else, sends `SEAT_CLAIM_FAILED` to the requester.
+
+#### `START_GAME`
+
+```json
 { "action": "START_GAME", "payload": {} }
-
-// Server -> Client
-{ "event": "LOBBY_STATE_UPDATED", "payload": { "host_id": "...", "seats": { ... } } }
 ```
 
-#### Dealing & Bidding
+Phase: `LOBBY_WAITING`. Requires all 4 seats occupied. Shuffles, deals 12 cards per player, picks random dealer, sets first bidder to dealer's left.
+
+#### `SUBMIT_BID`
 
 ```json
-// Server -> Client (Private)
-{ "event": "HAND_DEALT", "payload": { "cards": ["AH", "TH", ...] } }
-
-// Server -> Client
-{
-  "event": "BIDDING_TURN",
-  "payload": {
-    "current_highest_bid": 25,
-    "highest_bidder_seat": "NORTH",
-    "next_to_act_seat": "EAST",
-    "minimum_valid_bid": 26
-  }
-}
-
-// Client -> Server
-{ "action": "SUBMIT_BID", "payload": { "amount": 26, "shoot_the_moon": false } }
+{ "action": "SUBMIT_BID", "payload": { "amount": 26 } }
+// or pass:
+{ "action": "SUBMIT_BID", "payload": { "amount": null } }
 ```
 
-#### Trump Naming & Meld
+Phase: `BIDDING`. Minimum bid is 20. Each bid must exceed the previous by at least 1. Dealer cannot pass if all others passed and no bid exists yet.
+
+#### `DECLARE_TRUMP`
 
 ```json
-// Client -> Server
-{ "action": "DECLARE_TRUMP", "payload": { "suit": "HEARTS" } }
+{ "action": "DECLARE_TRUMP", "payload": { "suit": "HEARTS", "shoot_the_moon": false } }
+```
 
-// Server -> Client
-{
-  "event": "MELD_BROADCAST",
-  "payload": {
-    "trump_suit": "HEARTS",
-    "winning_bid": 26,
-    "is_shoot_the_moon": false,
-    "bidding_team": "NS",
-    "team_scores": { ... },
-    "player_hands": { ... }
-  }
-}
+Phase: `NAMING_TRUMP`. Only the bid winner can declare. Valid suits: `HEARTS`, `DIAMONDS`, `CLUBS`, `SPADES`.
 
-// Client -> Server
+#### `PASS_CARDS`
+
+```json
+{ "action": "PASS_CARDS", "payload": { "cards": ["9S", "JD", "QC"] } }
+```
+
+Phase: `PASSING_CARDS`. Only bidding team members. Exactly 3 cards from the player's hand. After both partners submit, cards are swapped and melds are calculated.
+
+#### `ACKNOWLEDGE_MELD`
+
+```json
 { "action": "ACKNOWLEDGE_MELD", "payload": {} }
 ```
 
-#### Trick Playing
+Phase: `SHOWING_MELD`. Each player sends once. After all 4 acknowledge, trick play begins.
+
+#### `PLAY_CARD`
 
 ```json
-// Server -> Client
-{
-  "event": "YOUR_TURN",
-  "payload": {
-    "trick_number": 1,
-    "led_suit": "SPADES",
-    "currently_winning_card": "TS",
-    "currently_winning_seat": "NORTH",
-    "legal_cards": ["AS", "KS", "QS"]
-  }
-}
-
-// Client -> Server
-{ "action": "PLAY_CARD", "payload": { "card": "KS" } }
-
-// Server -> Client
-{ "event": "CARD_PLAYED", "payload": { "seat": "SOUTH", "card": "KS" } }
-
-// Server -> Client
-{
-  "event": "TRICK_COMPLETED",
-  "payload": {
-    "winner_seat": "NORTH",
-    "trick_points_earned": 20,
-    "ns_trick_score_total": 20,
-    "ew_trick_score_total": 0,
-    "next_to_lead": "NORTH"
-  }
-}
+{ "action": "PLAY_CARD", "payload": { "card": "AH" } }
 ```
 
-#### Scoring
+Phase: `TRICK_PLAYING`. Only the player whose turn it is. Card must be in the legal cards list.
+
+#### `ACKNOWLEDGE_HAND_RESULT`
 
 ```json
-// Server -> Client
-{
-  "event": "HAND_COMPLETED",
-  "payload": {
-    "bidding_team": "NS",
-    "bid_amount": 0,
-    "is_shoot_the_moon": true,
-    "ns_total_hand_points": 250,
-    "ew_total_hand_points": 0,
-    "bid_successful": true,
-    "new_game_score": { "NS": 1500, "EW": 140 },
-    "game_over": true
-  }
-}
+{ "action": "ACKNOWLEDGE_HAND_RESULT", "payload": {} }
 ```
 
----
+Phase: `HAND_COMPLETE`. Each player sends once. After all 4, a new hand is dealt and bidding restarts.
 
-## 5. Redis State Hydration
+### WebSocket Events (Server → Client)
 
-When a game sits idle for 30 minutes, it is evicted from Redis. The `current_state_json` in Postgres serves as the persistent backup, allowing games to be seamlessly resumed days later.
+All server messages: `{ "event": "<EVENT>", "payload": { ... } }`
 
-### Hydration Flow
+#### `ERROR`
 
-When a client sends `{"action": "RESUME_GAME", "payload": {"room_code": "A7BX"}}`:
+```json
+{ "event": "ERROR", "payload": { "message": "It is not your turn to bid" } }
+```
 
-1. **Redis Check** — WebSocket Manager checks for key `game:A7BX` in Redis.
-2. **Cache Hit (Active Game)** — Game is already awake. Server subscribes the user to the WebSocket room and sends a state sync event.
-3. **Cache Miss (Sleeping Game)** — Server initiates the Hydration protocol:
-   - **Acquire Lock** — Server runs `SETNX lock:A7BX` in Redis to prevent duplicate hydration if two players reconnect simultaneously.
-   - **Fetch from DB** — `SELECT current_state_json FROM games WHERE room_code = 'A7BX' AND status = 'IN_PROGRESS';`
-   - **Hydrate Redis** — Writes the JSON blob to `game:A7BX` with a 30-minute TTL.
-   - **Release Lock** — Lock is removed.
-4. **Engine Initialization** — Game Engine instantiates a new state machine in memory from the hydrated JSON.
-5. **Client Sync** — Server broadcasts `STATE_RESTORED` to the reconnecting client.
+Personal. Sent when an action fails validation.
 
-### `current_state_json` Structure
-
-Updated asynchronously in Postgres after every valid move during active gameplay.
+#### `LOBBY_STATE_UPDATED`
 
 ```json
 {
-  "room_code": "A7BX",
-  "phase": "TRICK_PLAYING",
-  "game_scores": { "NS": 850, "EW": 620 },
-  "current_hand": {
-    "hand_number": 4,
-    "dealer_seat": "EAST",
-    "trump_suit": "SPADES",
-    "bidding": {
-      "winning_bid": 30,
-      "winning_seat": "SOUTH",
-      "is_shoot_the_moon": false
-    },
-    "team_meld": { "NS": 120, "EW": 40 }
-  },
-  "player_hands": {
-    "NORTH": ["AH", "TH", "KS"],
-    "EAST": ["AD", "TD", "KD"],
-    "SOUTH": ["AS", "TS", "QS"],
-    "WEST": ["AC", "TC", "KC"]
-  },
-  "current_trick": {
-    "trick_number": 10,
-    "led_by_seat": "NORTH",
-    "led_suit": "HEARTS",
-    "next_to_act_seat": "EAST",
-    "cards_on_table": {
-      "NORTH": "AH",
+  "event": "LOBBY_STATE_UPDATED",
+  "payload": {
+    "seats": {
+      "NORTH": "alice@example.com",
       "EAST": null,
-      "SOUTH": null,
+      "SOUTH": "bob@example.com",
       "WEST": null
     }
   }
 }
 ```
 
-### `STATE_RESTORED` WebSocket Event
+Broadcast. Sent after `SELECT_SEAT` and on initial WebSocket connect. Seat values are usernames or `null`.
 
-The server scrubs `player_hands` for the other three seats before sending, maintaining the rule of never exposing opponent cards.
-
-```json
-// Server -> Client (Private Sync Message)
-{
-  "event": "STATE_RESTORED",
-  "payload": {
-    "phase": "TRICK_PLAYING",
-    "my_seat": "SOUTH",
-    "scores": { "NS": 850, "EW": 620 },
-    "trump_suit": "SPADES",
-    "my_hand": ["AS", "TS", "QS"],
-    "cards_on_table": {
-      "NORTH": "AH",
-      "EAST": null,
-      "SOUTH": null,
-      "WEST": null
-    },
-    "is_my_turn": false,
-    "next_to_act_seat": "EAST",
-    "legal_cards": []
-  }
-}
-```
-
----
-
-## 6. Lobby Concurrency: The Read-Modify-Write Trap
-
-### The Problem
-
-A naive implementation allows a race condition on seat selection:
-
-1. Thread A (Player 1) reads: "Is North empty?" → YES
-2. Thread B (Player 2) reads: "Is North empty?" → YES
-3. Thread A writes Player 1 to North.
-4. Thread B writes Player 2 to North, overwriting Player 1. *(Chaos ensues.)*
-
-### The Solution: `HSETNX`
-
-Use Redis's atomic `HSETNX` (Hash Set If Not Exists) command: *"Write my name into this seat ONLY IF it is currently empty."* Because Redis is single-threaded, it is physically impossible for two `HSETNX` commands to execute simultaneously.
-
-### Concurrency Flow
-
-When two players send `{"action": "SELECT_SEAT", "payload": {"seat": "NORTH"}}` simultaneously:
-
-- **Player 1 (microsecond faster):** `HSETNX room:A7BX:seats NORTH player-uuid-1` → Returns `1` (Success). Server broadcasts updated lobby to all:
-
-```json
-{
-  "event": "LOBBY_STATE_UPDATED",
-  "payload": {
-    "seats": { "NORTH": "player-uuid-1", "EAST": null, "SOUTH": null, "WEST": null }
-  }
-}
-```
-
-- **Player 2 (microsecond later):** `HSETNX room:A7BX:seats NORTH player-uuid-2` → Returns `0` (Failure). Server sends private error only to Player 2:
+#### `SEAT_CLAIM_FAILED`
 
 ```json
 {
@@ -394,3 +364,316 @@ When two players send `{"action": "SELECT_SEAT", "payload": {"seat": "NORTH"}}` 
   }
 }
 ```
+
+Personal.
+
+#### `HAND_DEALT`
+
+```json
+{ "event": "HAND_DEALT", "payload": { "cards": ["AH", "10H", "KS", ...] } }
+```
+
+Personal. 12 cards. Sent after `START_GAME`, after all 4 acknowledge hand result, and on reconnect.
+
+#### `BIDDING_TURN`
+
+```json
+{
+  "event": "BIDDING_TURN",
+  "payload": {
+    "current_highest_bid": null,
+    "highest_bidder_seat": null,
+    "next_to_act_seat": "EAST",
+    "minimum_valid_bid": 20
+  }
+}
+```
+
+Broadcast. Sent after each bid/pass and at game start.
+
+#### `BIDDING_COMPLETED`
+
+```json
+{
+  "event": "BIDDING_COMPLETED",
+  "payload": {
+    "winning_seat": "SOUTH",
+    "winning_bid": 25,
+    "is_shoot_the_moon": false
+  }
+}
+```
+
+Broadcast. Sent when 3 players have passed.
+
+#### `TRUMP_NAMED`
+
+```json
+{
+  "event": "TRUMP_NAMED",
+  "payload": {
+    "trump_suit": "HEARTS",
+    "declared_by_seat": "SOUTH",
+    "bidding_team": "NS",
+    "winning_bid": 25,
+    "is_shoot_the_moon": false
+  }
+}
+```
+
+Broadcast.
+
+#### `PASSING_PHASE_STARTED`
+
+```json
+{
+  "event": "PASSING_PHASE_STARTED",
+  "payload": {
+    "trump_suit": "HEARTS",
+    "bidding_team": "NS",
+    "bidder_seat": "SOUTH",
+    "partner_seat": "NORTH"
+  }
+}
+```
+
+Broadcast. Sent immediately after `TRUMP_NAMED`.
+
+#### `CARDS_PASSED`
+
+```json
+{
+  "event": "CARDS_PASSED",
+  "payload": {
+    "seat": "SOUTH",
+    "submitted_seats": ["SOUTH"]
+  }
+}
+```
+
+Broadcast. Sent after each partner submits their 3 cards (so sent twice total).
+
+#### `CARDS_RECEIVED`
+
+```json
+{
+  "event": "CARDS_RECEIVED",
+  "payload": {
+    "cards_received": ["9H", "10D", "AC"],
+    "new_hand": ["AH", "10H", "KH", "QH", "JH", "9H", "10D", "AC", ...]
+  }
+}
+```
+
+Personal. Sent to each bidding-team partner after the swap.
+
+#### `MELD_BROADCAST`
+
+```json
+{
+  "event": "MELD_BROADCAST",
+  "payload": {
+    "trump_suit": "HEARTS",
+    "winning_bid": 25,
+    "is_shoot_the_moon": false,
+    "bidding_team": "NS",
+    "team_meld": { "NS": 25, "EW": 4 },
+    "player_melds": {
+      "NORTH": {
+        "melds": [
+          { "name": "Run", "cards": ["AH", "10H", "KH", "QH", "JH"], "points": 15 }
+        ],
+        "total": 15
+      },
+      "EAST": { "melds": [], "total": 0 },
+      "SOUTH": { "melds": [...], "total": 10 },
+      "WEST": { "melds": [...], "total": 4 }
+    }
+  }
+}
+```
+
+Broadcast. Sent after card swap completes.
+
+#### `MELD_ACKNOWLEDGED`
+
+```json
+{
+  "event": "MELD_ACKNOWLEDGED",
+  "payload": {
+    "seat": "NORTH",
+    "acknowledged_seats": ["NORTH"]
+  }
+}
+```
+
+Broadcast. Sent for the 1st, 2nd, and 3rd acknowledgments.
+
+#### `MELD_PHASE_COMPLETED`
+
+```json
+{
+  "event": "MELD_PHASE_COMPLETED",
+  "payload": {
+    "team_meld": { "NS": 25, "EW": 4 },
+    "first_to_act_seat": "SOUTH"
+  }
+}
+```
+
+Broadcast. Sent when the 4th player acknowledges meld.
+
+#### `YOUR_TURN`
+
+```json
+{
+  "event": "YOUR_TURN",
+  "payload": {
+    "seat": "SOUTH",
+    "legal_cards": ["AS", "10S", "KS"],
+    "trick_number": 3,
+    "led_suit": "S",
+    "cards_played": [
+      { "seat": "NORTH", "card": "9S" }
+    ],
+    "currently_winning": { "seat": "NORTH", "card": "9S" }
+  }
+}
+```
+
+Personal. `led_suit` is `null` and `currently_winning` is `null` when leading. `cards_played` is `[]` when leading.
+
+#### `CARD_PLAYED`
+
+```json
+{
+  "event": "CARD_PLAYED",
+  "payload": {
+    "seat": "SOUTH",
+    "card": "AS",
+    "next_to_act_seat": "WEST"
+  }
+}
+```
+
+Broadcast. `next_to_act_seat` is `null` when the trick is complete (4th card played).
+
+#### `TRICK_COMPLETED`
+
+```json
+{
+  "event": "TRICK_COMPLETED",
+  "payload": {
+    "trick_number": 3,
+    "winner_seat": "SOUTH",
+    "cards_played": [
+      { "seat": "NORTH", "card": "9S" },
+      { "seat": "EAST", "card": "JS" },
+      { "seat": "SOUTH", "card": "AS" },
+      { "seat": "WEST", "card": "KS" }
+    ],
+    "trick_points": 3,
+    "tricks_taken": { "NS": 2, "EW": 1 },
+    "trick_scores": { "NS": 8, "EW": 3 }
+  }
+}
+```
+
+Broadcast.
+
+#### `TRICK_STATE`
+
+```json
+{
+  "event": "TRICK_STATE",
+  "payload": {
+    "trick_number": 7,
+    "tricks_taken": { "NS": 4, "EW": 2 },
+    "trick_scores": { "NS": 15, "EW": 6 },
+    "led_seat": "SOUTH"
+  }
+}
+```
+
+Personal. Sent on reconnect during `TRICK_PLAYING` phase.
+
+#### `HAND_COMPLETED`
+
+```json
+{
+  "event": "HAND_COMPLETED",
+  "payload": {
+    "trick_scores": { "NS": 15, "EW": 10 },
+    "team_meld": { "NS": 25, "EW": 4 },
+    "bid": 25,
+    "bidding_team": "NS",
+    "score_deltas": { "NS": 40, "EW": 14 },
+    "game_scores": { "NS": 125, "EW": 76 }
+  }
+}
+```
+
+Broadcast.
+
+#### `HAND_RESULT_ACKNOWLEDGED`
+
+```json
+{
+  "event": "HAND_RESULT_ACKNOWLEDGED",
+  "payload": {
+    "seat": "NORTH",
+    "acknowledged_seats": ["NORTH"]
+  }
+}
+```
+
+Broadcast. Sent for the 1st, 2nd, and 3rd acknowledgments.
+
+---
+
+## 5. State Persistence & Reconnect
+
+### Persistence
+
+Game state is stored in `games.current_state_json` and updated after every valid WebSocket action:
+
+```python
+game.current_state_json = state
+await db.flush()
+```
+
+The database commit happens once per message in the WebSocket route handler (`await db.commit()`).
+
+### Reconnect
+
+When a player connects to the WebSocket, the server sends `LOBBY_STATE_UPDATED` with current seats, then calls `_send_game_state_on_reconnect` which replays phase-appropriate events:
+
+| Phase | Events Sent |
+|-------|-------------|
+| `LOBBY_WAITING` / `None` | Nothing (lobby state already sent) |
+| `BIDDING` | `HAND_DEALT`, `BIDDING_TURN` |
+| `NAMING_TRUMP` | `HAND_DEALT`, `BIDDING_COMPLETED` |
+| `PASSING_CARDS` | `HAND_DEALT`, `TRUMP_NAMED`, `PASSING_PHASE_STARTED`, `CARDS_PASSED` (if any submitted) |
+| `SHOWING_MELD` | `HAND_DEALT`, `MELD_BROADCAST`, `MELD_ACKNOWLEDGED` (if any acknowledged) |
+| `TRICK_PLAYING` | `HAND_DEALT`, `MELD_PHASE_COMPLETED`, `TRICK_STATE`, `CARD_PLAYED` (for each card in current trick), `YOUR_TURN` (if it's this player's turn) |
+| `HAND_COMPLETE` | `HAND_DEALT`, `HAND_COMPLETED`, `HAND_RESULT_ACKNOWLEDGED` (if any acknowledged) |
+
+All reconnect events are sent as personal messages to the reconnecting player only.
+
+---
+
+## 6. Lobby Concurrency
+
+### The Problem
+
+Simultaneous `SELECT_SEAT` requests for the same seat could cause a race condition where one player's seat claim silently overwrites another's.
+
+### The Solution
+
+The `handle_select_seat` handler checks the seat column's current value before writing:
+
+1. Load game from DB with `populate_existing=True` to bypass the SQLAlchemy identity map cache.
+2. If the seat column is not null and the occupant is not the requesting player, send `SEAT_CLAIM_FAILED`.
+3. Otherwise, set the column and flush.
+
+If the player already occupies a different seat, they are unseated from it first (allowing seat-switching).
