@@ -1,16 +1,23 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { CreateResponse, JoinResponse } from "@pinochle/shared";
 import { useAuth } from "../auth/AuthContext.tsx";
 import { postAuth, ApiError } from "../api/client.ts";
 import { RoomPage } from "../room/RoomPage.tsx";
 import styles from "./LobbyPage.module.css";
 
+function extractRoomCode(pathname: string): string {
+  const match = pathname.match(/^\/([A-Z]{4})$/);
+  return match ? match[1] : "";
+}
+
 export function LobbyPage() {
   const { user, token, logout } = useAuth();
 
-  const [roomCode, setRoomCode] = useState(
-    () => sessionStorage.getItem("roomCode") ?? "",
-  );
+  const [roomCode, setRoomCode] = useState(() => {
+    const pathCode = extractRoomCode(window.location.pathname);
+    if (pathCode) return pathCode;
+    return sessionStorage.getItem("roomCode") ?? "";
+  });
 
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState("");
@@ -62,12 +69,38 @@ export function LobbyPage() {
   function enterRoom(code: string) {
     sessionStorage.setItem("roomCode", code);
     setRoomCode(code);
+    window.history.pushState(null, "", `/${code}`);
   }
 
   function leaveRoom() {
     sessionStorage.removeItem("roomCode");
     setRoomCode("");
+    window.history.pushState(null, "", "/");
   }
+
+  // Handle browser back/forward navigation
+  useEffect(() => {
+    function handlePopState() {
+      const code = extractRoomCode(window.location.pathname);
+      if (code) {
+        sessionStorage.setItem("roomCode", code);
+        setRoomCode(code);
+      } else {
+        sessionStorage.removeItem("roomCode");
+        setRoomCode("");
+      }
+    }
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  // Sync URL when restoring from sessionStorage
+  useEffect(() => {
+    const urlCode = extractRoomCode(window.location.pathname);
+    if (roomCode && !urlCode) {
+      window.history.replaceState(null, "", `/${roomCode}`);
+    }
+  }, []);
 
   if (roomCode) {
     return (
