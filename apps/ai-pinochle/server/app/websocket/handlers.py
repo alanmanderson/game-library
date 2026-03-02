@@ -216,7 +216,7 @@ async def handle_start_game(
             "current_highest_bid": None,
             "highest_bidder_seat": None,
             "next_to_act_seat": first_bidder,
-            "minimum_valid_bid": 20,
+            "minimum_valid_bid": 25,
         },
     })
 
@@ -289,7 +289,7 @@ async def handle_submit_bid(
 
         if len(passed_seats) == 3:
             if winning_bid is None:
-                bidding["winning_bid"] = 20
+                bidding["winning_bid"] = 25
                 bidding["winning_seat"] = dealer_seat
             state["phase"] = "NAMING_TRUMP"
             game.current_state_json = state
@@ -308,7 +308,7 @@ async def handle_submit_bid(
             game.current_state_json = state
             await db.flush()
 
-            minimum = (winning_bid + 1) if winning_bid is not None else 20
+            minimum = (winning_bid + 1) if winning_bid is not None else 25
             await manager.broadcast(room_code, {
                 "event": "BIDDING_TURN",
                 "payload": {
@@ -326,7 +326,7 @@ async def handle_submit_bid(
             })
             return
 
-        minimum = (winning_bid + 1) if winning_bid is not None else 20
+        minimum = (winning_bid + 1) if winning_bid is not None else 25
         if amount < minimum:
             await manager.send_personal(websocket, {
                 "event": "ERROR",
@@ -1033,7 +1033,7 @@ async def handle_acknowledge_hand_result(
                 "current_highest_bid": None,
                 "highest_bidder_seat": None,
                 "next_to_act_seat": first_bidder,
-                "minimum_valid_bid": 20,
+                "minimum_valid_bid": 25,
             },
         })
 

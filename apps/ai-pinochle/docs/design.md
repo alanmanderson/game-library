@@ -281,7 +281,7 @@ Phase: `LOBBY_WAITING`. Requires all 4 seats occupied. Shuffles, deals 12 cards 
 { "action": "SUBMIT_BID", "payload": { "amount": null } }
 ```
 
-Phase: `BIDDING`. Minimum bid is 20. Each bid must exceed the previous by at least 1. Dealer cannot pass if all others passed and no bid exists yet.
+Phase: `BIDDING`. Minimum bid is 25. Each bid must exceed the previous by at least 1. Dealer cannot pass if all others passed and no bid exists yet.
 
 #### `DECLARE_TRUMP`
 
@@ -384,7 +384,7 @@ Personal. 12 cards. Sent after `START_GAME`, after all 4 acknowledge hand result
     "current_highest_bid": null,
     "highest_bidder_seat": null,
     "next_to_act_seat": "EAST",
-    "minimum_valid_bid": 20
+    "minimum_valid_bid": 25
   }
 }
 ```

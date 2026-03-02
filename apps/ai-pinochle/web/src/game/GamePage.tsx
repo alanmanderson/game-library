@@ -48,7 +48,7 @@ export function GamePage({
     currentBid: null,
     highestBidderSeat: null,
     nextSeat: "",
-    minBid: 20,
+    minBid: 25,
   });
   const [biddingResult, setBiddingResult] = useState<BiddingResult | null>(null);
   const [trumpSuit, setTrumpSuit] = useState<string | null>(null);

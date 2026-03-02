@@ -142,7 +142,7 @@ async def _send_game_state_on_reconnect(
                 "current_highest_bid": winning_bid,
                 "highest_bidder_seat": bidding.get("winning_seat"),
                 "next_to_act_seat": bidding.get("next_to_act_seat"),
-                "minimum_valid_bid": (winning_bid + 1) if winning_bid is not None else 20,
+                "minimum_valid_bid": (winning_bid + 1) if winning_bid is not None else 25,
             },
         })
 

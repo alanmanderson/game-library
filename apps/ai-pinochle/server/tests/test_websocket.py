@@ -160,7 +160,7 @@ async def test_start_game_success(client: AsyncClient, sync_client: TestClient, 
 
         bidding_turn = ws.receive_json()
         assert bidding_turn["event"] == "BIDDING_TURN"
-        assert bidding_turn["payload"]["minimum_valid_bid"] == 20
+        assert bidding_turn["payload"]["minimum_valid_bid"] == 25
         assert bidding_turn["payload"]["current_highest_bid"] is None
         assert bidding_turn["payload"]["next_to_act_seat"] in [
             "NORTH", "EAST", "SOUTH", "WEST"
@@ -345,7 +345,7 @@ def _drain_broadcast(websockets):
 
 
 async def test_submit_bid_success(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
-    """First player bids 20 → BIDDING_TURN with correct highest bid, next bidder, min=21."""
+    """First player bids 25 → BIDDING_TURN with correct highest bid, next bidder, min=26."""
     room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
     websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
     try:
@@ -354,12 +354,12 @@ async def test_submit_bid_success(client: AsyncClient, sync_client: TestClient, 
 
         websockets[bidder_idx].send_json({
             "action": "SUBMIT_BID",
-            "payload": {"amount": 20},
+            "payload": {"amount": 25},
         })
 
         data = _drain_broadcast(websockets)[0]
         assert data["event"] == "BIDDING_TURN"
-        assert data["payload"]["current_highest_bid"] == 20
+        assert data["payload"]["current_highest_bid"] == 25
         assert data["payload"]["highest_bidder_seat"] == first_bidder
         assert data["payload"]["minimum_valid_bid"] == 21
         expected_next = SEATS[(bidder_idx + 1) % 4]
@@ -379,7 +379,7 @@ async def test_submit_bid_not_your_turn(client: AsyncClient, sync_client: TestCl
 
         websockets[wrong_idx].send_json({
             "action": "SUBMIT_BID",
-            "payload": {"amount": 20},
+            "payload": {"amount": 25},
         })
 
         data = websockets[wrong_idx].receive_json()
@@ -440,10 +440,10 @@ async def test_submit_bid_three_passes_ends_bidding(client: AsyncClient, sync_cl
         current_idx = SEATS.index(bt["next_to_act_seat"])
         bidder_seat = bt["next_to_act_seat"]
 
-        # First player bids 20
+        # First player bids 25
         websockets[current_idx].send_json({
             "action": "SUBMIT_BID",
-            "payload": {"amount": 20},
+            "payload": {"amount": 25},
         })
         _drain_broadcast(websockets)  # BIDDING_TURN
 
@@ -460,7 +460,7 @@ async def test_submit_bid_three_passes_ends_bidding(client: AsyncClient, sync_cl
         # After 3rd pass → BIDDING_COMPLETED
         data = _drain_broadcast(websockets)[0]
         assert data["event"] == "BIDDING_COMPLETED"
-        assert data["payload"]["winning_bid"] == 20
+        assert data["payload"]["winning_bid"] == 25
         assert data["payload"]["winning_seat"] == bidder_seat
         assert data["payload"]["is_shoot_the_moon"] is False
     finally:
@@ -469,7 +469,7 @@ async def test_submit_bid_three_passes_ends_bidding(client: AsyncClient, sync_cl
 
 
 async def test_submit_bid_all_pass_dealer_forced(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
-    """All 3 non-dealers pass with no bids → dealer forced to take 20."""
+    """All 3 non-dealers pass with no bids → dealer forced to take 25."""
     room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
     websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
     try:
@@ -492,10 +492,10 @@ async def test_submit_bid_all_pass_dealer_forced(client: AsyncClient, sync_clien
 
         # After 3rd non-dealer passes, dealer is forced — try to pass should ERROR
         # Actually the 3rd pass triggers the forced bid scenario:
-        # When 3 pass with no bids, dealer wins at 20
+        # When 3 pass with no bids, dealer wins at 25
         data = _drain_broadcast(websockets)[0]
         assert data["event"] == "BIDDING_COMPLETED"
-        assert data["payload"]["winning_bid"] == 20
+        assert data["payload"]["winning_bid"] == 25
         assert data["payload"]["winning_seat"] == dealer_seat
         assert data["payload"]["is_shoot_the_moon"] is False
     finally:
@@ -514,7 +514,7 @@ async def test_submit_bid_after_bidding_completed(client: AsyncClient, sync_clie
         # Shoot the moon to end bidding immediately
         websockets[first_idx].send_json({
             "action": "SUBMIT_BID",
-            "payload": {"amount": 20, "shoot_the_moon": True},
+            "payload": {"amount": 25, "shoot_the_moon": True},
         })
         _drain_broadcast(websockets)  # BIDDING_COMPLETED
 
@@ -541,13 +541,13 @@ async def test_submit_bid_shoot_the_moon(client: AsyncClient, sync_client: TestC
 
         websockets[bidder_idx].send_json({
             "action": "SUBMIT_BID",
-            "payload": {"amount": 20, "shoot_the_moon": True},
+            "payload": {"amount": 25, "shoot_the_moon": True},
         })
 
         data = _drain_broadcast(websockets)[0]
         assert data["event"] == "BIDDING_COMPLETED"
         assert data["payload"]["winning_seat"] == bidder_seat
-        assert data["payload"]["winning_bid"] == 20
+        assert data["payload"]["winning_bid"] == 25
         assert data["payload"]["is_shoot_the_moon"] is True
     finally:
         for ctx in contexts:
@@ -559,7 +559,7 @@ async def test_submit_bid_wrong_phase(client: AsyncClient, sync_client: TestClie
     room_code, token = await _create_game_and_get_token(client, auth_headers)
 
     with sync_client.websocket_connect(f"/ws/{room_code}?token={token}") as ws:
-        ws.send_json({"action": "SUBMIT_BID", "payload": {"amount": 20}})
+        ws.send_json({"action": "SUBMIT_BID", "payload": {"amount": 25}})
         data = ws.receive_json()
         assert data["event"] == "ERROR"
         assert "bidding" in data["payload"]["message"].lower()
@@ -574,7 +574,7 @@ def _end_bidding_with_shoot(websockets, bt):
     bidder_idx = SEATS.index(bidder_seat)
     websockets[bidder_idx].send_json({
         "action": "SUBMIT_BID",
-        "payload": {"amount": 20, "shoot_the_moon": True},
+        "payload": {"amount": 25, "shoot_the_moon": True},
     })
     _drain_broadcast(websockets)  # BIDDING_COMPLETED
     return bidder_seat, bidder_idx
@@ -599,7 +599,7 @@ async def test_declare_trump_success(client: AsyncClient, sync_client: TestClien
         assert data["event"] == "TRUMP_NAMED"
         assert data["payload"]["trump_suit"] == "HEARTS"
         assert data["payload"]["declared_by_seat"] == winner_seat
-        assert data["payload"]["winning_bid"] == 20
+        assert data["payload"]["winning_bid"] == 25
         assert data["payload"]["is_shoot_the_moon"] is True
         # Verify team mapping
         expected_team = "NS" if winner_seat in ("NORTH", "SOUTH") else "EW"

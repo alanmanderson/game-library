@@ -42,11 +42,11 @@ Trump cards beat all non-trump cards of any rank. Within trump, the same ranking
 
 Starting with the player to the dealer's left, each player either bids or passes. Bids represent the minimum number of points the bidder's team commits to scoring (meld + tricks combined) that hand.
 
-- **Minimum bid:** 20
+- **Minimum bid:** 25
 - Bids increase by increments of 1 (or more).
 - A player who passes may not re-enter the auction.
 - The **highest bidder** wins the bid and names trump.
-- If all three players pass, the dealer is forced to bid 20.
+- If all three players pass, the dealer is forced to bid 25.
 
 ---
 
