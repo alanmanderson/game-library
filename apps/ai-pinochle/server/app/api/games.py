@@ -1,10 +1,11 @@
 import random
 import string
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -55,6 +56,79 @@ async def create_game(
 
 
 SEAT_COLUMNS = ["north", "east", "south", "west"]
+
+
+class GameSummaryResponse(BaseModel):
+    room_code: str
+    status: str
+    phase: str
+    ns_score: int
+    ew_score: int
+    players: dict[str, str | None]
+    started_at: datetime | None
+    ended_at: datetime | None
+
+
+@router.get("/mine", response_model=list[GameSummaryResponse])
+async def my_games(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Game).where(
+            or_(
+                Game.north_player_id == user.id,
+                Game.east_player_id == user.id,
+                Game.south_player_id == user.id,
+                Game.west_player_id == user.id,
+            )
+        )
+    )
+    games = result.scalars().all()
+
+    # Batch-fetch usernames for all players across all games
+    all_player_ids: set[uuid.UUID] = set()
+    for game in games:
+        for seat in SEAT_COLUMNS:
+            pid = getattr(game, f"{seat}_player_id")
+            if pid is not None:
+                all_player_ids.add(pid)
+
+    id_to_username: dict[uuid.UUID, str] = {}
+    if all_player_ids:
+        rows = await db.execute(select(User).where(User.id.in_(all_player_ids)))
+        for u in rows.scalars():
+            id_to_username[u.id] = u.username
+
+    summaries = []
+    for game in games:
+        phase = (game.current_state_json or {}).get("phase", "LOBBY_WAITING")
+        players: dict[str, str | None] = {}
+        for seat in SEAT_COLUMNS:
+            pid = getattr(game, f"{seat}_player_id")
+            players[seat] = id_to_username.get(pid) if pid else None
+
+        summaries.append(GameSummaryResponse(
+            room_code=game.room_code,
+            status=game.status,
+            phase=phase,
+            ns_score=game.ns_total_score,
+            ew_score=game.ew_total_score,
+            players=players,
+            started_at=game.started_at,
+            ended_at=game.ended_at,
+        ))
+
+    # Sort: IN_PROGRESS first, then by most recent started_at
+    epoch = datetime(2000, 1, 1)
+    summaries.sort(
+        key=lambda s: (
+            0 if s.status == "IN_PROGRESS" else 1,
+            -(s.started_at or epoch).timestamp(),
+        ),
+    )
+
+    return summaries
 
 
 @router.post("/{room_code}/join", response_model=JoinGameResponse)

@@ -94,6 +94,21 @@
   letter-spacing: 0.1em;
 }
 
+.myGamesButton {
+  margin-top: 2rem;
+  padding: 0.5rem 1rem;
+  background: none;
+  color: #4a90d9;
+  border: 1px solid #4a90d9;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.myGamesButton:hover {
+  background: rgba(74, 144, 217, 0.08);
+}
+
 .logoutButton {
   margin-top: 2rem;
   padding: 0.5rem 1rem;

@@ -3,6 +3,7 @@ import type { CreateResponse, JoinResponse } from "@pinochle/shared";
 import { useAuth } from "../auth/AuthContext.tsx";
 import { postAuth, ApiError } from "../api/client.ts";
 import { RoomPage } from "../room/RoomPage.tsx";
+import { MyGamesPage } from "../game/MyGamesPage.tsx";
 import styles from "./LobbyPage.module.css";
 
 function extractRoomCode(pathname: string): string {
@@ -25,6 +26,8 @@ export function LobbyPage() {
   const [joinCode, setJoinCode] = useState("");
   const [joinLoading, setJoinLoading] = useState(false);
   const [joinError, setJoinError] = useState("");
+
+  const [showMyGames, setShowMyGames] = useState(false);
 
   async function handleCreate() {
     setCreateLoading(true);
@@ -108,6 +111,18 @@ export function LobbyPage() {
     );
   }
 
+  if (showMyGames) {
+    return (
+      <MyGamesPage
+        onBack={() => setShowMyGames(false)}
+        onOpenGame={(code) => {
+          setShowMyGames(false);
+          enterRoom(code);
+        }}
+      />
+    );
+  }
+
   return (
     <div className={styles.container}>
       <p className={styles.header}>Welcome, {user!.email ?? user!.username}!</p>
@@ -147,6 +162,10 @@ export function LobbyPage() {
           {joinError && <p className={styles.error}>{joinError}</p>}
         </div>
       </div>
+
+      <button className={styles.myGamesButton} onClick={() => setShowMyGames(true)}>
+        My Games
+      </button>
 
       <button className={styles.logoutButton} onClick={logout}>
         Log out

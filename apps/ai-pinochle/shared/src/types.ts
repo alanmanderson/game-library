@@ -110,3 +110,14 @@ export interface JoinResponse {
   room_code: string;
   seats: Record<string, string | null>;
 }
+
+export interface GameSummary {
+  room_code: string;
+  status: string;
+  phase: string;
+  ns_score: number;
+  ew_score: number;
+  players: Record<string, string | null>;
+  started_at: string | null;
+  ended_at: string | null;
+}
