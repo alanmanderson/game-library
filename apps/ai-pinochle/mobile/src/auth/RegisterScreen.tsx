@@ -18,26 +18,39 @@ export function RegisterScreen() {
   const { login } = useAuth();
 
   const [mode, setMode] = useState<"register" | "login">("register");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [serverError, setServerError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  const isRegister = mode === "register";
+
   async function handleSubmit() {
     setServerError("");
 
-    const errors = validate(email, password);
+    const errors = validate(
+      email,
+      password,
+      isRegister ? firstName : undefined,
+    );
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) return;
 
     setSubmitting(true);
     try {
       const endpoint = mode === "register" ? "/auth/register" : "/auth/login";
-      const res = await post<AuthResponse>(endpoint, { email, password });
+      const body = isRegister
+        ? { first_name: firstName, last_name: lastName, email, password }
+        : { email, password };
+      const res = await post<AuthResponse>(endpoint, body);
       login(res.access_token, {
         id: res.id,
         username: res.username,
+        first_name: res.first_name,
+        last_name: res.last_name,
         email: res.email,
       });
     } catch (err) {
@@ -57,8 +70,6 @@ export function RegisterScreen() {
     setServerError("");
   }
 
-  const isRegister = mode === "register";
-
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -72,6 +83,35 @@ export function RegisterScreen() {
           <Text style={styles.title}>
             {isRegister ? "Create Account" : "Sign In"}
           </Text>
+
+          {isRegister && (
+            <>
+              <Text style={styles.label}>First Name</Text>
+              <TextInput
+                style={styles.input}
+                value={firstName}
+                onChangeText={setFirstName}
+                autoCapitalize="words"
+                autoCorrect={false}
+                placeholder="First name"
+                placeholderTextColor="#888"
+              />
+              {fieldErrors.first_name && (
+                <Text style={styles.fieldError}>{fieldErrors.first_name}</Text>
+              )}
+
+              <Text style={styles.label}>Last Name</Text>
+              <TextInput
+                style={styles.input}
+                value={lastName}
+                onChangeText={setLastName}
+                autoCapitalize="words"
+                autoCorrect={false}
+                placeholder="Last name (optional)"
+                placeholderTextColor="#888"
+              />
+            </>
+          )}
 
           <Text style={styles.label}>Email</Text>
           <TextInput

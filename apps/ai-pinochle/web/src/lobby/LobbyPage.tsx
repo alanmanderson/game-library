@@ -125,7 +125,7 @@ export function LobbyPage() {
 
   return (
     <div className={styles.container}>
-      <p className={styles.header}>Welcome, {user!.email ?? user!.username}!</p>
+      <p className={styles.header}>Welcome, {user!.first_name}!</p>
 
       <div className={styles.sections}>
         <div className={styles.section}>

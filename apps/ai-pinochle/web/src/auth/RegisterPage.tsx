@@ -9,6 +9,8 @@ import styles from "./RegisterPage.module.css";
 export function RegisterPage() {
   const { login } = useAuth();
 
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -19,19 +21,23 @@ export function RegisterPage() {
     e.preventDefault();
     setServerError("");
 
-    const errors = validate(email, password);
+    const errors = validate(email, password, firstName);
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) return;
 
     setSubmitting(true);
     try {
       const res = await post<AuthResponse>("/auth/register", {
+        first_name: firstName,
+        last_name: lastName,
         email,
         password,
       });
       login(res.access_token, {
         id: res.id,
         username: res.username,
+        first_name: res.first_name,
+        last_name: res.last_name,
         email: res.email,
       });
     } catch (err) {
@@ -55,6 +61,8 @@ export function RegisterPage() {
       login(res.access_token, {
         id: res.id,
         username: res.username,
+        first_name: res.first_name,
+        last_name: res.last_name,
         email: res.email,
       });
     } catch (err) {
@@ -70,6 +78,31 @@ export function RegisterPage() {
     <div className={styles.container}>
       <form className={styles.form} onSubmit={handleSubmit}>
         <h1 className={styles.title}>Create Account</h1>
+
+        <label className={styles.label}>
+          First Name
+          <input
+            className={styles.input}
+            type="text"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            autoComplete="given-name"
+          />
+          {fieldErrors.first_name && (
+            <span className={styles.fieldError}>{fieldErrors.first_name}</span>
+          )}
+        </label>
+
+        <label className={styles.label}>
+          Last Name
+          <input
+            className={styles.input}
+            type="text"
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+            autoComplete="family-name"
+          />
+        </label>
 
         <label className={styles.label}>
           Email

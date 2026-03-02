@@ -15,6 +15,8 @@ class User(Base):
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
     username: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    first_name: Mapped[str] = mapped_column(String, nullable=False, server_default="")
+    last_name: Mapped[str] = mapped_column(String, nullable=False, server_default="")
     email: Mapped[str | None] = mapped_column(String, unique=True, nullable=True)
     password_hash: Mapped[str | None] = mapped_column(String, nullable=True)
     google_auth_id: Mapped[str | None] = mapped_column(String, unique=True, nullable=True)

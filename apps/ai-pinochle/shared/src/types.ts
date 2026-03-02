@@ -1,6 +1,8 @@
 export interface User {
   id: string;
   username: string;
+  first_name: string;
+  last_name: string;
   email: string | null;
 }
 
@@ -92,12 +94,16 @@ export type Seats = Record<string, string | null>;
 export interface AuthResponse {
   id: string;
   username: string;
+  first_name: string;
+  last_name: string;
   email: string | null;
   access_token: string;
   token_type: string;
 }
 
 export interface FieldErrors {
+  first_name?: string;
+  last_name?: string;
   password?: string;
   email?: string;
 }
@@ -109,6 +115,7 @@ export interface CreateResponse {
 export interface JoinResponse {
   room_code: string;
   seats: Record<string, string | null>;
+  your_seat: string | null;
 }
 
 export interface GameSummary {

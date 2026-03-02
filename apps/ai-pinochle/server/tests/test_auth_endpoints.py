@@ -12,81 +12,101 @@ GOOGLE_SUB = "google-uid-12345"
 GOOGLE_EMAIL = "googleuser@gmail.com"
 
 
-def _google_id_info(sub=GOOGLE_SUB, email=GOOGLE_EMAIL):
-    return {"sub": sub, "email": email}
+def _google_id_info(sub=GOOGLE_SUB, email=GOOGLE_EMAIL, given_name=None, family_name=None):
+    info = {"sub": sub, "email": email}
+    if given_name is not None:
+        info["given_name"] = given_name
+    if family_name is not None:
+        info["family_name"] = family_name
+    return info
 
 
 async def test_register_success_201(client):
-    resp = await client.post("/auth/register", json={"username": "alice", "password": "securepass"})
+    resp = await client.post(
+        "/auth/register",
+        json={"first_name": "Alice", "email": "alice@example.com", "password": "securepass"},
+    )
     assert resp.status_code == 201
     data = resp.json()
     assert "id" in data
-    assert data["username"] == "alice"
+    assert data["first_name"] == "Alice"
+    assert data["last_name"] == ""
+    assert data["email"] == "alice@example.com"
     assert "access_token" in data
     assert data["token_type"] == "bearer"
 
 
-async def test_register_with_email(client):
+async def test_register_with_last_name(client):
     resp = await client.post(
         "/auth/register",
-        json={"username": "bob", "password": "securepass", "email": "bob@example.com"},
+        json={"first_name": "Bob", "last_name": "Smith", "email": "bob@example.com", "password": "securepass"},
     )
     assert resp.status_code == 201
-    assert resp.json()["email"] == "bob@example.com"
+    assert resp.json()["first_name"] == "Bob"
+    assert resp.json()["last_name"] == "Smith"
 
 
 async def test_register_token_valid_jwt(client):
-    resp = await client.post("/auth/register", json={"username": "carol", "password": "securepass"})
+    resp = await client.post(
+        "/auth/register",
+        json={"first_name": "Carol", "email": "carol@example.com", "password": "securepass"},
+    )
     data = resp.json()
     payload = jwt.decode(data["access_token"], settings.secret_key, algorithms=["HS256"])
     assert payload["sub"] == data["id"]
 
 
 async def test_register_password_hashed(client, db_session):
-    await client.post("/auth/register", json={"username": "dave", "password": "securepass"})
-    result = await db_session.execute(select(User).where(User.username == "dave"))
+    await client.post(
+        "/auth/register",
+        json={"first_name": "Dave", "email": "dave@example.com", "password": "securepass"},
+    )
+    result = await db_session.execute(select(User).where(User.email == "dave@example.com"))
     user = result.scalar_one()
     assert user.password_hash != "securepass"
     assert bcrypt.checkpw(b"securepass", user.password_hash.encode())
 
 
-async def test_duplicate_username_409(client):
-    await client.post("/auth/register", json={"username": "eve", "password": "securepass"})
-    resp = await client.post("/auth/register", json={"username": "eve", "password": "securepass"})
-    assert resp.status_code == 409
-
-
 async def test_duplicate_email_409(client):
     await client.post(
         "/auth/register",
-        json={"username": "frank", "password": "securepass", "email": "dup@example.com"},
+        json={"first_name": "Frank", "email": "dup@example.com", "password": "securepass"},
     )
     resp = await client.post(
         "/auth/register",
-        json={"username": "grace", "password": "securepass", "email": "dup@example.com"},
+        json={"first_name": "Grace", "email": "dup@example.com", "password": "securepass"},
     )
     assert resp.status_code == 409
 
 
-async def test_missing_username_422(client):
-    resp = await client.post("/auth/register", json={"password": "securepass"})
+async def test_missing_email_422(client):
+    resp = await client.post(
+        "/auth/register",
+        json={"first_name": "Alice", "password": "securepass"},
+    )
     assert resp.status_code == 422
 
 
 async def test_missing_password_422(client):
-    resp = await client.post("/auth/register", json={"username": "alice"})
+    resp = await client.post(
+        "/auth/register",
+        json={"first_name": "Alice", "email": "alice@example.com"},
+    )
     assert resp.status_code == 422
 
 
-async def test_short_username_422(client):
-    resp = await client.post("/auth/register", json={"username": "ab", "password": "securepass"})
+async def test_missing_first_name_422(client):
+    resp = await client.post(
+        "/auth/register",
+        json={"email": "alice@example.com", "password": "securepass"},
+    )
     assert resp.status_code == 422
 
 
 async def test_invalid_email_422(client):
     resp = await client.post(
         "/auth/register",
-        json={"username": "alice", "password": "securepass", "email": "bad"},
+        json={"first_name": "Alice", "email": "bad", "password": "securepass"},
     )
     assert resp.status_code == 422
 
@@ -95,52 +115,77 @@ async def test_invalid_email_422(client):
 
 
 async def test_login_success_200(client):
-    await client.post("/auth/register", json={"username": "login_user", "password": "securepass"})
-    resp = await client.post("/auth/login", json={"username": "login_user", "password": "securepass"})
+    await client.post(
+        "/auth/register",
+        json={"first_name": "Login", "email": "login@example.com", "password": "securepass"},
+    )
+    resp = await client.post(
+        "/auth/login",
+        json={"email": "login@example.com", "password": "securepass"},
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert "id" in data
-    assert data["username"] == "login_user"
+    assert data["first_name"] == "Login"
     assert "access_token" in data
     assert data["token_type"] == "bearer"
 
 
-async def test_login_with_email_in_response(client):
+async def test_login_with_names_in_response(client):
     await client.post(
         "/auth/register",
-        json={"username": "login_email", "password": "securepass", "email": "login@example.com"},
+        json={"first_name": "Test", "last_name": "User", "email": "names@example.com", "password": "securepass"},
     )
-    resp = await client.post("/auth/login", json={"username": "login_email", "password": "securepass"})
+    resp = await client.post(
+        "/auth/login",
+        json={"email": "names@example.com", "password": "securepass"},
+    )
     assert resp.status_code == 200
-    assert resp.json()["email"] == "login@example.com"
+    assert resp.json()["first_name"] == "Test"
+    assert resp.json()["last_name"] == "User"
 
 
 async def test_login_token_valid_jwt(client):
-    await client.post("/auth/register", json={"username": "login_jwt", "password": "securepass"})
-    resp = await client.post("/auth/login", json={"username": "login_jwt", "password": "securepass"})
+    await client.post(
+        "/auth/register",
+        json={"first_name": "JWT", "email": "jwt@example.com", "password": "securepass"},
+    )
+    resp = await client.post(
+        "/auth/login",
+        json={"email": "jwt@example.com", "password": "securepass"},
+    )
     data = resp.json()
     payload = jwt.decode(data["access_token"], settings.secret_key, algorithms=["HS256"])
     assert payload["sub"] == data["id"]
 
 
 async def test_login_wrong_password_401(client):
-    await client.post("/auth/register", json={"username": "login_wrong", "password": "securepass"})
-    resp = await client.post("/auth/login", json={"username": "login_wrong", "password": "wrongpass"})
+    await client.post(
+        "/auth/register",
+        json={"first_name": "Wrong", "email": "wrong@example.com", "password": "securepass"},
+    )
+    resp = await client.post(
+        "/auth/login",
+        json={"email": "wrong@example.com", "password": "wrongpass"},
+    )
     assert resp.status_code == 401
 
 
 async def test_login_nonexistent_user_401(client):
-    resp = await client.post("/auth/login", json={"username": "noexist", "password": "securepass"})
+    resp = await client.post(
+        "/auth/login",
+        json={"email": "noexist@example.com", "password": "securepass"},
+    )
     assert resp.status_code == 401
 
 
-async def test_login_missing_username_422(client):
+async def test_login_missing_email_422(client):
     resp = await client.post("/auth/login", json={"password": "securepass"})
     assert resp.status_code == 422
 
 
 async def test_login_missing_password_422(client):
-    resp = await client.post("/auth/login", json={"username": "someone"})
+    resp = await client.post("/auth/login", json={"email": "a@b.com"})
     assert resp.status_code == 422
 
 
@@ -148,17 +193,26 @@ async def test_login_missing_password_422(client):
 
 
 async def test_google_auth_new_user_200(client):
-    with patch(GOOGLE_VERIFY, return_value=_google_id_info()):
+    with patch(GOOGLE_VERIFY, return_value=_google_id_info(given_name="Google", family_name="User")):
         resp = await client.post("/auth/google", json={"token": "valid-token"})
     assert resp.status_code == 200
     data = resp.json()
-    assert data["username"] == GOOGLE_EMAIL
     assert data["email"] == GOOGLE_EMAIL
+    assert data["first_name"] == "Google"
+    assert data["last_name"] == "User"
     assert "access_token" in data
 
 
-async def test_google_auth_existing_user_200(client):
+async def test_google_auth_fallback_first_name(client):
+    """When Google doesn't provide given_name, use email prefix."""
     with patch(GOOGLE_VERIFY, return_value=_google_id_info()):
+        resp = await client.post("/auth/google", json={"token": "valid-token"})
+    assert resp.status_code == 200
+    assert resp.json()["first_name"] == "googleuser"
+
+
+async def test_google_auth_existing_user_200(client):
+    with patch(GOOGLE_VERIFY, return_value=_google_id_info(given_name="G")):
         resp1 = await client.post("/auth/google", json={"token": "valid-token"})
         resp2 = await client.post("/auth/google", json={"token": "valid-token"})
     assert resp2.status_code == 200
@@ -166,13 +220,13 @@ async def test_google_auth_existing_user_200(client):
 
 
 async def test_google_auth_returns_email(client):
-    with patch(GOOGLE_VERIFY, return_value=_google_id_info(email="custom@example.com")):
+    with patch(GOOGLE_VERIFY, return_value=_google_id_info(email="custom@example.com", given_name="C")):
         resp = await client.post("/auth/google", json={"token": "valid-token"})
     assert resp.json()["email"] == "custom@example.com"
 
 
 async def test_google_auth_valid_jwt(client):
-    with patch(GOOGLE_VERIFY, return_value=_google_id_info()):
+    with patch(GOOGLE_VERIFY, return_value=_google_id_info(given_name="G")):
         resp = await client.post("/auth/google", json={"token": "valid-token"})
     data = resp.json()
     payload = jwt.decode(data["access_token"], settings.secret_key, algorithms=["HS256"])

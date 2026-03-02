@@ -127,10 +127,7 @@ async def handle_select_seat(
     await db.refresh(game)
 
     seats = await _build_seats_dict(game, db)
-    await manager.broadcast(room_code, {
-        "event": "LOBBY_STATE_UPDATED",
-        "payload": {"seats": seats},
-    })
+    await _send_lobby_state(game, room_code, seats)
 
 
 async def handle_start_game(
@@ -1038,19 +1035,38 @@ async def handle_acknowledge_hand_result(
         })
 
 
+def _your_seat(game: Game, user_id: uuid.UUID) -> str | None:
+    for seat, col in SEAT_COLUMNS.items():
+        if getattr(game, col) == user_id:
+            return seat
+    return None
+
+
+async def _send_lobby_state(
+    game: Game, room_code: str, seats: dict[str, str | None]
+) -> None:
+    connections = manager.get_connections(room_code)
+    for conn in connections:
+        your_seat = _your_seat(game, conn.user_id)
+        await manager.send_personal(conn.websocket, {
+            "event": "LOBBY_STATE_UPDATED",
+            "payload": {"seats": seats, "your_seat": your_seat},
+        })
+
+
 async def _build_seats_dict(game: Game, db: AsyncSession) -> dict[str, str | None]:
     player_ids = {
         seat: getattr(game, col) for seat, col in SEAT_COLUMNS.items()
     }
 
     occupied_ids = [pid for pid in player_ids.values() if pid is not None]
-    id_to_username: dict[uuid.UUID, str] = {}
+    id_to_name: dict[uuid.UUID, str] = {}
     if occupied_ids:
         rows = await db.execute(select(User).where(User.id.in_(occupied_ids)))
         for u in rows.scalars():
-            id_to_username[u.id] = u.username
+            id_to_name[u.id] = u.first_name
 
     return {
-        seat: id_to_username.get(pid) if pid else None
+        seat: id_to_name.get(pid) if pid else None
         for seat, pid in player_ids.items()
     }

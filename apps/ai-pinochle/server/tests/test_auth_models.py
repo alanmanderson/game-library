@@ -5,66 +5,47 @@ from app.api.auth import RegisterRequest
 
 
 def test_valid_minimal():
-    req = RegisterRequest(username="alice", password="securepass")
-    assert req.username == "alice"
-    assert req.email is None
+    req = RegisterRequest(first_name="Alice", email="alice@example.com", password="securepass")
+    assert req.first_name == "Alice"
+    assert req.last_name == ""
+    assert req.email == "alice@example.com"
 
 
-def test_valid_with_email():
-    req = RegisterRequest(username="alice", password="securepass", email="a@b.com")
-    assert req.email == "a@b.com"
+def test_valid_with_last_name():
+    req = RegisterRequest(first_name="Alice", last_name="Smith", email="a@b.com", password="securepass")
+    assert req.last_name == "Smith"
 
 
-def test_username_too_short():
+def test_first_name_required():
     with pytest.raises(ValidationError):
-        RegisterRequest(username="ab", password="securepass")
+        RegisterRequest(email="a@b.com", password="securepass")
 
 
-def test_username_too_long():
+def test_first_name_min_length():
     with pytest.raises(ValidationError):
-        RegisterRequest(username="a" * 31, password="securepass")
-
-
-def test_username_invalid_chars():
-    with pytest.raises(ValidationError):
-        RegisterRequest(username="bad user!", password="securepass")
-
-
-def test_username_boundary_3():
-    req = RegisterRequest(username="abc", password="securepass")
-    assert req.username == "abc"
-
-
-def test_username_boundary_30():
-    req = RegisterRequest(username="a" * 30, password="securepass")
-    assert len(req.username) == 30
-
-
-def test_username_underscores():
-    req = RegisterRequest(username="my_user_1", password="securepass")
-    assert req.username == "my_user_1"
+        RegisterRequest(first_name="", email="a@b.com", password="securepass")
 
 
 def test_password_too_short():
     with pytest.raises(ValidationError):
-        RegisterRequest(username="alice", password="1234567")
+        RegisterRequest(first_name="Alice", email="a@b.com", password="1234567")
 
 
 def test_password_boundary_8():
-    req = RegisterRequest(username="alice", password="12345678")
+    req = RegisterRequest(first_name="Alice", email="a@b.com", password="12345678")
     assert req.password == "12345678"
 
 
 def test_invalid_email():
     with pytest.raises(ValidationError):
-        RegisterRequest(username="alice", password="securepass", email="not-an-email")
+        RegisterRequest(first_name="Alice", email="not-an-email", password="securepass")
 
 
-def test_missing_username():
+def test_missing_email():
     with pytest.raises(ValidationError):
-        RegisterRequest(password="securepass")
+        RegisterRequest(first_name="Alice", password="securepass")
 
 
 def test_missing_password():
     with pytest.raises(ValidationError):
-        RegisterRequest(username="alice")
+        RegisterRequest(first_name="Alice", email="a@b.com")

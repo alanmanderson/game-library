@@ -26,6 +26,7 @@ class JoinGameResponse(BaseModel):
     game_id: uuid.UUID
     phase: str
     seats: dict[str, str | None]
+    your_seat: str | None
 
 
 def _generate_room_code() -> str:
@@ -94,11 +95,11 @@ async def my_games(
             if pid is not None:
                 all_player_ids.add(pid)
 
-    id_to_username: dict[uuid.UUID, str] = {}
+    id_to_name: dict[uuid.UUID, str] = {}
     if all_player_ids:
         rows = await db.execute(select(User).where(User.id.in_(all_player_ids)))
         for u in rows.scalars():
-            id_to_username[u.id] = u.username
+            id_to_name[u.id] = u.first_name
 
     summaries = []
     for game in games:
@@ -106,7 +107,7 @@ async def my_games(
         players: dict[str, str | None] = {}
         for seat in SEAT_COLUMNS:
             pid = getattr(game, f"{seat}_player_id")
-            players[seat] = id_to_username.get(pid) if pid else None
+            players[seat] = id_to_name.get(pid) if pid else None
 
         summaries.append(GameSummaryResponse(
             room_code=game.room_code,
@@ -151,20 +152,24 @@ async def join_game(
         seat: getattr(game, f"{seat}_player_id") for seat in SEAT_COLUMNS
     }
 
-    # Batch-fetch usernames for occupied seats
+    # Batch-fetch first names for occupied seats
     occupied_ids = [pid for pid in player_ids.values() if pid is not None]
-    id_to_username: dict[uuid.UUID, str] = {}
+    id_to_name: dict[uuid.UUID, str] = {}
     if occupied_ids:
         rows = await db.execute(select(User).where(User.id.in_(occupied_ids)))
         for u in rows.scalars():
-            id_to_username[u.id] = u.username
+            id_to_name[u.id] = u.first_name
 
+    your_seat: str | None = None
     for seat, pid in player_ids.items():
-        seats[seat] = id_to_username.get(pid) if pid else None
+        seats[seat] = id_to_name.get(pid) if pid else None
+        if pid == user.id:
+            your_seat = seat
 
     return JoinGameResponse(
         room_code=game.room_code,
         game_id=game.id,
         phase=phase,
         seats=seats,
+        your_seat=your_seat,
     )

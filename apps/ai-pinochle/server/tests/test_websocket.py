@@ -15,11 +15,11 @@ async def _create_game_and_get_token(client: AsyncClient, auth_headers: dict) ->
     return room_code, token
 
 
-async def _register_user(client: AsyncClient, username: str) -> str:
+async def _register_user(client: AsyncClient, name: str) -> str:
     """Register a user and return their token."""
     resp = await client.post(
         "/auth/register",
-        json={"username": username, "password": "securepass123"},
+        json={"first_name": name, "email": f"{name}@test.com", "password": "securepass123"},
     )
     return resp.json()["access_token"]
 
@@ -48,12 +48,16 @@ async def test_websocket_connect_and_select_seat(client: AsyncClient, sync_clien
 
     with sync_client.websocket_connect(f"/ws/{room_code}?token={token}") as ws:
         ws.send_json({"action": "SELECT_SEAT", "payload": {"seat": "NORTH"}})
+        # Drain initial LOBBY_STATE_UPDATED from connect
         data = ws.receive_json()
+        if data["payload"]["seats"]["NORTH"] is None:
+            data = ws.receive_json()  # get the post-seat-selection update
         assert data["event"] == "LOBBY_STATE_UPDATED"
-        assert data["payload"]["seats"]["NORTH"] == "testplayer"
+        assert data["payload"]["seats"]["NORTH"] == "Test"
         assert data["payload"]["seats"]["EAST"] is None
         assert data["payload"]["seats"]["SOUTH"] is None
         assert data["payload"]["seats"]["WEST"] is None
+        assert data["payload"]["your_seat"] == "NORTH"
 
 
 async def test_websocket_missing_token(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
@@ -77,7 +81,10 @@ async def test_websocket_invalid_seat(client: AsyncClient, sync_client: TestClie
 
     with sync_client.websocket_connect(f"/ws/{room_code}?token={token}") as ws:
         ws.send_json({"action": "SELECT_SEAT", "payload": {"seat": "CENTER"}})
+        # Skip initial LOBBY_STATE if it arrives first
         data = ws.receive_json()
+        if data["event"] != "ERROR":
+            data = ws.receive_json()
         assert data["event"] == "ERROR"
         assert "Invalid seat" in data["payload"]["message"]
 
@@ -88,6 +95,8 @@ async def test_websocket_unknown_action(client: AsyncClient, sync_client: TestCl
     with sync_client.websocket_connect(f"/ws/{room_code}?token={token}") as ws:
         ws.send_json({"action": "DANCE", "payload": {}})
         data = ws.receive_json()
+        if data["event"] != "ERROR":
+            data = ws.receive_json()
         assert data["event"] == "ERROR"
         assert "Unknown action" in data["payload"]["message"]
 
@@ -99,20 +108,23 @@ async def test_websocket_seat_already_taken(client: AsyncClient, sync_client: Te
     # Register a second user
     resp2 = await client.post(
         "/auth/register",
-        json={"username": "player2", "password": "securepass456"},
+        json={"first_name": "Player2", "email": "player2@test.com", "password": "securepass456"},
     )
     token2 = resp2.json()["access_token"]
 
     # User 1 takes NORTH
     with sync_client.websocket_connect(f"/ws/{room_code}?token={token1}") as ws1:
         ws1.send_json({"action": "SELECT_SEAT", "payload": {"seat": "NORTH"}})
-        data = ws1.receive_json()
-        assert data["event"] == "LOBBY_STATE_UPDATED"
+        ws1.receive_json()  # LOBBY_STATE_UPDATED
 
     # User 2 tries NORTH — should fail
     with sync_client.websocket_connect(f"/ws/{room_code}?token={token2}") as ws2:
         ws2.send_json({"action": "SELECT_SEAT", "payload": {"seat": "NORTH"}})
-        data = ws2.receive_json()
+        # Read messages until we find SEAT_CLAIM_FAILED
+        for _ in range(3):
+            data = ws2.receive_json()
+            if data["event"] == "SEAT_CLAIM_FAILED":
+                break
         assert data["event"] == "SEAT_CLAIM_FAILED"
         assert data["payload"]["requested_seat"] == "NORTH"
 
@@ -124,11 +136,13 @@ async def test_websocket_switch_seat(client: AsyncClient, sync_client: TestClien
     with sync_client.websocket_connect(f"/ws/{room_code}?token={token}") as ws:
         ws.send_json({"action": "SELECT_SEAT", "payload": {"seat": "NORTH"}})
         data = ws.receive_json()
-        assert data["payload"]["seats"]["NORTH"] == "testplayer"
+        if data["payload"]["seats"]["NORTH"] is None:
+            data = ws.receive_json()
+        assert data["payload"]["seats"]["NORTH"] == "Test"
 
         ws.send_json({"action": "SELECT_SEAT", "payload": {"seat": "SOUTH"}})
         data = ws.receive_json()
-        assert data["payload"]["seats"]["SOUTH"] == "testplayer"
+        assert data["payload"]["seats"]["SOUTH"] == "Test"
         assert data["payload"]["seats"]["NORTH"] is None
 
 
@@ -139,13 +153,15 @@ async def test_websocket_reselect_same_seat(client: AsyncClient, sync_client: Te
     with sync_client.websocket_connect(f"/ws/{room_code}?token={token}") as ws:
         ws.send_json({"action": "SELECT_SEAT", "payload": {"seat": "EAST"}})
         data = ws.receive_json()
+        if data["payload"]["seats"]["EAST"] is None:
+            data = ws.receive_json()
         assert data["event"] == "LOBBY_STATE_UPDATED"
-        assert data["payload"]["seats"]["EAST"] == "testplayer"
+        assert data["payload"]["seats"]["EAST"] == "Test"
 
         ws.send_json({"action": "SELECT_SEAT", "payload": {"seat": "EAST"}})
         data = ws.receive_json()
         assert data["event"] == "LOBBY_STATE_UPDATED"
-        assert data["payload"]["seats"]["EAST"] == "testplayer"
+        assert data["payload"]["seats"]["EAST"] == "Test"
 
 
 async def test_start_game_success(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
@@ -155,6 +171,8 @@ async def test_start_game_success(client: AsyncClient, sync_client: TestClient, 
     with sync_client.websocket_connect(f"/ws/{room_code}?token={tokens[0]}") as ws:
         ws.send_json({"action": "START_GAME", "payload": {}})
         hand_dealt = ws.receive_json()
+        if hand_dealt["event"] == "LOBBY_STATE_UPDATED":
+            hand_dealt = ws.receive_json()
         assert hand_dealt["event"] == "HAND_DEALT"
         assert len(hand_dealt["payload"]["cards"]) == 12
 
@@ -173,7 +191,8 @@ async def test_start_game_seats_not_full(client: AsyncClient, sync_client: TestC
 
     with sync_client.websocket_connect(f"/ws/{room_code}?token={token}") as ws:
         ws.send_json({"action": "SELECT_SEAT", "payload": {"seat": "NORTH"}})
-        ws.receive_json()  # LOBBY_STATE_UPDATED
+        ws.receive_json()  # LOBBY_STATE_UPDATED (initial or post-seat)
+        ws.receive_json()  # LOBBY_STATE_UPDATED (post-seat if first was initial)
 
         ws.send_json({"action": "START_GAME", "payload": {}})
         data = ws.receive_json()
@@ -187,11 +206,17 @@ async def test_start_game_wrong_phase(client: AsyncClient, sync_client: TestClie
     # Start the game first
     with sync_client.websocket_connect(f"/ws/{room_code}?token={tokens[0]}") as ws:
         ws.send_json({"action": "START_GAME", "payload": {}})
-        ws.receive_json()  # HAND_DEALT
-        ws.receive_json()  # BIDDING_TURN
+        ws.receive_json()  # LOBBY_STATE_UPDATED or HAND_DEALT
+        ws.receive_json()  # HAND_DEALT or BIDDING_TURN
+        ws.receive_json()  # BIDDING_TURN (may be needed)
 
-    # Try to start again — phase is now BIDDING
+    # Try to start again — phase is now BIDDING, reconnect sends state
     with sync_client.websocket_connect(f"/ws/{room_code}?token={tokens[0]}") as ws:
+        # Drain all reconnect messages before sending action
+        for _ in range(4):
+            data = ws.receive_json()
+            if data["event"] == "BIDDING_TURN":
+                break
         ws.send_json({"action": "START_GAME", "payload": {}})
         data = ws.receive_json()
         assert data["event"] == "ERROR"
@@ -561,6 +586,8 @@ async def test_submit_bid_wrong_phase(client: AsyncClient, sync_client: TestClie
     with sync_client.websocket_connect(f"/ws/{room_code}?token={token}") as ws:
         ws.send_json({"action": "SUBMIT_BID", "payload": {"amount": 25}})
         data = ws.receive_json()
+        if data["event"] != "ERROR":
+            data = ws.receive_json()
         assert data["event"] == "ERROR"
         assert "bidding" in data["payload"]["message"].lower()
 

@@ -19,6 +19,8 @@ router = APIRouter()
 
 
 class RegisterRequest(BaseModel):
+    first_name: str = Field(min_length=1)
+    last_name: str = ""
     email: EmailStr
     password: str = Field(min_length=8)
 
@@ -35,6 +37,8 @@ class GoogleAuthRequest(BaseModel):
 class AuthResponse(BaseModel):
     id: uuid.UUID
     username: str
+    first_name: str
+    last_name: str
     email: str | None
     access_token: str
     token_type: str = "bearer"
@@ -52,6 +56,8 @@ def _create_access_token(user_id: uuid.UUID) -> str:
 async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
     user = User(
         username=body.email,
+        first_name=body.first_name,
+        last_name=body.last_name,
         email=body.email,
         password_hash=bcrypt.hashpw(body.password.encode(), bcrypt.gensalt()).decode(),
     )
@@ -68,6 +74,8 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
     return AuthResponse(
         id=user.id,
         username=user.username,
+        first_name=user.first_name,
+        last_name=user.last_name,
         email=user.email,
         access_token=access_token,
     )
@@ -88,6 +96,8 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
     return AuthResponse(
         id=user.id,
         username=user.username,
+        first_name=user.first_name,
+        last_name=user.last_name,
         email=user.email,
         access_token=access_token,
     )
@@ -109,6 +119,8 @@ async def google_auth(body: GoogleAuthRequest, db: AsyncSession = Depends(get_db
 
     google_sub = id_info["sub"]
     email = id_info["email"]
+    given_name = id_info.get("given_name") or email.split("@")[0]
+    family_name = id_info.get("family_name", "")
 
     result = await db.execute(
         select(User).where(User.google_auth_id == google_sub)
@@ -118,6 +130,8 @@ async def google_auth(body: GoogleAuthRequest, db: AsyncSession = Depends(get_db
     if user is None:
         user = User(
             username=email,
+            first_name=given_name,
+            last_name=family_name,
             email=email,
             google_auth_id=google_sub,
             password_hash=None,
@@ -136,6 +150,8 @@ async def google_auth(body: GoogleAuthRequest, db: AsyncSession = Depends(get_db
     return AuthResponse(
         id=user.id,
         username=user.username,
+        first_name=user.first_name,
+        last_name=user.last_name,
         email=user.email,
         access_token=access_token,
     )

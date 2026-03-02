@@ -20,7 +20,7 @@ function normalizeSeats(raw: Record<string, string | null>): Seats {
 }
 
 export function RoomPage({ roomCode, onLeave }: Props) {
-  const { user, token } = useAuth();
+  const { token } = useAuth();
   const { sendMessage, lastEvent, connected } = useWebSocket(
     roomCode,
     token!,
@@ -32,6 +32,7 @@ export function RoomPage({ roomCode, onLeave }: Props) {
     south: null,
     west: null,
   });
+  const [mySeat, setMySeat] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [gameStarted, setGameStarted] = useState(false);
   const [myHand, setMyHand] = useState<string[]>([]);
@@ -40,8 +41,11 @@ export function RoomPage({ roomCode, onLeave }: Props) {
     if (!lastEvent) return;
 
     if (lastEvent.event === "LOBBY_STATE_UPDATED") {
-      const payload = lastEvent.payload as { seats: Seats };
+      const payload = lastEvent.payload as { seats: Seats; your_seat: string | null };
       setSeats(normalizeSeats(payload.seats));
+      if (payload.your_seat) {
+        setMySeat(payload.your_seat.toLowerCase());
+      }
       setError("");
     } else if (lastEvent.event === "SEAT_CLAIM_FAILED") {
       const payload = lastEvent.payload as { reason: string };
@@ -63,10 +67,6 @@ export function RoomPage({ roomCode, onLeave }: Props) {
   }
 
   const allSeated = SEATS.every((s) => seats[s]);
-  const username = user!.username;
-
-  const mySeat =
-    Object.entries(seats).find(([, occupant]) => occupant === username)?.[0] ?? null;
 
   if (gameStarted && mySeat) {
     return (
@@ -108,7 +108,7 @@ export function RoomPage({ roomCode, onLeave }: Props) {
       <div className={styles.table}>
         {positions.map(({ seat, position }) => {
           const occupant = seats[seat];
-          const isSelf = occupant === username;
+          const isSelf = seat === mySeat;
           const posClass = styles[`seat_${position}`];
 
           return (
