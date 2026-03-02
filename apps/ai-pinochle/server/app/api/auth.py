@@ -20,7 +20,7 @@ router = APIRouter()
 
 class RegisterRequest(BaseModel):
     first_name: str = Field(min_length=1)
-    last_name: str = ""
+    last_name: str = Field(min_length=1)
     email: EmailStr
     password: str = Field(min_length=8)
 

@@ -19,7 +19,7 @@ async def _register_user(client: AsyncClient, name: str) -> str:
     """Register a user and return their token."""
     resp = await client.post(
         "/auth/register",
-        json={"first_name": name, "email": f"{name}@test.com", "password": "securepass123"},
+        json={"first_name": name, "last_name": "Test", "email": f"{name}@test.com", "password": "securepass123"},
     )
     return resp.json()["access_token"]
 
@@ -108,7 +108,7 @@ async def test_websocket_seat_already_taken(client: AsyncClient, sync_client: Te
     # Register a second user
     resp2 = await client.post(
         "/auth/register",
-        json={"first_name": "Player2", "email": "player2@test.com", "password": "securepass456"},
+        json={"first_name": "Player2", "last_name": "Test", "email": "player2@test.com", "password": "securepass456"},
     )
     token2 = resp2.json()["access_token"]
 

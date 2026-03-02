@@ -111,7 +111,7 @@ def sync_client():
 async def auth_headers(client: AsyncClient) -> dict[str, str]:
     resp = await client.post(
         "/auth/register",
-        json={"first_name": "Test", "email": "test@example.com", "password": "securepass123"},
+        json={"first_name": "Test", "last_name": "User", "email": "test@example.com", "password": "securepass123"},
     )
     token = resp.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}

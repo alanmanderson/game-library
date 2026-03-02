@@ -21,7 +21,7 @@ export function RegisterPage() {
     e.preventDefault();
     setServerError("");
 
-    const errors = validate(email, password, firstName);
+    const errors = validate(email, password, firstName, lastName);
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) return;
 
@@ -102,6 +102,9 @@ export function RegisterPage() {
             onChange={(e) => setLastName(e.target.value)}
             autoComplete="family-name"
           />
+          {fieldErrors.last_name && (
+            <span className={styles.fieldError}>{fieldErrors.last_name}</span>
+          )}
         </label>
 
         <label className={styles.label}>

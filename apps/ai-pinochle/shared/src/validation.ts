@@ -12,6 +12,10 @@ export function validate(
     errors.first_name = "First name is required";
   }
 
+  if (lastName !== undefined && !lastName.trim()) {
+    errors.last_name = "Last name is required";
+  }
+
   if (!email) {
     errors.email = "Email is required";
   } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {

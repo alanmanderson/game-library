@@ -24,13 +24,13 @@ def _google_id_info(sub=GOOGLE_SUB, email=GOOGLE_EMAIL, given_name=None, family_
 async def test_register_success_201(client):
     resp = await client.post(
         "/auth/register",
-        json={"first_name": "Alice", "email": "alice@example.com", "password": "securepass"},
+        json={"first_name": "Alice", "last_name": "Jones", "email": "alice@example.com", "password": "securepass"},
     )
     assert resp.status_code == 201
     data = resp.json()
     assert "id" in data
     assert data["first_name"] == "Alice"
-    assert data["last_name"] == ""
+    assert data["last_name"] == "Jones"
     assert data["email"] == "alice@example.com"
     assert "access_token" in data
     assert data["token_type"] == "bearer"
@@ -49,7 +49,7 @@ async def test_register_with_last_name(client):
 async def test_register_token_valid_jwt(client):
     resp = await client.post(
         "/auth/register",
-        json={"first_name": "Carol", "email": "carol@example.com", "password": "securepass"},
+        json={"first_name": "Carol", "last_name": "Lee", "email": "carol@example.com", "password": "securepass"},
     )
     data = resp.json()
     payload = jwt.decode(data["access_token"], settings.secret_key, algorithms=["HS256"])
@@ -59,7 +59,7 @@ async def test_register_token_valid_jwt(client):
 async def test_register_password_hashed(client, db_session):
     await client.post(
         "/auth/register",
-        json={"first_name": "Dave", "email": "dave@example.com", "password": "securepass"},
+        json={"first_name": "Dave", "last_name": "Kim", "email": "dave@example.com", "password": "securepass"},
     )
     result = await db_session.execute(select(User).where(User.email == "dave@example.com"))
     user = result.scalar_one()
@@ -70,11 +70,11 @@ async def test_register_password_hashed(client, db_session):
 async def test_duplicate_email_409(client):
     await client.post(
         "/auth/register",
-        json={"first_name": "Frank", "email": "dup@example.com", "password": "securepass"},
+        json={"first_name": "Frank", "last_name": "Doe", "email": "dup@example.com", "password": "securepass"},
     )
     resp = await client.post(
         "/auth/register",
-        json={"first_name": "Grace", "email": "dup@example.com", "password": "securepass"},
+        json={"first_name": "Grace", "last_name": "Doe", "email": "dup@example.com", "password": "securepass"},
     )
     assert resp.status_code == 409
 
@@ -82,7 +82,7 @@ async def test_duplicate_email_409(client):
 async def test_missing_email_422(client):
     resp = await client.post(
         "/auth/register",
-        json={"first_name": "Alice", "password": "securepass"},
+        json={"first_name": "Alice", "last_name": "X", "password": "securepass"},
     )
     assert resp.status_code == 422
 
@@ -90,7 +90,7 @@ async def test_missing_email_422(client):
 async def test_missing_password_422(client):
     resp = await client.post(
         "/auth/register",
-        json={"first_name": "Alice", "email": "alice@example.com"},
+        json={"first_name": "Alice", "last_name": "X", "email": "alice@example.com"},
     )
     assert resp.status_code == 422
 
@@ -98,7 +98,15 @@ async def test_missing_password_422(client):
 async def test_missing_first_name_422(client):
     resp = await client.post(
         "/auth/register",
-        json={"email": "alice@example.com", "password": "securepass"},
+        json={"last_name": "X", "email": "alice@example.com", "password": "securepass"},
+    )
+    assert resp.status_code == 422
+
+
+async def test_missing_last_name_422(client):
+    resp = await client.post(
+        "/auth/register",
+        json={"first_name": "Alice", "email": "alice@example.com", "password": "securepass"},
     )
     assert resp.status_code == 422
 
@@ -106,7 +114,7 @@ async def test_missing_first_name_422(client):
 async def test_invalid_email_422(client):
     resp = await client.post(
         "/auth/register",
-        json={"first_name": "Alice", "email": "bad", "password": "securepass"},
+        json={"first_name": "Alice", "last_name": "X", "email": "bad", "password": "securepass"},
     )
     assert resp.status_code == 422
 
@@ -117,7 +125,7 @@ async def test_invalid_email_422(client):
 async def test_login_success_200(client):
     await client.post(
         "/auth/register",
-        json={"first_name": "Login", "email": "login@example.com", "password": "securepass"},
+        json={"first_name": "Login", "last_name": "User", "email": "login@example.com", "password": "securepass"},
     )
     resp = await client.post(
         "/auth/login",
@@ -148,7 +156,7 @@ async def test_login_with_names_in_response(client):
 async def test_login_token_valid_jwt(client):
     await client.post(
         "/auth/register",
-        json={"first_name": "JWT", "email": "jwt@example.com", "password": "securepass"},
+        json={"first_name": "JWT", "last_name": "User", "email": "jwt@example.com", "password": "securepass"},
     )
     resp = await client.post(
         "/auth/login",
@@ -162,7 +170,7 @@ async def test_login_token_valid_jwt(client):
 async def test_login_wrong_password_401(client):
     await client.post(
         "/auth/register",
-        json={"first_name": "Wrong", "email": "wrong@example.com", "password": "securepass"},
+        json={"first_name": "Wrong", "last_name": "User", "email": "wrong@example.com", "password": "securepass"},
     )
     resp = await client.post(
         "/auth/login",

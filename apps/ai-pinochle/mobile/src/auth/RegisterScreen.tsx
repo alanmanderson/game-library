@@ -35,6 +35,7 @@ export function RegisterScreen() {
       email,
       password,
       isRegister ? firstName : undefined,
+      isRegister ? lastName : undefined,
     );
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) return;
@@ -107,9 +108,12 @@ export function RegisterScreen() {
                 onChangeText={setLastName}
                 autoCapitalize="words"
                 autoCorrect={false}
-                placeholder="Last name (optional)"
+                placeholder="Last name"
                 placeholderTextColor="#888"
               />
+              {fieldErrors.last_name && (
+                <Text style={styles.fieldError}>{fieldErrors.last_name}</Text>
+              )}
             </>
           )}
 
