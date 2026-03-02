@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Card shape with rounded corners -->
+  <rect x="8" y="4" width="48" height="56" rx="6" ry="6" fill="#fff" stroke="#1a1a2e" stroke-width="2.5"/>
+
+  <!-- Red diamond suit, top-left corner -->
+  <polygon points="20,12 16,17 20,22 24,17" fill="#c0392b"/>
+
+  <!-- Large letter P -->
+  <text x="32" y="45" font-family="Georgia, 'Times New Roman', serif" font-size="32" font-weight="bold" fill="#1a1a2e" text-anchor="middle">P</text>
+
+  <!-- Black spade suit, bottom-right corner -->
+  <path d="M44,43 C41,45.5 38,48 38,50 C38,52 40,53 42,51.5 L41.5,54 L46.5,54 L46,51.5 C48,53 50,52 50,50 C50,48 47,45.5 44,43 Z" fill="#1a1a2e"/>
+</svg>
