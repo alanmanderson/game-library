@@ -21,3 +21,8 @@ logs/
 .vscode/
 .idea/
 *.swp
+
+# Terraform
+infra/.terraform/
+infra/*.tfstate*
+infra/terraform.tfvars
