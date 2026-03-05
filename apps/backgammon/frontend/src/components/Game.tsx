@@ -1,0 +1,321 @@
+import { useState, useCallback, useMemo, useEffect } from "react";
+import { useParams, Link } from "react-router-dom";
+import type { GameState, Color, Table, Move, WSMessage } from "../types/game";
+import { useWebSocket } from "../hooks/useWebSocket";
+import Board from "./Board";
+import Dice from "./Dice";
+import GameControls from "./GameControls";
+import GameInfo from "./GameInfo";
+import "./styles/Game.css";
+
+function Game() {
+  const { tableId } = useParams<{ tableId: string }>();
+  const [gameState, setGameState] = useState<GameState | null>(null);
+  const [myColor, setMyColor] = useState<Color | null>(null);
+  const [table, setTable] = useState<Table | null>(null);
+  const [selectedPoint, setSelectedPoint] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [waitingForOpponent, setWaitingForOpponent] = useState(false);
+  const [opponentConnected, setOpponentConnected] = useState(true);
+  const [opponentReconnected, setOpponentReconnected] = useState(false);
+
+  // Get player from localStorage
+  const player = useMemo(() => {
+    try {
+      const stored = localStorage.getItem("backgammon_player");
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const playerId = player?.id;
+
+  // Build WebSocket URL
+  const wsUrl = useMemo(() => {
+    if (!tableId || !playerId) return "";
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${protocol}//${window.location.host}/ws/${tableId}/${playerId}`;
+  }, [tableId, playerId]);
+
+  // Handle incoming WebSocket messages
+  const handleMessage = useCallback((message: WSMessage) => {
+    switch (message.type) {
+      case "game_state":
+        // Full state update: data contains { game_state, your_color, table }
+        if (message.data.game_state) {
+          setGameState(message.data.game_state);
+        }
+        if (message.data.your_color) {
+          setMyColor(message.data.your_color);
+        }
+        if (message.data.table) {
+          setTable(message.data.table);
+        }
+        setWaitingForOpponent(false);
+        setError(null);
+        setSelectedPoint(null);
+        break;
+
+      case "dice_rolled":
+        // Just confirmation of dice roll; full state comes via subsequent game_state
+        break;
+
+      case "game_over":
+        // Game finished: data has winner_id, win_type, final_score
+        // The game_state was already sent via game_state message
+        setSelectedPoint(null);
+        break;
+
+      case "waiting":
+        // Table exists but second player hasn't joined yet
+        setWaitingForOpponent(true);
+        break;
+
+      case "error":
+        setError(message.data.message);
+        setTimeout(() => setError(null), 5000);
+        break;
+
+      case "opponent_disconnected":
+        setOpponentConnected(false);
+        setOpponentReconnected(false);
+        break;
+
+      case "opponent_reconnected":
+        setOpponentConnected(true);
+        setOpponentReconnected(true);
+        setTimeout(() => setOpponentReconnected(false), 3000);
+        break;
+    }
+  }, []);
+
+  const handleWsOpen = useCallback(() => {
+    setError(null);
+  }, []);
+
+  const { sendMessage, isConnected } = useWebSocket({
+    url: wsUrl,
+    onMessage: handleMessage,
+    onOpen: handleWsOpen,
+  });
+
+  // Clear error on unmount
+  useEffect(() => {
+    return () => setError(null);
+  }, []);
+
+  // ----- Actions -----
+
+  const rollDice = useCallback(() => {
+    sendMessage({ action: "roll_dice" });
+  }, [sendMessage]);
+
+  const endTurn = useCallback(() => {
+    sendMessage({ action: "end_turn" });
+    setSelectedPoint(null);
+  }, [sendMessage]);
+
+  const makeMove = useCallback(
+    (fromPoint: number, toPoint: number) => {
+      sendMessage({ action: "make_move", from_point: fromPoint, to_point: toPoint });
+      setSelectedPoint(null);
+    },
+    [sendMessage],
+  );
+
+  // ----- Click handling -----
+
+  const isMyTurn = gameState?.current_turn === myColor;
+  const isMovingPhase = gameState?.status === "moving";
+  const validMoves = gameState?.valid_moves ?? [];
+
+  // When status is "rolling" and dice are still present, the dice belong
+  // to the *previous* player (the opponent of current_turn).
+  const diceColor = useMemo((): Color => {
+    if (!gameState) return "white";
+    if (gameState.status === "rolling" && gameState.dice) {
+      return gameState.current_turn === "white" ? "black" : "white";
+    }
+    return gameState.current_turn;
+  }, [gameState]);
+
+  const handlePointClick = useCallback(
+    (point: number) => {
+      if (!isMyTurn || !isMovingPhase || !myColor) return;
+
+      if (selectedPoint !== null) {
+        // Check if the clicked point is a valid destination
+        const isValidDest = validMoves.some(
+          (m) => m.from_point === selectedPoint && m.to_point === point,
+        );
+        if (isValidDest) {
+          makeMove(selectedPoint, point);
+          return;
+        }
+
+        // Check if clicking a new source
+        const isValidSource = validMoves.some((m) => m.from_point === point);
+        if (isValidSource) {
+          setSelectedPoint(point);
+          return;
+        }
+
+        // Deselect
+        setSelectedPoint(null);
+        return;
+      }
+
+      // No selection yet - try to select a source
+      const isValidSource = validMoves.some((m) => m.from_point === point);
+      if (isValidSource) {
+        setSelectedPoint(point);
+      }
+    },
+    [isMyTurn, isMovingPhase, myColor, selectedPoint, validMoves, makeMove],
+  );
+
+  const handleBarClick = useCallback(() => {
+    if (!isMyTurn || !isMovingPhase || !myColor) return;
+
+    const barPoint = myColor === "white" ? 25 : 0;
+    const isValidSource = validMoves.some((m) => m.from_point === barPoint);
+
+    if (isValidSource) {
+      setSelectedPoint(barPoint);
+    }
+  }, [isMyTurn, isMovingPhase, myColor, validMoves]);
+
+  const handleBearOffClick = useCallback(() => {
+    if (!isMyTurn || !isMovingPhase || !myColor || selectedPoint === null) return;
+
+    const offPoint = myColor === "white" ? 0 : 25;
+    const isValidDest = validMoves.some(
+      (m) => m.from_point === selectedPoint && m.to_point === offPoint,
+    );
+
+    if (isValidDest) {
+      makeMove(selectedPoint, offPoint);
+    }
+  }, [isMyTurn, isMovingPhase, myColor, selectedPoint, validMoves, makeMove]);
+
+  // ----- Render -----
+
+  if (!tableId || !playerId) {
+    return (
+      <div className="game-page">
+        <div className="game-loading">
+          <p>Invalid game URL or player not found.</p>
+          <Link to="/" className="back-link">
+            Go Home
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (waitingForOpponent && !gameState) {
+    return (
+      <div className="game-page">
+        <div className="game-header">
+          <h2>Backgammon</h2>
+          <Link to="/" className="back-link">
+            Home
+          </Link>
+        </div>
+        <div className="game-loading">
+          <div className="spinner" />
+          <p>Waiting for opponent to join...</p>
+          <div className="waiting-table-id">
+            <span>Share this Table ID:</span>
+            <code className="table-id-code">{tableId}</code>
+            <button
+              className="copy-id-btn"
+              onClick={() => {
+                navigator.clipboard.writeText(tableId!).catch(() => {});
+              }}
+            >
+              Copy
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!gameState || !myColor || !table) {
+    return (
+      <div className="game-page">
+        <div className="game-header">
+          <h2>Backgammon</h2>
+          <Link to="/" className="back-link">
+            Home
+          </Link>
+        </div>
+        <div className="game-loading">
+          <div className="spinner" />
+          <p>{isConnected ? "Loading game..." : "Connecting..."}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="game-page">
+      <div className="game-header">
+        <h2>Backgammon</h2>
+        <Link to="/" className="back-link">
+          Home
+        </Link>
+      </div>
+
+      {/* Connection/error banners */}
+      {!opponentConnected && (
+        <div className="connection-banner">
+          Opponent disconnected. Waiting for them to reconnect...
+        </div>
+      )}
+      {opponentReconnected && (
+        <div className="connection-banner reconnected">
+          Opponent reconnected!
+        </div>
+      )}
+      {error && <div className="game-error-banner">{error}</div>}
+
+      <div className="game-layout">
+        <div className="game-center">
+          <Board
+            gameState={gameState}
+            myColor={myColor}
+            selectedPoint={selectedPoint}
+            validMoves={isMyTurn ? validMoves : []}
+            onPointClick={handlePointClick}
+            onBarClick={handleBarClick}
+            onBearOffClick={handleBearOffClick}
+          />
+          <Dice
+            dice={gameState.dice}
+            remainingDice={gameState.remaining_dice}
+            currentTurn={diceColor}
+          />
+          <GameControls
+            gameState={gameState}
+            myColor={myColor}
+            onRollDice={rollDice}
+            onEndTurn={endTurn}
+          />
+        </div>
+
+        <div className="game-sidebar">
+          <GameInfo
+            table={table}
+            gameState={gameState}
+            myColor={myColor}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default Game;
