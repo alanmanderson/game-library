@@ -1,0 +1,65 @@
+.dice-container {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+}
+
+.die {
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.die-white {
+  background: #f5f0e1;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.die-black {
+  background: #1a1a1a;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+.die.used {
+  opacity: 0.3;
+  transform: scale(0.9);
+}
+
+.die-dots {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 2px;
+  width: 36px;
+  height: 36px;
+  padding: 2px;
+}
+
+.die-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: transparent;
+  align-self: center;
+  justify-self: center;
+}
+
+.die-white .die-dot.filled {
+  background: #2c1810;
+}
+
+.die-black .die-dot.filled {
+  background: #f0ebe0;
+}
+
+.dice-separator {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}

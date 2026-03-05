@@ -1,0 +1,122 @@
+.game-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  background: var(--bg-secondary);
+  border-radius: 10px;
+  padding: 1rem;
+}
+
+.game-info-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.game-info-section h4 {
+  color: var(--accent);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.table-id-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.table-id-row code {
+  background: var(--bg-primary);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-id-row .copy-btn {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border: 1px solid var(--text-secondary);
+}
+
+.table-id-row .copy-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.player-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.player-color-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.player-color-dot.white {
+  background: var(--white-checker);
+}
+
+.player-color-dot.black {
+  background: var(--black-checker);
+}
+
+.player-name {
+  color: var(--text-primary);
+}
+
+.player-name.you {
+  font-weight: 600;
+}
+
+.player-name.waiting {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.checker-counts {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.move-history {
+  max-height: 200px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.move-history-entry {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  padding: 0.2rem 0.4rem;
+  border-radius: 3px;
+}
+
+.move-history-entry:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.move-history-empty {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-style: italic;
+  text-align: center;
+  padding: 0.5rem;
+}

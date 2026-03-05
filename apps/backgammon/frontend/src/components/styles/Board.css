@@ -1,0 +1,34 @@
+.board-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.board-svg {
+  max-width: 100%;
+  height: auto;
+  filter: drop-shadow(0 4px 20px rgba(0, 0, 0, 0.4));
+  border-radius: 8px;
+}
+
+/* Checker transitions */
+.board-svg .checker {
+  transition: transform 0.2s ease;
+}
+
+/* Clickable areas */
+.board-svg .point-area {
+  cursor: pointer;
+}
+
+.board-svg .point-area:hover {
+  opacity: 0.9;
+}
+
+.board-svg .bar-area {
+  cursor: pointer;
+}
+
+.board-svg .bearoff-area {
+  cursor: pointer;
+}

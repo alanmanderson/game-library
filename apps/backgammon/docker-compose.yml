@@ -1,0 +1,48 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: backgammon
+      POSTGRES_PASSWORD: backgammon_secret
+      POSTGRES_DB: backgammon
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U backgammon"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://backgammon:backgammon_secret@db:5432/backgammon
+      DATABASE_URL_SYNC: postgresql://backgammon:backgammon_secret@db:5432/backgammon
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    environment:
+      # Internal URL for the Vite dev-server proxy (container-to-container)
+      VITE_BACKEND_INTERNAL_URL: http://backend:8000
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:

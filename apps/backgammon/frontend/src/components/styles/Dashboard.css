@@ -1,0 +1,102 @@
+.dashboard {
+  width: 100%;
+}
+
+/* ------------------------------------------------------------------
+   Summary stat cards – mirrors .stats-overview from Statistics.css
+   ------------------------------------------------------------------ */
+
+.dashboard-overview {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+/* Re-use .stat-card / .stat-value / .stat-label from Statistics.css.
+   Only the color overrides below are dashboard-specific. */
+
+.dashboard-wins {
+  color: #4caf50;
+}
+
+.dashboard-losses {
+  color: var(--danger);
+}
+
+.dashboard-abandoned {
+  color: #ff9800;
+}
+
+/* ------------------------------------------------------------------
+   Game history table – extends .opponent-table from Statistics.css
+   ------------------------------------------------------------------ */
+
+.dashboard-table th,
+.dashboard-table td {
+  text-align: center;
+}
+
+.dashboard-table th:nth-child(1),
+.dashboard-table td:nth-child(1),
+.dashboard-table th:nth-child(2),
+.dashboard-table td:nth-child(2) {
+  text-align: left;
+}
+
+/* Color indicator (small circle for white / black) */
+
+.color-indicator {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+.color-white {
+  background: #f0f0f0;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.color-black {
+  background: #333;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* Result badges */
+
+.result-badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.result-win {
+  background: rgba(76, 175, 80, 0.15);
+  color: #4caf50;
+}
+
+.result-loss {
+  background: rgba(244, 67, 54, 0.15);
+  color: var(--danger);
+}
+
+.result-abandoned {
+  background: rgba(255, 152, 0, 0.15);
+  color: #ff9800;
+}
+
+/* Loading / empty states */
+
+.dashboard-loading,
+.dashboard-empty {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 1rem;
+  font-style: italic;
+}

@@ -1,0 +1,322 @@
+"""WebSocket handler for real-time backgammon game play."""
+
+import json
+import logging
+from typing import Optional
+
+from fastapi import WebSocket, WebSocketDisconnect
+
+from app.database import async_session
+from app.models import Player, Table
+from app.game_engine import GameStatus
+from app.services.game_service import game_manager
+
+logger = logging.getLogger(__name__)
+
+
+class ConnectionManager:
+    """Manages active WebSocket connections organized by table and player.
+
+    Supports per-player messaging for personalized game state delivery,
+    table-wide broadcasts, and graceful disconnect notifications.
+    """
+
+    def __init__(self) -> None:
+        # table_id -> {player_id: WebSocket}
+        self._connections: dict[str, dict[str, WebSocket]] = {}
+
+    async def connect(self, table_id: str, player_id: str, ws: WebSocket) -> None:
+        """Accept a WebSocket connection and register it for a table/player.
+
+        If the player is reconnecting (replacing an existing connection),
+        the opponent is notified.
+        """
+        await ws.accept()
+        if table_id not in self._connections:
+            self._connections[table_id] = {}
+
+        self._connections[table_id][player_id] = ws
+
+        # Notify opponent of reconnection
+        for pid, conn in self._connections[table_id].items():
+            if pid != player_id:
+                try:
+                    await conn.send_json({"type": "opponent_reconnected", "data": {}})
+                except Exception:
+                    pass
+
+    def disconnect(self, table_id: str, player_id: str) -> None:
+        """Remove a player's WebSocket connection from the registry."""
+        if table_id in self._connections:
+            self._connections[table_id].pop(player_id, None)
+            if not self._connections[table_id]:
+                del self._connections[table_id]
+
+    async def send_to_player(
+        self, table_id: str, player_id: str, message: dict
+    ) -> None:
+        """Send a JSON message to a specific player at a table."""
+        conns = self._connections.get(table_id, {})
+        ws = conns.get(player_id)
+        if ws:
+            try:
+                await ws.send_json(message)
+            except Exception:
+                pass
+
+    async def broadcast_to_table(
+        self, table_id: str, message: dict, exclude: Optional[str] = None
+    ) -> None:
+        """Send a JSON message to all connected players at a table.
+
+        Optionally exclude one player (e.g. the sender).
+        """
+        conns = self._connections.get(table_id, {})
+        for pid, ws in conns.items():
+            if pid != exclude:
+                try:
+                    await ws.send_json(message)
+                except Exception:
+                    pass
+
+    async def notify_opponent_disconnect(
+        self, table_id: str, player_id: str
+    ) -> None:
+        """Notify the opponent that a player has disconnected."""
+        conns = self._connections.get(table_id, {})
+        for pid, ws in conns.items():
+            if pid != player_id:
+                try:
+                    await ws.send_json({"type": "opponent_disconnected", "data": {}})
+                except Exception:
+                    pass
+
+    def get_player_ids(self, table_id: str) -> list[str]:
+        """Return a list of currently connected player IDs for a table."""
+        return list(self._connections.get(table_id, {}).keys())
+
+
+# Global singleton connection manager
+manager = ConnectionManager()
+
+
+async def _build_full_message(table_id: str, player_id: str, msg_type: str = "game_state") -> dict:
+    """Build a full WebSocket message with game_state, your_color, and table info."""
+    state = game_manager.build_game_state_response(table_id, player_id)
+    color = game_manager.get_player_color(table_id, player_id)
+
+    # Get table info from database for player details
+    async with async_session() as db:
+        table = await db.get(Table, table_id)
+        table_data = None
+        if table:
+            white_player = await db.get(Player, table.white_player_id) if table.white_player_id else None
+            black_player = await db.get(Player, table.black_player_id) if table.black_player_id else None
+            table_data = {
+                "id": table.id,
+                "status": table.status,
+                "white_player": {"id": white_player.id, "nickname": white_player.nickname, "created_at": str(white_player.created_at)} if white_player else None,
+                "black_player": {"id": black_player.id, "nickname": black_player.nickname, "created_at": str(black_player.created_at)} if black_player else None,
+                "created_at": str(table.created_at),
+            }
+
+    return {
+        "type": msg_type,
+        "data": {
+            "game_state": state,
+            "your_color": color.value if color else None,
+            "table": table_data,
+        },
+    }
+
+
+async def notify_game_started(table_id: str) -> None:
+    """Called from the REST join endpoint to push the initial game state
+    to every WebSocket client already connected at *table_id*."""
+    await _send_game_state_to_all(table_id)
+
+
+async def _send_game_state_to_all(table_id: str) -> None:
+    """Send personalized game state to every connected player at a table.
+
+    Each player receives their own valid_moves (only the current player
+    whose turn it is sees moves; the opponent sees an empty list).
+    """
+    for pid in manager.get_player_ids(table_id):
+        try:
+            message = await _build_full_message(table_id, pid)
+            await manager.send_to_player(table_id, pid, message)
+        except Exception:
+            logger.exception("Failed to send game state to player %s", pid)
+
+
+async def _send_error(ws: WebSocket, message: str) -> None:
+    """Send an error message to a single WebSocket client."""
+    try:
+        await ws.send_json({"type": "error", "data": {"message": message}})
+    except Exception:
+        pass
+
+
+async def websocket_endpoint(websocket: WebSocket, table_id: str, player_id: str) -> None:
+    """WebSocket endpoint for real-time game interaction.
+
+    Path: /ws/{table_id}/{player_id}
+
+    After connecting, the player receives the current game state.
+    The client sends JSON messages with an "action" field:
+
+    - {"action": "roll_dice"}
+        Roll dice for the current player's turn.
+
+    - {"action": "make_move", "from_point": int, "to_point": int}
+        Execute a checker move.
+
+    - {"action": "end_turn"}
+        End the turn when no valid moves remain.
+
+    After each action, updated game state is broadcast to both players
+    with personalized valid_moves.
+    """
+    # Validate player and table exist before accepting the connection
+    async with async_session() as db:
+        player = await db.get(Player, player_id)
+        table = await db.get(Table, table_id)
+
+    if not player or not table:
+        await websocket.accept()
+        reason = "Player not found" if not player else "Table not found"
+        await websocket.close(code=4004, reason=reason)
+        return
+
+    # Accept and register the connection
+    await manager.connect(table_id, player_id, websocket)
+
+    try:
+        # Send initial game state if engine is active
+        engine = game_manager.get_engine(table_id)
+        if engine:
+            message = await _build_full_message(table_id, player_id)
+            await websocket.send_json(message)
+        else:
+            # Game not started yet or already finished -- send table status
+            async with async_session() as db:
+                table = await db.get(Table, table_id)
+                await websocket.send_json({
+                    "type": "waiting",
+                    "data": {"table_id": table_id, "status": table.status if table else "unknown"},
+                })
+
+        # Main message loop
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                message = json.loads(raw)
+            except json.JSONDecodeError:
+                await _send_error(websocket, "Invalid JSON")
+                continue
+
+            action = message.get("action")
+            if not action:
+                await _send_error(websocket, "Missing 'action' field")
+                continue
+
+            # All game actions require a database session
+            async with async_session() as db:
+                try:
+                    if action == "roll_dice":
+                        await _handle_roll_dice(db, websocket, table_id, player_id)
+
+                    elif action == "make_move":
+                        from_point = message.get("from_point")
+                        to_point = message.get("to_point")
+                        if from_point is None or to_point is None:
+                            await _send_error(
+                                websocket,
+                                "make_move requires 'from_point' and 'to_point'",
+                            )
+                            continue
+                        await _handle_make_move(
+                            db, websocket, table_id, player_id, from_point, to_point
+                        )
+
+                    elif action == "end_turn":
+                        await _handle_end_turn(db, websocket, table_id, player_id)
+
+                    else:
+                        await _send_error(websocket, f"Unknown action: {action}")
+
+                    await db.commit()
+
+                except ValueError as e:
+                    await db.rollback()
+                    await _send_error(websocket, str(e))
+                except Exception:
+                    await db.rollback()
+                    logger.exception(
+                        "Unexpected error handling action '%s' for player %s at table %s",
+                        action, player_id, table_id,
+                    )
+                    await _send_error(websocket, "Internal server error")
+
+    except WebSocketDisconnect:
+        logger.info("Player %s disconnected from table %s", player_id, table_id)
+    except Exception:
+        logger.exception(
+            "WebSocket error for player %s at table %s", player_id, table_id
+        )
+    finally:
+        manager.disconnect(table_id, player_id)
+        await manager.notify_opponent_disconnect(table_id, player_id)
+
+
+async def _handle_roll_dice(
+    db, websocket: WebSocket, table_id: str, player_id: str
+) -> None:
+    """Handle a roll_dice action: roll and broadcast the result."""
+    roll_result = await game_manager.roll_dice(db, table_id, player_id)
+
+    # Send dice result to the rolling player
+    await websocket.send_json({"type": "dice_rolled", "data": roll_result})
+
+    # Broadcast updated game state to all connected players
+    await _send_game_state_to_all(table_id)
+
+
+async def _handle_make_move(
+    db, websocket: WebSocket, table_id: str, player_id: str,
+    from_point: int, to_point: int,
+) -> None:
+    """Handle a make_move action: execute the move and broadcast the result."""
+    await game_manager.make_move(db, table_id, player_id, from_point, to_point)
+
+    # Broadcast updated game state (including the final state) to all players
+    await _send_game_state_to_all(table_id)
+
+    # If the game is finished, send a game_over message and clean up
+    engine = game_manager.get_engine(table_id)
+    if engine and engine.state.status == GameStatus.FINISHED:
+        async with async_session() as read_db:
+            table = await read_db.get(Table, table_id)
+            if table:
+                game_over_data = {
+                    "winner_id": table.winner_id,
+                    "win_type": table.win_type,
+                    "final_score": table.final_score,
+                }
+                for pid in manager.get_player_ids(table_id):
+                    await manager.send_to_player(
+                        table_id, pid, {"type": "game_over", "data": game_over_data}
+                    )
+        # Now safe to clean up the engine
+        game_manager.cleanup_finished_game(table_id)
+
+
+async def _handle_end_turn(
+    db, websocket: WebSocket, table_id: str, player_id: str
+) -> None:
+    """Handle an end_turn action: end the turn and broadcast the result."""
+    await game_manager.end_turn(db, table_id, player_id)
+
+    # Broadcast updated game state to all connected players
+    await _send_game_state_to_all(table_id)
