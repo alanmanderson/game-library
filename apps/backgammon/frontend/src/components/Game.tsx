@@ -451,6 +451,13 @@ function Game() {
                 onDeclineDouble={declineDouble}
               />
             </div>
+            {gameState.status === "finished" && (
+              <div className="board-overlay-right">
+                <div className="win-banner">
+                  {gameState.winner === myColor ? "You won!" : `${opponentName} wins!`}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Player info row */}

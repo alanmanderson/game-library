@@ -117,6 +117,46 @@
   width: 39%;
 }
 
+/* Right-side overlay for win banner */
+.board-overlay-right {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.perspective-white .board-overlay-right {
+  left: 46.5%;
+  width: 39%;
+}
+
+.perspective-black .board-overlay-right {
+  left: 51.5%;
+  width: 39%;
+}
+
+.win-banner {
+  background: rgba(0, 0, 0, 0.8);
+  border: 2px solid var(--accent);
+  color: var(--accent);
+  font-size: 1.4rem;
+  font-weight: 700;
+  padding: 0.75rem 1.5rem;
+  border-radius: 10px;
+  text-align: center;
+  white-space: nowrap;
+  animation: bannerFadeIn 0.4s ease;
+}
+
+@keyframes bannerFadeIn {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+
 .player-info-row {
   display: flex;
   align-items: center;
