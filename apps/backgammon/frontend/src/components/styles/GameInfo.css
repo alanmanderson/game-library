@@ -1,97 +1,40 @@
-.game-info {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  background: var(--bg-secondary);
-  border-radius: 10px;
-  padding: 1rem;
+.move-history-drawer {
+  width: 100%;
+  max-width: 500px;
 }
 
-.game-info-section {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.game-info-section h4 {
-  color: var(--accent);
-  font-size: 0.85rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.table-id-row {
+.drawer-toggle {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-}
-
-.table-id-row code {
-  background: var(--bg-primary);
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  font-size: 0.8rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
   color: var(--text-secondary);
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.15s;
 }
 
-.table-id-row .copy-btn {
-  padding: 0.2rem 0.5rem;
-  font-size: 0.75rem;
-  background: var(--bg-primary);
-  color: var(--text-secondary);
-  border: 1px solid var(--text-secondary);
-}
-
-.table-id-row .copy-btn:hover {
+.drawer-toggle:hover {
   border-color: var(--accent);
   color: var(--accent);
 }
 
-.player-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.9rem;
+.drawer-toggle.open {
+  border-radius: 6px 6px 0 0;
 }
 
-.player-color-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 1px solid var(--text-secondary);
-  flex-shrink: 0;
+.drawer-arrow {
+  font-size: 0.7rem;
 }
 
-.player-color-dot.white {
-  background: var(--white-checker);
-}
-
-.player-color-dot.black {
-  background: var(--black-checker);
-}
-
-.player-name {
-  color: var(--text-primary);
-}
-
-.player-name.you {
-  font-weight: 600;
-}
-
-.player-name.waiting {
-  color: var(--text-secondary);
-  font-style: italic;
-}
-
-.checker-counts {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.85rem;
-  color: var(--text-secondary);
+.move-count {
+  margin-left: auto;
+  font-size: 0.75rem;
+  opacity: 0.7;
 }
 
 .move-history {
@@ -100,6 +43,11 @@
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  padding: 0.5rem;
+  background: var(--bg-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: none;
+  border-radius: 0 0 6px 6px;
 }
 
 .move-history-entry {

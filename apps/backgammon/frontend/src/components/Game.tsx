@@ -18,6 +18,7 @@ function Game() {
   const [waitingForOpponent, setWaitingForOpponent] = useState(false);
   const [opponentConnected, setOpponentConnected] = useState(true);
   const [opponentReconnected, setOpponentReconnected] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   // Get player from localStorage
   const player = useMemo(() => {
@@ -223,6 +224,91 @@ function Game() {
     return opponentPlayer?.nickname ?? "Opponent";
   }, [table, myColor]);
 
+  const myName = useMemo(() => {
+    if (!table || !myColor) return "You";
+    const myPlayer = myColor === "white" ? table.white_player : table.black_player;
+    return myPlayer?.nickname ?? "You";
+  }, [table, myColor]);
+
+  const pipCounts = useMemo(() => {
+    if (!gameState) return { white: 0, black: 0 };
+    let whitePips = 0;
+    let blackPips = 0;
+    for (let i = 1; i <= 24; i++) {
+      const val = gameState.points[i];
+      if (val > 0) whitePips += i * val;
+      if (val < 0) blackPips += (25 - i) * (-val);
+    }
+    whitePips += 25 * gameState.bar_white;
+    blackPips += 25 * gameState.bar_black;
+    return { white: whitePips, black: blackPips };
+  }, [gameState]);
+
+  const myScore = table && myColor ? (myColor === "white" ? table.white_match_score : table.black_match_score) : 0;
+  const opponentScore = table && myColor ? (myColor === "white" ? table.black_match_score : table.white_match_score) : 0;
+  const myPips = myColor === "white" ? pipCounts.white : pipCounts.black;
+  const opponentPips = myColor === "white" ? pipCounts.black : pipCounts.white;
+
+  const handleCopy = useCallback(async () => {
+    if (!tableId) return;
+    try {
+      await navigator.clipboard.writeText(tableId);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      const el = document.createElement("input");
+      el.value = tableId;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand("copy");
+      document.body.removeChild(el);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  }, [tableId]);
+
+  const statusMessage = useMemo(() => {
+    if (!gameState) return null;
+    if (gameState.status === "waiting") {
+      return "Share the table ID with a friend so they can join.";
+    }
+    if (gameState.status === "finished") {
+      const winType = gameState.win_type;
+      if (winType && winType !== "normal") {
+        return `Won by ${winType}!`;
+      }
+      return null;
+    }
+    if (gameState.double_offered) {
+      if (gameState.double_offered_by === myColor) {
+        return `Waiting for ${opponentName} to respond to your double...`;
+      }
+      return `${opponentName} offers to double to ${gameState.cube_value * 2}. Accept or decline?`;
+    }
+    if (isMyTurn && gameState.status === "rolling") {
+      if (gameState.can_double) {
+        return "Double the stakes or roll the dice to begin your turn.";
+      }
+      return "Roll the dice to begin your turn.";
+    }
+    if (isMyTurn && gameState.status === "moving") {
+      if (gameState.valid_moves.length === 0 && gameState.turn_moves_count > 0) {
+        return "No more valid moves. Confirm your turn.";
+      }
+      if (gameState.valid_moves.length === 0) {
+        return "No valid moves available.";
+      }
+      if (gameState.remaining_dice.length === 0) {
+        return "All dice used. Confirm your turn.";
+      }
+      return "Click a highlighted checker, then click its destination.";
+    }
+    if (!isMyTurn) {
+      return `Waiting for ${opponentName} to move...`;
+    }
+    return null;
+  }, [gameState, isMyTurn, myColor, opponentName]);
+
   // ----- Render -----
 
   if (!tableId || !playerId) {
@@ -287,7 +373,21 @@ function Game() {
   return (
     <div className="game-page">
       <div className="game-header">
-        <h2>Backgammon</h2>
+        <div className="game-header-left">
+          <h2>
+            Backgammon{" "}
+            <span className="header-table-id">
+              ({table.id}{" "}
+              <button className="header-copy-btn" onClick={handleCopy}>
+                {copied ? "Copied!" : "Copy"}
+              </button>
+              )
+            </span>
+          </h2>
+        </div>
+        {statusMessage && (
+          <div className="game-status-msg">{statusMessage}</div>
+        )}
         <Link to="/" className="back-link">
           Home
         </Link>
@@ -308,10 +408,16 @@ function Game() {
 
       <div className="game-layout">
         <div className="game-center">
-          {/* Opponent name pill */}
-          <div className={`player-pill opponent-pill ${!opponentConnected ? "disconnected" : ""}`}>
-            <span className={`connection-dot ${opponentConnected ? "connected" : "disconnected"}`} />
-            <span className="pill-name">{opponentName}</span>
+          {/* Opponent info row */}
+          <div className="player-info-row">
+            <div className={`player-pill opponent-pill ${!opponentConnected ? "disconnected" : ""}`}>
+              <span className={`connection-dot ${opponentConnected ? "connected" : "disconnected"}`} />
+              <span className="pill-name">{opponentName}</span>
+            </div>
+            <span className="pip-count">{opponentPips} pips</span>
+            {table.match_points > 0 && (
+              <span className="match-pts">{opponentScore} / {table.match_points}</span>
+            )}
           </div>
 
           <Board
@@ -331,10 +437,22 @@ function Game() {
             currentTurn={diceColor}
             openingRoll={gameState.opening_roll}
           />
+
+          {/* Player info row */}
+          <div className="player-info-row">
+            <div className="player-pill my-pill">
+              <span className="connection-dot connected" />
+              <span className="pill-name">{myName}</span>
+            </div>
+            <span className="pip-count">{myPips} pips</span>
+            {table.match_points > 0 && (
+              <span className="match-pts">{myScore} / {table.match_points}</span>
+            )}
+          </div>
+
           <GameControls
             gameState={gameState}
             myColor={myColor}
-            table={table}
             opponentName={opponentName}
             onRollDice={rollDice}
             onEndTurn={endTurn}
@@ -343,14 +461,8 @@ function Game() {
             onAcceptDouble={acceptDouble}
             onDeclineDouble={declineDouble}
           />
-        </div>
 
-        <div className="game-sidebar">
-          <GameInfo
-            table={table}
-            gameState={gameState}
-            myColor={myColor}
-          />
+          <GameInfo table={table} />
         </div>
       </div>
     </div>

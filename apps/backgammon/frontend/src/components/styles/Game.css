@@ -7,15 +7,53 @@
 
 .game-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 1rem;
   padding: 0.5rem 1rem;
   margin-bottom: 0.5rem;
+}
+
+.game-header-left {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-shrink: 0;
 }
 
 .game-header h2 {
   color: var(--accent);
   font-size: 1.25rem;
+  white-space: nowrap;
+}
+
+.header-table-id {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-weight: normal;
+}
+
+.header-copy-btn {
+  padding: 0.1rem 0.4rem;
+  font-size: 0.7rem;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--text-secondary);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.header-copy-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.game-status-msg {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  text-align: center;
+  flex: 1;
+  min-width: 0;
 }
 
 .game-header .back-link {
@@ -23,6 +61,7 @@
   font-size: 0.9rem;
   cursor: pointer;
   transition: color 0.15s;
+  flex-shrink: 0;
 }
 
 .game-header .back-link:hover {
@@ -32,7 +71,6 @@
 .game-layout {
   display: flex;
   flex: 1;
-  gap: 1rem;
   justify-content: center;
   align-items: flex-start;
 }
@@ -44,9 +82,23 @@
   gap: 0.75rem;
 }
 
-.game-sidebar {
-  width: 280px;
-  flex-shrink: 0;
+.player-info-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  justify-content: center;
+}
+
+.pip-count {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.match-pts {
+  font-size: 0.8rem;
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .game-loading {
