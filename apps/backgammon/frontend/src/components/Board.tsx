@@ -10,6 +10,8 @@ interface BoardProps {
   onPointClick: (point: number) => void;
   onBarClick: () => void;
   onBearOffClick: () => void;
+  cubeValue: number;
+  cubeOwner: Color | null;
 }
 
 // ----- Layout constants -----
@@ -50,6 +52,8 @@ function Board({
   onPointClick,
   onBarClick,
   onBearOffClick,
+  cubeValue,
+  cubeOwner,
 }: BoardProps) {
   /**
    * Layout positions depend on myColor.
@@ -312,32 +316,30 @@ function Board({
   function renderBarCheckers() {
     const elements: JSX.Element[] = [];
     const barCx = layout.barX + BAR_WIDTH / 2;
+    const centerY = BOARD_HEIGHT / 2;
+    const step = CHECKER_RADIUS * 2 + CHECKER_GAP;
 
-    // For White's view: white bar checkers bottom, black bar checkers top
-    // For Black's view: black bar checkers bottom (near Black's home), white bar checkers top
+    // For White's view: white bar checkers stack toward bottom, black toward top
+    // For Black's view: black bar checkers stack toward bottom, white toward top
     const whiteIsTop = myColor === "black";
     const blackIsTop = myColor !== "black";
 
-    // White bar checkers
+    // White bar checkers — start at center, stack outward
     if (gameState.bar_white > 0) {
       const count = Math.min(gameState.bar_white, 4);
       const isTop = whiteIsTop;
       for (let i = 0; i < count; i++) {
         const cy = isTop
-          ? MARGIN + CHECKER_RADIUS + 8 + i * (CHECKER_RADIUS * 2 + CHECKER_GAP)
-          : BOARD_HEIGHT -
-            MARGIN -
-            CHECKER_RADIUS -
-            8 -
-            i * (CHECKER_RADIUS * 2 + CHECKER_GAP);
+          ? centerY - CHECKER_RADIUS - 8 - i * step
+          : centerY + CHECKER_RADIUS + 8 + i * step;
         elements.push(
           renderChecker(barCx, cy, "white", `bar-white-${i}`),
         );
       }
       if (gameState.bar_white > 4) {
         const lastCy = isTop
-          ? MARGIN + CHECKER_RADIUS + 8 + (count - 1) * (CHECKER_RADIUS * 2 + CHECKER_GAP)
-          : BOARD_HEIGHT - MARGIN - CHECKER_RADIUS - 8 - (count - 1) * (CHECKER_RADIUS * 2 + CHECKER_GAP);
+          ? centerY - CHECKER_RADIUS - 8 - (count - 1) * step
+          : centerY + CHECKER_RADIUS + 8 + (count - 1) * step;
         elements.push(
           <g key="bar-white-badge">
             <circle cx={barCx} cy={lastCy} r={10} fill="rgba(0,0,0,0.7)" />
@@ -349,26 +351,22 @@ function Board({
       }
     }
 
-    // Black bar checkers
+    // Black bar checkers — start at center, stack outward
     if (gameState.bar_black > 0) {
       const count = Math.min(gameState.bar_black, 4);
       const isTop = blackIsTop;
       for (let i = 0; i < count; i++) {
         const cy = isTop
-          ? MARGIN + CHECKER_RADIUS + 8 + i * (CHECKER_RADIUS * 2 + CHECKER_GAP)
-          : BOARD_HEIGHT -
-            MARGIN -
-            CHECKER_RADIUS -
-            8 -
-            i * (CHECKER_RADIUS * 2 + CHECKER_GAP);
+          ? centerY - CHECKER_RADIUS - 8 - i * step
+          : centerY + CHECKER_RADIUS + 8 + i * step;
         elements.push(
           renderChecker(barCx, cy, "black", `bar-black-${i}`),
         );
       }
       if (gameState.bar_black > 4) {
         const lastCy = isTop
-          ? MARGIN + CHECKER_RADIUS + 8 + (count - 1) * (CHECKER_RADIUS * 2 + CHECKER_GAP)
-          : BOARD_HEIGHT - MARGIN - CHECKER_RADIUS - 8 - (count - 1) * (CHECKER_RADIUS * 2 + CHECKER_GAP);
+          ? centerY - CHECKER_RADIUS - 8 - (count - 1) * step
+          : centerY + CHECKER_RADIUS + 8 + (count - 1) * step;
         elements.push(
           <g key="bar-black-badge">
             <circle cx={barCx} cy={lastCy} r={10} fill="rgba(0,0,0,0.7)" />
@@ -395,11 +393,11 @@ function Board({
     // White borne off
     if (gameState.off_white > 0) {
       const isBottom = whiteIsBottom;
-      const count = Math.min(gameState.off_white, 8);
+      const count = gameState.off_white;
       for (let i = 0; i < count; i++) {
         const cy = isBottom
-          ? BOARD_HEIGHT - MARGIN - 6 - i * 12
-          : MARGIN + 6 + i * 12;
+          ? BOARD_HEIGHT - MARGIN - 6 - i * 8
+          : MARGIN + 6 + i * 8;
         elements.push(
           <rect
             key={`off-white-${i}`}
@@ -414,31 +412,16 @@ function Board({
           />,
         );
       }
-      if (gameState.off_white > 8) {
-        elements.push(
-          <text
-            key="off-white-count"
-            x={bearCx}
-            y={isBottom ? BOARD_HEIGHT - MARGIN - 6 - 8 * 12 : MARGIN + 6 + 8 * 12 + 12}
-            textAnchor="middle"
-            fill={WHITE_CHECKER_FILL}
-            fontSize={10}
-            fontWeight="bold"
-          >
-            {gameState.off_white}
-          </text>,
-        );
-      }
     }
 
     // Black borne off
     if (gameState.off_black > 0) {
       const isBottom = blackIsBottom;
-      const count = Math.min(gameState.off_black, 8);
+      const count = gameState.off_black;
       for (let i = 0; i < count; i++) {
         const cy = isBottom
-          ? BOARD_HEIGHT - MARGIN - 6 - i * 12
-          : MARGIN + 6 + i * 12;
+          ? BOARD_HEIGHT - MARGIN - 6 - i * 8
+          : MARGIN + 6 + i * 8;
         elements.push(
           <rect
             key={`off-black-${i}`}
@@ -451,21 +434,6 @@ function Board({
             stroke={BLACK_CHECKER_STROKE}
             strokeWidth={0.5}
           />,
-        );
-      }
-      if (gameState.off_black > 8) {
-        elements.push(
-          <text
-            key="off-black-count"
-            x={bearCx}
-            y={isBottom ? BOARD_HEIGHT - MARGIN - 6 - 8 * 12 : MARGIN + 6 + 8 * 12 + 12}
-            textAnchor="middle"
-            fill={BLACK_CHECKER_FILL}
-            fontSize={10}
-            fontWeight="bold"
-          >
-            {gameState.off_black}
-          </text>,
         );
       }
     }
@@ -549,8 +517,9 @@ function Board({
           y={cy}
           textAnchor="middle"
           fill="#888"
-          fontSize={9}
+          fontSize={13}
           fontFamily="monospace"
+          fontWeight="600"
         >
           {point}
         </text>,
@@ -558,6 +527,72 @@ function Board({
     }
 
     return labels;
+  }
+
+  function renderDoublingCube() {
+    const cx = layout.bearoffX + BEAROFF_WIDTH / 2;
+    // Position based on ownership: centered if no owner, near owner's side otherwise
+    let cy: number;
+    if (cubeOwner === null) {
+      cy = BOARD_HEIGHT / 2;
+    } else if (
+      (cubeOwner === "white" && myColor === "white") ||
+      (cubeOwner === "black" && myColor === "black")
+    ) {
+      // Owner is me — show near my side (bottom)
+      cy = BOARD_HEIGHT / 2 + 60;
+    } else {
+      // Owner is opponent — show near their side (top)
+      cy = BOARD_HEIGHT / 2 - 60;
+    }
+    const size = 32;
+    const half = size / 2;
+    return (
+      <g>
+        {/* Cube shadow */}
+        <rect
+          x={cx - half + 2}
+          y={cy - half + 2}
+          width={size}
+          height={size}
+          rx={4}
+          fill="rgba(0,0,0,0.3)"
+        />
+        {/* Cube body */}
+        <rect
+          x={cx - half}
+          y={cy - half}
+          width={size}
+          height={size}
+          rx={4}
+          fill="#f5f0e1"
+          stroke="#8b7355"
+          strokeWidth={1.5}
+        />
+        {/* Top face highlight for 3D effect */}
+        <rect
+          x={cx - half}
+          y={cy - half}
+          width={size}
+          height={size / 3}
+          rx={4}
+          fill="rgba(255,255,255,0.15)"
+        />
+        {/* Cube value */}
+        <text
+          x={cx}
+          y={cy + 1}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fill="#2a1a0e"
+          fontSize={cubeValue >= 100 ? 11 : 14}
+          fontWeight="bold"
+          fontFamily="monospace"
+        >
+          {cubeValue}
+        </text>
+      </g>
+    );
   }
 
   // Build the triangles (alternating colors)
@@ -705,19 +740,8 @@ function Board({
           BAR
         </text>
 
-        {/* "OFF" label */}
-        <text
-          x={layout.bearoffX + BEAROFF_WIDTH / 2}
-          y={BOARD_HEIGHT / 2}
-          textAnchor="middle"
-          fill="#888"
-          fontSize={10}
-          fontFamily="monospace"
-          transform={`rotate(-90, ${layout.bearoffX + BEAROFF_WIDTH / 2}, ${BOARD_HEIGHT / 2})`}
-          pointerEvents="none"
-        >
-          OFF
-        </text>
+        {/* Doubling cube */}
+        {renderDoublingCube()}
       </svg>
     </div>
   );

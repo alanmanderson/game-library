@@ -6,6 +6,7 @@ interface DiceProps {
   dice: DiceRoll | null;
   remainingDice: number[];
   currentTurn: Color;
+  openingRoll?: { white: number; black: number } | null;
 }
 
 /**
@@ -38,7 +39,7 @@ function DieFace({ value, used, color }: { value: number; used: boolean; color: 
   );
 }
 
-function Dice({ dice, remainingDice, currentTurn }: DiceProps) {
+function Dice({ dice, remainingDice, currentTurn, openingRoll }: DiceProps) {
   const diceDisplay = useMemo(() => {
     if (!dice) return [];
 
@@ -52,6 +53,7 @@ function Dice({ dice, remainingDice, currentTurn }: DiceProps) {
       return allDice.map((val, idx) => ({
         value: val,
         used: idx >= remainingCount,
+        color: currentTurn as Color,
       }));
     }
 
@@ -72,11 +74,28 @@ function Dice({ dice, remainingDice, currentTurn }: DiceProps) {
       die2Used = true;
     }
 
+    // When showing the opening roll, color each die by the player who rolled it
+    if (openingRoll) {
+      const whiteVal = openingRoll.white;
+      const blackVal = openingRoll.black;
+      if (
+        (dice.die1 === whiteVal && dice.die2 === blackVal) ||
+        (dice.die1 === blackVal && dice.die2 === whiteVal)
+      ) {
+        const die1Color: Color = dice.die1 === whiteVal ? "white" : "black";
+        const die2Color: Color = dice.die1 === whiteVal ? "black" : "white";
+        return [
+          { value: dice.die1, used: die1Used, color: die1Color },
+          { value: dice.die2, used: die2Used, color: die2Color },
+        ];
+      }
+    }
+
     return [
-      { value: dice.die1, used: die1Used },
-      { value: dice.die2, used: die2Used },
+      { value: dice.die1, used: die1Used, color: currentTurn as Color },
+      { value: dice.die2, used: die2Used, color: currentTurn as Color },
     ];
-  }, [dice, remainingDice]);
+  }, [dice, remainingDice, currentTurn, openingRoll]);
 
   if (!dice) {
     return null;
@@ -85,7 +104,7 @@ function Dice({ dice, remainingDice, currentTurn }: DiceProps) {
   return (
     <div className="dice-container">
       {diceDisplay.map((d, idx) => (
-        <DieFace key={idx} value={d.value} used={d.used} color={currentTurn} />
+        <DieFace key={idx} value={d.value} used={d.used} color={d.color} />
       ))}
     </div>
   );

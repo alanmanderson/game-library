@@ -67,6 +67,10 @@ class Table(Base):
     final_score: int | None = Column(Integer, nullable=True)
     game_state: dict | None = Column(JSON, nullable=True)
     finished_at: datetime | None = Column(DateTime, nullable=True)
+    # Match play
+    match_points: int = Column(Integer, nullable=False, default=5)
+    white_match_score: int = Column(Integer, nullable=False, default=0)
+    black_match_score: int = Column(Integer, nullable=False, default=0)
 
     # Relationships
     white_player = relationship(

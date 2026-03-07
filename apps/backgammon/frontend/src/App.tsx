@@ -90,7 +90,7 @@ function App() {
             )
           }
         />
-        <Route path="/game/:tableId" element={<Game />} />
+        <Route path="/game/:tableId" element={<Game key={player?.id} />} />
       </Routes>
     </div>
   );

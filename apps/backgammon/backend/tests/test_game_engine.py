@@ -126,9 +126,10 @@ class TestDiceRoll:
     def test_determine_first_player_no_doubles(self):
         # Repeat a few times to ensure no doubles are returned.
         for _ in range(50):
-            color, roll = BackgammonEngine.determine_first_player()
+            color, roll, opening = BackgammonEngine.determine_first_player()
             assert roll.die1 != roll.die2
-            if roll.die1 > roll.die2:
+            # Higher individual die determines who goes first
+            if opening["white"] > opening["black"]:
                 assert color == Color.WHITE
             else:
                 assert color == Color.BLACK
@@ -549,7 +550,8 @@ class TestGameSimulation:
         assert result is True
         result = engine.make_move(Move(6, 5))
         assert result is True
-        # Turn should auto-end
+        # All dice used; confirm the turn
+        assert engine.end_turn() is True
         assert engine.state.current_turn == Color.BLACK
         assert engine.state.status == GameStatus.ROLLING
 
@@ -560,6 +562,7 @@ class TestGameSimulation:
         # White: 8/5 6/5
         engine.make_move(Move(8, 5))
         engine.make_move(Move(6, 5))
+        engine.end_turn()
         assert engine.state.current_turn == Color.BLACK
 
         # Black rolls
@@ -569,6 +572,7 @@ class TestGameSimulation:
         # Black: 12/15 12/17 (just standard moves)
         engine.make_move(Move(12, 17))
         engine.make_move(Move(12, 15))
+        engine.end_turn()
         assert engine.state.current_turn == Color.WHITE
 
 
@@ -808,6 +812,7 @@ class TestStatusTransitions:
         engine.start_game(first_player=Color.WHITE, dice=DiceRoll(3, 1))
         engine.make_move(Move(8, 5))
         engine.make_move(Move(6, 5))
+        engine.end_turn()
         assert engine.state.status == GameStatus.ROLLING
 
     def test_moving_to_finished(self):
@@ -911,6 +916,7 @@ class TestRegression:
         engine.start_game(first_player=Color.WHITE, dice=DiceRoll(3, 1))
         engine.make_move(Move(8, 5))
         engine.make_move(Move(6, 5))
+        engine.end_turn()
         assert len(engine.state.moves_history) == 1
         color, dice, moves = engine.state.moves_history[0]
         assert color == Color.WHITE
@@ -922,6 +928,7 @@ class TestRegression:
         engine.start_game(first_player=Color.WHITE, dice=DiceRoll(3, 1))
         engine.make_move(Move(8, 5))
         engine.make_move(Move(6, 5))
+        engine.end_turn()
         assert engine.state.turn_moves == []
 
     def test_white_bear_off_with_die2(self):
@@ -977,6 +984,7 @@ class TestDicePersistence:
         engine.start_game(first_player=Color.WHITE, dice=DiceRoll(3, 1))
         engine.make_move(Move(8, 5))
         engine.make_move(Move(6, 5))
+        engine.end_turn()
         # Turn switched to Black, status=ROLLING
         assert engine.state.current_turn == Color.BLACK
         assert engine.state.status == GameStatus.ROLLING
@@ -993,6 +1001,7 @@ class TestDicePersistence:
         engine.start_game(first_player=Color.WHITE, dice=DiceRoll(3, 1))
         engine.make_move(Move(8, 5))
         engine.make_move(Move(6, 5))
+        engine.end_turn()
         # Black rolls
         engine.roll_dice(die1=5, die2=2)
         assert engine.state.dice.die1 == 5

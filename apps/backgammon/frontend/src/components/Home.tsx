@@ -81,7 +81,7 @@ function Home({ player }: HomeProps) {
               type="text"
               placeholder="Table ID"
               value={joinTableId}
-              onChange={(e) => setJoinTableId(e.target.value)}
+              onChange={(e) => setJoinTableId(e.target.value.toUpperCase())}
               disabled={joiningTable}
             />
             <button type="submit" disabled={joiningTable}>

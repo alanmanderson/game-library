@@ -18,6 +18,9 @@ class Settings(BaseModel):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 1440  # 24 hours
 
+    # CORS
+    allowed_origins: str = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173")
+
     # Google OAuth (optional -- empty string means disabled)
     google_client_id: str = os.getenv("GOOGLE_CLIENT_ID", "")
 

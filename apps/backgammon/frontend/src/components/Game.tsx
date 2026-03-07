@@ -116,6 +116,22 @@ function Game() {
     setSelectedPoint(null);
   }, [sendMessage]);
 
+  const undoTurn = useCallback(() => {
+    sendMessage({ action: "undo_turn" });
+  }, [sendMessage]);
+
+  const offerDouble = useCallback(() => {
+    sendMessage({ action: "offer_double" });
+  }, [sendMessage]);
+
+  const acceptDouble = useCallback(() => {
+    sendMessage({ action: "accept_double" });
+  }, [sendMessage]);
+
+  const declineDouble = useCallback(() => {
+    sendMessage({ action: "decline_double" });
+  }, [sendMessage]);
+
   const makeMove = useCallback(
     (fromPoint: number, toPoint: number) => {
       sendMessage({ action: "make_move", from_point: fromPoint, to_point: toPoint });
@@ -199,6 +215,14 @@ function Game() {
     }
   }, [isMyTurn, isMovingPhase, myColor, selectedPoint, validMoves, makeMove]);
 
+  // ----- Derived values -----
+
+  const opponentName = useMemo(() => {
+    if (!table || !myColor) return "Opponent";
+    const opponentPlayer = myColor === "white" ? table.black_player : table.white_player;
+    return opponentPlayer?.nickname ?? "Opponent";
+  }, [table, myColor]);
+
   // ----- Render -----
 
   if (!tableId || !playerId) {
@@ -270,20 +294,26 @@ function Game() {
       </div>
 
       {/* Connection/error banners */}
-      {!opponentConnected && (
+      {!opponentConnected && !opponentReconnected && (
         <div className="connection-banner">
-          Opponent disconnected. Waiting for them to reconnect...
+          {opponentName} disconnected. Waiting for them to reconnect...
         </div>
       )}
       {opponentReconnected && (
         <div className="connection-banner reconnected">
-          Opponent reconnected!
+          {opponentName} reconnected!
         </div>
       )}
       {error && <div className="game-error-banner">{error}</div>}
 
       <div className="game-layout">
         <div className="game-center">
+          {/* Opponent name pill */}
+          <div className={`player-pill opponent-pill ${!opponentConnected ? "disconnected" : ""}`}>
+            <span className={`connection-dot ${opponentConnected ? "connected" : "disconnected"}`} />
+            <span className="pill-name">{opponentName}</span>
+          </div>
+
           <Board
             gameState={gameState}
             myColor={myColor}
@@ -292,17 +322,26 @@ function Game() {
             onPointClick={handlePointClick}
             onBarClick={handleBarClick}
             onBearOffClick={handleBearOffClick}
+            cubeValue={gameState.cube_value}
+            cubeOwner={gameState.cube_owner}
           />
           <Dice
             dice={gameState.dice}
             remainingDice={gameState.remaining_dice}
             currentTurn={diceColor}
+            openingRoll={gameState.opening_roll}
           />
           <GameControls
             gameState={gameState}
             myColor={myColor}
+            table={table}
+            opponentName={opponentName}
             onRollDice={rollDice}
             onEndTurn={endTurn}
+            onUndoTurn={undoTurn}
+            onOfferDouble={offerDouble}
+            onAcceptDouble={acceptDouble}
+            onDeclineDouble={declineDouble}
           />
         </div>
 

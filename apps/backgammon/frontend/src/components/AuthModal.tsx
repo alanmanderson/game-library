@@ -1,12 +1,26 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import type { Player } from "../types/game";
 import {
   register,
   login,
   createGuest,
+  googleAuth,
   setStoredToken,
 } from "../services/api";
 import "./styles/AuthModal.css";
+
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (config: Record<string, unknown>) => void;
+          renderButton: (element: HTMLElement, config: Record<string, unknown>) => void;
+        };
+      };
+    };
+  }
+}
 
 type AuthTab = "signin" | "register";
 
@@ -91,6 +105,49 @@ function AuthModal({ onAuthenticated }: AuthModalProps) {
     },
     [regNickname, regEmail, regPassword, onAuthenticated],
   );
+
+  // Google Sign-In
+  const googleBtnRef = useRef<HTMLDivElement>(null);
+
+  const handleGoogleCredential = useCallback(
+    async (response: { credential: string }) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await googleAuth(response.credential);
+        setStoredToken(result.token);
+        localStorage.setItem("backgammon_player", JSON.stringify(result.player));
+        onAuthenticated(result.player);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Google sign-in failed.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [onAuthenticated],
+  );
+
+  useEffect(() => {
+    const tryInit = () => {
+      if (window.google && googleBtnRef.current) {
+        window.google.accounts.id.initialize({
+          client_id: (window as unknown as Record<string, string>).__GOOGLE_CLIENT_ID__ || import.meta.env.VITE_GOOGLE_CLIENT_ID || "",
+          callback: handleGoogleCredential,
+        });
+        window.google.accounts.id.renderButton(googleBtnRef.current, {
+          theme: "filled_blue",
+          size: "large",
+          width: "100%",
+          text: "signin_with",
+        });
+      }
+    };
+
+    tryInit();
+    // Retry in case the script hasn't loaded yet
+    const timer = setTimeout(tryInit, 1000);
+    return () => clearTimeout(timer);
+  }, [handleGoogleCredential]);
 
   const handleGuest = useCallback(
     async (e: React.FormEvent) => {
@@ -206,6 +263,9 @@ function AuthModal({ onAuthenticated }: AuthModalProps) {
         )}
 
         {error && <p className="auth-error">{error}</p>}
+
+        {/* Google Sign-In */}
+        <div ref={googleBtnRef} className="google-signin-btn" />
 
         {/* Divider */}
         <div className="auth-divider">

@@ -23,9 +23,12 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
+    volumes:
+      - ./backend:/app
     environment:
       DATABASE_URL: postgresql+asyncpg://backgammon:backgammon_secret@db:5432/backgammon
       DATABASE_URL_SYNC: postgresql://backgammon:backgammon_secret@db:5432/backgammon
+      JWT_SECRET: backgammon-dev-jwt-secret-do-not-use-in-prod
     depends_on:
       db:
         condition: service_healthy
@@ -38,6 +41,9 @@ services:
       dockerfile: Dockerfile
     ports:
       - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
     environment:
       # Internal URL for the Vite dev-server proxy (container-to-container)
       VITE_BACKEND_INTERNAL_URL: http://backend:8000

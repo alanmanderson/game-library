@@ -123,6 +123,7 @@ class GameManager:
             ]
 
         snapshot["valid_moves"] = valid_moves
+        snapshot["can_double"] = engine.can_double(color) if color else False
         return snapshot
 
     # ------------------------------------------------------------------
@@ -146,6 +147,11 @@ class GameManager:
             raise ValueError("Cannot roll now")
 
         roll = engine.roll_dice()
+
+        # If the turn was auto-skipped (no valid moves), record the
+        # turn so it appears in move history.
+        if engine.state.current_turn != color:
+            await self._record_moves(db, table_id, player_id, engine)
 
         # Persist updated game state
         table = await db.get(Table, table_id)
@@ -236,6 +242,73 @@ class GameManager:
 
         return True
 
+    async def offer_double(self, db: AsyncSession, table_id: str, player_id: str) -> bool:
+        """Offer to double the stakes."""
+        engine = self._engines.get(table_id)
+        if not engine:
+            raise ValueError("Game not found")
+        color = self.get_player_color(table_id, player_id)
+        if not color:
+            raise ValueError("Not a player at this table")
+        if not engine.offer_double(color):
+            raise ValueError("Cannot double now")
+        table = await db.get(Table, table_id)
+        if table:
+            table.game_state = engine.get_state_snapshot()
+        return True
+
+    async def accept_double(self, db: AsyncSession, table_id: str, player_id: str) -> bool:
+        """Accept a pending double offer."""
+        engine = self._engines.get(table_id)
+        if not engine:
+            raise ValueError("Game not found")
+        color = self.get_player_color(table_id, player_id)
+        if not color:
+            raise ValueError("Not a player at this table")
+        if not engine.accept_double(color):
+            raise ValueError("No double to accept")
+        table = await db.get(Table, table_id)
+        if table:
+            table.game_state = engine.get_state_snapshot()
+        return True
+
+    async def decline_double(self, db: AsyncSession, table_id: str, player_id: str) -> dict:
+        """Decline a pending double offer."""
+        engine = self._engines.get(table_id)
+        if not engine:
+            raise ValueError("Game not found")
+        color = self.get_player_color(table_id, player_id)
+        if not color:
+            raise ValueError("Not a player at this table")
+        success, winner = engine.decline_double(color)
+        if not success:
+            raise ValueError("No double to decline")
+        await self._finish_game(db, table_id, engine)
+        table = await db.get(Table, table_id)
+        if table:
+            table.game_state = engine.get_state_snapshot()
+        return {"winner": winner.value if winner else None}
+
+    async def undo_turn(self, db: AsyncSession, table_id: str, player_id: str) -> bool:
+        """Undo all moves made this turn, restoring the board to post-roll state."""
+        engine = self._engines.get(table_id)
+        if not engine:
+            raise ValueError("Game not found")
+
+        color = self.get_player_color(table_id, player_id)
+        if not color or engine.state.current_turn != color:
+            raise ValueError("Not your turn")
+
+        success = engine.undo_turn()
+        if not success:
+            raise ValueError("Nothing to undo")
+
+        table = await db.get(Table, table_id)
+        if table:
+            table.game_state = engine.get_state_snapshot()
+
+        return True
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
@@ -290,9 +363,19 @@ class GameManager:
             table.winner_id = table.black_player_id
 
         table.win_type = win_type.name.lower() if win_type else "normal"
-        table.final_score = win_type.value if win_type else 1
+        # Score = win_type_value * cube_value
+        base_score = win_type.value if win_type else 1
+        cube_score = base_score * engine.state.cube_value
+        table.final_score = cube_score
         table.status = "finished"
         table.finished_at = datetime.utcnow()
+
+        # Update match scores
+        if winner_color == Color.WHITE:
+            table.white_match_score += cube_score
+        elif winner_color == Color.BLACK:
+            table.black_match_score += cube_score
+
         table.game_state = engine.get_state_snapshot()
 
         # Update player statistics

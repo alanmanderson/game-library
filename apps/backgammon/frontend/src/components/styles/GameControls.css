@@ -56,6 +56,54 @@
   background: var(--text-secondary);
 }
 
+.game-controls .confirm-turn-btn {
+  padding: 0.5rem 1.5rem;
+  font-size: 0.95rem;
+  background: var(--success);
+}
+
+.game-controls .undo-btn {
+  padding: 0.4rem 1.2rem;
+  font-size: 0.9rem;
+  background: var(--text-secondary);
+}
+
+.game-controls .double-btn {
+  padding: 0.5rem 1.5rem;
+  font-size: 1rem;
+  background: var(--accent);
+}
+
+.double-response-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.double-response-buttons .accept-double-btn {
+  padding: 0.5rem 1.2rem;
+  font-size: 0.95rem;
+  background: var(--success);
+}
+
+.double-response-buttons .decline-double-btn {
+  padding: 0.5rem 1.2rem;
+  font-size: 0.95rem;
+  background: var(--danger, #e74c3c);
+}
+
+.match-score-display {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.match-score-display .cube-value {
+  font-weight: 600;
+  color: var(--accent);
+}
+
 .game-status-msg {
   color: var(--text-secondary);
   font-size: 0.85rem;

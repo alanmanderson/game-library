@@ -167,6 +167,13 @@ class GameState:
     win_type: Optional[WinType] = None
     moves_history: list[tuple[Color, DiceRoll, list[Move]]] = field(default_factory=list)
     turn_moves: list[Move] = field(default_factory=list)
+    # Opening roll: each player's individual die (for display)
+    opening_roll: Optional[dict] = None  # {"white": int, "black": int}
+    # Doubling cube
+    cube_value: int = 1
+    cube_owner: Optional[Color] = None  # None = centered (either can double)
+    double_offered: bool = False  # True when a double is pending acceptance
+    double_offered_by: Optional[Color] = None
 
 
 # ---------------------------------------------------------------------------
@@ -264,7 +271,8 @@ class BackgammonEngine:
         self.state.turn_moves = []
 
     def start_game(self, first_player: Optional[Color] = None,
-                   dice: Optional[DiceRoll] = None) -> None:
+                   dice: Optional[DiceRoll] = None,
+                   opening_roll: Optional[dict] = None) -> None:
         """Start the game, optionally specifying who goes first.
 
         If *first_player* is ``None``, :meth:`determine_first_player` is
@@ -272,12 +280,19 @@ class BackgammonEngine:
         opening roll cannot be doubles).
         """
         if first_player is None:
-            first_player, dice = self.determine_first_player()
+            first_player, dice, opening_roll = self.determine_first_player()
         self.state.current_turn = first_player
+        self.state.opening_roll = opening_roll
         if dice is not None:
             self.state.dice = dice
             self.state.remaining_dice = list(dice.values)
             self.state.status = GameStatus.MOVING
+
+            # Save snapshot for undo (same as roll_dice does)
+            self._turn_snapshot = self._snapshot_internals()
+            self._turn_snapshot["remaining_dice"] = list(self.state.remaining_dice)
+            self._turn_snapshot["turn_moves"] = []
+
             self._auto_skip_if_no_moves()
         else:
             self.state.status = GameStatus.ROLLING
@@ -285,6 +300,8 @@ class BackgammonEngine:
     # ------------------------------------------------------------------
     # Dice
     # ------------------------------------------------------------------
+
+    _turn_snapshot: Optional[dict] = None  # saved at roll for undo
 
     def roll_dice(self, die1: Optional[int] = None,
                   die2: Optional[int] = None) -> DiceRoll:
@@ -308,8 +325,80 @@ class BackgammonEngine:
         self.state.turn_moves = []
         self.state.status = GameStatus.MOVING
 
+        # Save snapshot for undo (before auto-skip check)
+        self._turn_snapshot = self._snapshot_internals()
+        self._turn_snapshot["remaining_dice"] = list(self.state.remaining_dice)
+        self._turn_snapshot["turn_moves"] = []
+
         self._auto_skip_if_no_moves()
         return roll
+
+    # ------------------------------------------------------------------
+    # Doubling cube
+    # ------------------------------------------------------------------
+
+    def can_double(self, color: Color) -> bool:
+        """Return True if *color* can offer a double right now.
+
+        A player can double at the start of their turn (before rolling)
+        when the cube is centered or they own it.
+        """
+        if self.state.status != GameStatus.ROLLING:
+            return False
+        if self.state.current_turn != color:
+            return False
+        if self.state.double_offered:
+            return False
+        # Can double if cube is centered or owned by this player
+        if self.state.cube_owner is not None and self.state.cube_owner != color:
+            return False
+        return True
+
+    def offer_double(self, color: Color) -> bool:
+        """Offer to double the stakes.
+
+        Returns True if the offer was valid and made.
+        """
+        if not self.can_double(color):
+            return False
+        self.state.double_offered = True
+        self.state.double_offered_by = color
+        return True
+
+    def accept_double(self, color: Color) -> bool:
+        """Accept a pending double offer.
+
+        Returns True if successful.  The cube value is doubled and
+        ownership transfers to the accepting player.
+        """
+        if not self.state.double_offered:
+            return False
+        if self.state.double_offered_by == color:
+            return False  # can't accept your own offer
+        self.state.cube_value *= 2
+        self.state.cube_owner = color
+        self.state.double_offered = False
+        self.state.double_offered_by = None
+        return True
+
+    def decline_double(self, color: Color) -> tuple[bool, Optional[Color]]:
+        """Decline a pending double offer, losing the game.
+
+        Returns (success, winner) where winner is the player who offered
+        the double.
+        """
+        if not self.state.double_offered:
+            return False, None
+        if self.state.double_offered_by == color:
+            return False, None  # can't decline your own offer
+        winner = self.state.double_offered_by
+        self.state.winner = winner
+        self.state.win_type = WinType.NORMAL
+        self.state.status = GameStatus.FINISHED
+        self.state.double_offered = False
+        self.state.double_offered_by = None
+        self._record_turn()
+        return True, winner
 
     # ------------------------------------------------------------------
     # Move generation
@@ -574,7 +663,7 @@ class BackgammonEngine:
 
     def _restore_internals(self, snap: dict) -> None:
         s = self.state
-        s.points = snap["points"]
+        s.points = list(snap["points"])
         s.bar_white = snap["bar_white"]
         s.bar_black = snap["bar_black"]
         s.off_white = snap["off_white"]
@@ -924,35 +1013,71 @@ class BackgammonEngine:
     # ------------------------------------------------------------------
 
     def end_turn(self) -> bool:
-        """Manually end the current player's turn.
+        """Manually end (confirm) the current player's turn.
 
-        Returns ``True`` if the turn was ended, ``False`` if it wasn't
-        appropriate (e.g. the player still has valid moves).
-
-        In normal play this is called automatically by the engine.
+        Returns ``True`` if the turn was ended.  The turn can be ended
+        when there are no remaining valid moves OR when all dice have
+        been used (the player is confirming their moves).
         """
         if self.state.status != GameStatus.MOVING:
             return False
 
-        # Only allow ending the turn if no valid moves remain.
-        if self.get_valid_moves():
-            return False
+        # Allow ending if: (a) no valid moves, or (b) no remaining dice
+        has_valid = bool(self.get_valid_moves())
+        has_dice = bool(self.state.remaining_dice)
+
+        if has_valid and has_dice:
+            return False  # player still has moves to make
 
         self._record_turn()
         self._switch_turn()
         return True
 
+    def undo_turn(self) -> bool:
+        """Undo all moves made this turn, restoring the board to post-roll state.
+
+        Returns ``True`` if the undo succeeded, ``False`` if there is
+        nothing to undo (no moves made this turn, or no snapshot saved).
+        """
+        if self._turn_snapshot is None:
+            return False
+        if not self.state.turn_moves:
+            return False
+        if self.state.status != GameStatus.MOVING:
+            return False
+
+        self._restore_internals(self._turn_snapshot)
+        self.state.remaining_dice = list(self._turn_snapshot["remaining_dice"])
+        self.state.turn_moves = []
+        return True
+
     def _auto_skip_if_no_moves(self) -> None:
-        """End the turn automatically when the player has no valid moves."""
+        """End the turn automatically when the player has no valid moves.
+
+        If the player has already made moves this turn, the turn is NOT
+        auto-ended so the player can review and optionally undo.  The
+        player must explicitly confirm via :meth:`end_turn`.
+
+        If no moves were made at all (e.g. completely blocked / stuck on
+        bar), the turn is auto-skipped immediately.
+        """
         if self.state.status != GameStatus.MOVING:
             return
         if not self.state.remaining_dice:
-            self._record_turn()
-            self._switch_turn()
+            if not self.state.turn_moves:
+                # No moves were made and no dice left — shouldn't happen
+                # in normal play, but handle gracefully.
+                self._record_turn()
+                self._switch_turn()
+            # Otherwise, player made moves — wait for explicit confirm.
             return
         if not self.get_valid_moves():
-            self._record_turn()
-            self._switch_turn()
+            if not self.state.turn_moves:
+                # No moves possible at all (e.g. stuck on bar) — auto-skip.
+                self._record_turn()
+                self._switch_turn()
+            # Otherwise, player made some moves but can't use remaining
+            # dice — wait for explicit confirm.
 
     def _switch_turn(self) -> None:
         """Switch to the next player and set status to ROLLING.
@@ -964,6 +1089,7 @@ class BackgammonEngine:
         self.state.current_turn = _opponent(self.state.current_turn)
         self.state.remaining_dice = []
         self.state.turn_moves = []
+        self.state.opening_roll = None
         self.state.status = GameStatus.ROLLING
 
     def _record_turn(self) -> None:
@@ -1080,7 +1206,14 @@ class BackgammonEngine:
             "remaining_dice": list(s.remaining_dice),
             "status": s.status.value,
             "winner": s.winner.value if s.winner else None,
-            "win_type": s.win_type.value if s.win_type else None,
+            "win_type": s.win_type.name.lower() if s.win_type else None,
+            "opening_roll": s.opening_roll,
+            "turn_moves_count": len(s.turn_moves),
+            "can_undo": len(s.turn_moves) > 0 and s.status == GameStatus.MOVING,
+            "cube_value": s.cube_value,
+            "cube_owner": s.cube_owner.value if s.cube_owner else None,
+            "double_offered": s.double_offered,
+            "double_offered_by": s.double_offered_by.value if s.double_offered_by else None,
         }
 
     def get_notation_log(self) -> list[str]:
@@ -1103,17 +1236,19 @@ class BackgammonEngine:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def determine_first_player() -> tuple[Color, DiceRoll]:
+    def determine_first_player() -> tuple[Color, DiceRoll, dict]:
         """Each player rolls one die; higher roll goes first.
 
-        On a tie the dice are re-rolled.  The returned ``DiceRoll`` is
-        the opening roll (with the two different values).
+        On a tie the dice are re-rolled.  Returns ``(first_player,
+        dice_roll, opening_roll)`` where *opening_roll* is a dict
+        ``{"white": int, "black": int}`` recording each player's die.
         """
         while True:
-            d1 = random.randint(1, 6)
-            d2 = random.randint(1, 6)
-            if d1 != d2:
-                if d1 > d2:
-                    return Color.WHITE, DiceRoll(d1, d2)
+            white_die = random.randint(1, 6)
+            black_die = random.randint(1, 6)
+            if white_die != black_die:
+                opening = {"white": white_die, "black": black_die}
+                if white_die > black_die:
+                    return Color.WHITE, DiceRoll(white_die, black_die), opening
                 else:
-                    return Color.BLACK, DiceRoll(d1, d2)
+                    return Color.BLACK, DiceRoll(black_die, white_die), opening

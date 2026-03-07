@@ -100,25 +100,37 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
-async def _build_full_message(table_id: str, player_id: str, msg_type: str = "game_state") -> dict:
-    """Build a full WebSocket message with game_state, your_color, and table info."""
+async def _build_full_message(table_id: str, player_id: str, msg_type: str = "game_state", db=None) -> dict:
+    """Build a full WebSocket message with game_state, your_color, and table info.
+
+    If *db* is provided, reuse that session (to see uncommitted changes).
+    Otherwise a fresh session is opened.
+    """
     state = game_manager.build_game_state_response(table_id, player_id)
     color = game_manager.get_player_color(table_id, player_id)
 
-    # Get table info from database for player details
-    async with async_session() as db:
-        table = await db.get(Table, table_id)
-        table_data = None
-        if table:
-            white_player = await db.get(Player, table.white_player_id) if table.white_player_id else None
-            black_player = await db.get(Player, table.black_player_id) if table.black_player_id else None
-            table_data = {
-                "id": table.id,
-                "status": table.status,
-                "white_player": {"id": white_player.id, "nickname": white_player.nickname, "created_at": str(white_player.created_at)} if white_player else None,
-                "black_player": {"id": black_player.id, "nickname": black_player.nickname, "created_at": str(black_player.created_at)} if black_player else None,
-                "created_at": str(table.created_at),
-            }
+    async def _build_table_data(session):
+        table = await session.get(Table, table_id)
+        if not table:
+            return None
+        white_player = await session.get(Player, table.white_player_id) if table.white_player_id else None
+        black_player = await session.get(Player, table.black_player_id) if table.black_player_id else None
+        return {
+            "id": table.id,
+            "status": table.status,
+            "white_player": {"id": white_player.id, "nickname": white_player.nickname, "created_at": str(white_player.created_at)} if white_player else None,
+            "black_player": {"id": black_player.id, "nickname": black_player.nickname, "created_at": str(black_player.created_at)} if black_player else None,
+            "created_at": str(table.created_at),
+            "match_points": table.match_points,
+            "white_match_score": table.white_match_score,
+            "black_match_score": table.black_match_score,
+        }
+
+    if db is not None:
+        table_data = await _build_table_data(db)
+    else:
+        async with async_session() as fresh_db:
+            table_data = await _build_table_data(fresh_db)
 
     return {
         "type": msg_type,
@@ -136,15 +148,16 @@ async def notify_game_started(table_id: str) -> None:
     await _send_game_state_to_all(table_id)
 
 
-async def _send_game_state_to_all(table_id: str) -> None:
+async def _send_game_state_to_all(table_id: str, db=None) -> None:
     """Send personalized game state to every connected player at a table.
 
     Each player receives their own valid_moves (only the current player
     whose turn it is sees moves; the opponent sees an empty list).
+    If *db* is provided, reuse it to see uncommitted changes.
     """
     for pid in manager.get_player_ids(table_id):
         try:
-            message = await _build_full_message(table_id, pid)
+            message = await _build_full_message(table_id, pid, db=db)
             await manager.send_to_player(table_id, pid, message)
         except Exception:
             logger.exception("Failed to send game state to player %s", pid)
@@ -243,6 +256,18 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, player_id: str
                     elif action == "end_turn":
                         await _handle_end_turn(db, websocket, table_id, player_id)
 
+                    elif action == "undo_turn":
+                        await _handle_undo_turn(db, websocket, table_id, player_id)
+
+                    elif action == "offer_double":
+                        await _handle_offer_double(db, websocket, table_id, player_id)
+
+                    elif action == "accept_double":
+                        await _handle_accept_double(db, websocket, table_id, player_id)
+
+                    elif action == "decline_double":
+                        await _handle_decline_double(db, websocket, table_id, player_id)
+
                     else:
                         await _send_error(websocket, f"Unknown action: {action}")
 
@@ -280,7 +305,7 @@ async def _handle_roll_dice(
     await websocket.send_json({"type": "dice_rolled", "data": roll_result})
 
     # Broadcast updated game state to all connected players
-    await _send_game_state_to_all(table_id)
+    await _send_game_state_to_all(table_id, db=db)
 
 
 async def _handle_make_move(
@@ -291,23 +316,22 @@ async def _handle_make_move(
     await game_manager.make_move(db, table_id, player_id, from_point, to_point)
 
     # Broadcast updated game state (including the final state) to all players
-    await _send_game_state_to_all(table_id)
+    await _send_game_state_to_all(table_id, db=db)
 
     # If the game is finished, send a game_over message and clean up
     engine = game_manager.get_engine(table_id)
     if engine and engine.state.status == GameStatus.FINISHED:
-        async with async_session() as read_db:
-            table = await read_db.get(Table, table_id)
-            if table:
-                game_over_data = {
-                    "winner_id": table.winner_id,
-                    "win_type": table.win_type,
-                    "final_score": table.final_score,
-                }
-                for pid in manager.get_player_ids(table_id):
-                    await manager.send_to_player(
-                        table_id, pid, {"type": "game_over", "data": game_over_data}
-                    )
+        table = await db.get(Table, table_id)
+        if table:
+            game_over_data = {
+                "winner_id": table.winner_id,
+                "win_type": table.win_type,
+                "final_score": table.final_score,
+            }
+            for pid in manager.get_player_ids(table_id):
+                await manager.send_to_player(
+                    table_id, pid, {"type": "game_over", "data": game_over_data}
+                )
         # Now safe to clean up the engine
         game_manager.cleanup_finished_game(table_id)
 
@@ -319,4 +343,55 @@ async def _handle_end_turn(
     await game_manager.end_turn(db, table_id, player_id)
 
     # Broadcast updated game state to all connected players
-    await _send_game_state_to_all(table_id)
+    await _send_game_state_to_all(table_id, db=db)
+
+
+async def _handle_undo_turn(
+    db, websocket: WebSocket, table_id: str, player_id: str
+) -> None:
+    """Handle an undo_turn action: rewind all moves this turn."""
+    await game_manager.undo_turn(db, table_id, player_id)
+
+    # Broadcast updated game state to all connected players
+    await _send_game_state_to_all(table_id, db=db)
+
+
+async def _handle_offer_double(
+    db, websocket: WebSocket, table_id: str, player_id: str
+) -> None:
+    """Handle an offer_double action."""
+    await game_manager.offer_double(db, table_id, player_id)
+    await _send_game_state_to_all(table_id, db=db)
+
+
+async def _handle_accept_double(
+    db, websocket: WebSocket, table_id: str, player_id: str
+) -> None:
+    """Handle an accept_double action."""
+    await game_manager.accept_double(db, table_id, player_id)
+    await _send_game_state_to_all(table_id, db=db)
+
+
+async def _handle_decline_double(
+    db, websocket: WebSocket, table_id: str, player_id: str
+) -> None:
+    """Handle a decline_double action: opponent forfeits the game."""
+    result = await game_manager.decline_double(db, table_id, player_id)
+
+    await _send_game_state_to_all(table_id, db=db)
+
+    # Send game_over message
+    engine = game_manager.get_engine(table_id)
+    if engine and engine.state.status == GameStatus.FINISHED:
+        table = await db.get(Table, table_id)
+        if table:
+            game_over_data = {
+                "winner_id": table.winner_id,
+                "win_type": table.win_type,
+                "final_score": table.final_score,
+            }
+            for pid in manager.get_player_ids(table_id):
+                await manager.send_to_player(
+                    table_id, pid, {"type": "game_over", "data": game_over_data}
+                    )
+        game_manager.cleanup_finished_game(table_id)

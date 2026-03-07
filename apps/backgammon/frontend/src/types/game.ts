@@ -73,6 +73,14 @@ export interface GameState {
   valid_moves: Move[];
   winner: Color | null;
   win_type: WinType | null;
+  opening_roll: { white: number; black: number } | null;
+  turn_moves_count: number;
+  can_undo: boolean;
+  cube_value: number;
+  cube_owner: Color | null;
+  double_offered: boolean;
+  double_offered_by: Color | null;
+  can_double: boolean;
 }
 
 /** A table (lobby / game room) that two players can join. */
@@ -82,6 +90,9 @@ export interface Table {
   white_player: Player | null;
   black_player: Player | null;
   created_at: string;
+  match_points: number;
+  white_match_score: number;
+  black_match_score: number;
 }
 
 /** A single row in the move-history log for a completed turn. */

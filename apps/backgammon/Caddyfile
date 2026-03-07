@@ -1,0 +1,15 @@
+{$DOMAIN} {
+    handle /api/* {
+        reverse_proxy fastapi:8000
+    }
+
+    handle /ws/* {
+        reverse_proxy fastapi:8000
+    }
+
+    handle {
+        root * /srv/web
+        try_files {path} /index.html
+        file_server
+    }
+}

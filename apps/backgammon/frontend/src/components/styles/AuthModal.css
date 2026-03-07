@@ -114,6 +114,12 @@
   background: #3367d6;
 }
 
+.google-signin-btn {
+  display: flex;
+  justify-content: center;
+  margin: 0.75rem 0;
+}
+
 /* Error */
 .auth-error {
   color: var(--danger);

@@ -6,12 +6,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import router
 from app.api.auth_routes import auth_router
 from app.api.websocket import websocket_endpoint
+from app.config import settings
 
 app = FastAPI(title="Backgammon Online", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.allowed_origins.split(","),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

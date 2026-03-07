@@ -165,14 +165,11 @@ def check_invariants(
     # 6. When status is MOVING, get_valid_moves() should return moves that are executable
     if s.status == GameStatus.MOVING and s.remaining_dice:
         valid_moves = engine.get_valid_moves()
-        # The engine auto-skips when there are no valid moves, so if we are
-        # still in MOVING status, there should be at least one valid move
-        # (unless remaining_dice is empty, which we already checked).
-        if not valid_moves:
-            # It's possible there are no valid moves and the engine is about
-            # to auto-skip. But _auto_skip_if_no_moves should have been called
-            # already. If we're still MOVING with remaining dice and no valid
-            # moves, that's suspicious.
+        # The engine auto-skips when there are no valid moves AND no moves
+        # have been made this turn.  When moves HAVE been made (turn_moves
+        # is non-empty), the engine keeps the turn alive so the player can
+        # undo or explicitly confirm.  That is a valid state.
+        if not valid_moves and not s.turn_moves:
             violations.append(
                 "Status is MOVING with remaining dice but get_valid_moves() is empty. "
                 f"remaining_dice={s.remaining_dice}"
@@ -891,6 +888,9 @@ class TestFullGameSimulation:
             while valid and engine.state.status == GameStatus.MOVING:
                 engine.make_move(valid[0])
                 valid = engine.get_valid_moves()
+            # With undo/commit, engine may wait for explicit end_turn()
+            if engine.state.status == GameStatus.MOVING:
+                engine.end_turn()
 
         # After all moves, should be ROLLING (for next player) or FINISHED
         assert engine.state.status in (GameStatus.ROLLING, GameStatus.FINISHED)
@@ -962,7 +962,7 @@ class TestFullGameSimulation:
     def test_opening_roll_no_doubles(self):
         """determine_first_player should never return doubles."""
         for _ in range(100):
-            color, roll = BackgammonEngine.determine_first_player()
+            color, roll, _opening = BackgammonEngine.determine_first_player()
             assert roll.die1 != roll.die2, (
                 f"Opening roll should not be doubles: {roll}"
             )
