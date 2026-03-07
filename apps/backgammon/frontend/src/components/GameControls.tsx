@@ -57,7 +57,7 @@ function GameControls({
   const showAcceptDeclineButtons =
     gameState.double_offered && gameState.double_offered_by !== myColor;
 
-  const showUndoButton = gameState.can_undo;
+  const showUndoButton = isMyTurn && gameState.can_undo;
 
   const showConfirmTurnButton =
     isMyTurn &&
@@ -74,10 +74,6 @@ function GameControls({
 
   return (
     <div className="game-controls">
-      <div className={`turn-indicator ${statusInfo.className}`}>
-        {statusInfo.text}
-      </div>
-
       <div className="controls-row">
         {showAcceptDeclineButtons && (
           <>
