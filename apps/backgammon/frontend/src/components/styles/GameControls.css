@@ -97,3 +97,33 @@
   font-size: 0.95rem;
   background: var(--danger, #e74c3c);
 }
+
+/* Compact controls when inside board overlay */
+.board-overlay .game-controls {
+  padding: 0.15rem;
+  gap: 0.25rem;
+}
+
+.board-overlay .turn-indicator {
+  font-size: 0.8rem;
+  padding: 0.15rem 0.6rem;
+}
+
+.board-overlay .controls-row {
+  gap: 0.4rem;
+}
+
+.board-overlay .controls-row .roll-btn {
+  padding: 0.4rem 1.2rem;
+  font-size: 0.9rem;
+}
+
+.board-overlay .controls-row .double-btn,
+.board-overlay .controls-row .undo-btn,
+.board-overlay .controls-row .confirm-turn-btn,
+.board-overlay .controls-row .end-turn-btn,
+.board-overlay .controls-row .accept-double-btn,
+.board-overlay .controls-row .decline-double-btn {
+  padding: 0.3rem 0.8rem;
+  font-size: 0.8rem;
+}

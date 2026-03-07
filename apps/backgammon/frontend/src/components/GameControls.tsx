@@ -96,7 +96,7 @@ function GameControls({
         )}
         {showRollButton && (
           <button className="roll-btn" onClick={onRollDice}>
-            Roll Dice
+            Roll
           </button>
         )}
         {showUndoButton && (

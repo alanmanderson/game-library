@@ -63,3 +63,25 @@
   color: var(--text-secondary);
   font-size: 0.9rem;
 }
+
+/* Compact dice when inside board overlay */
+.board-overlay .dice-container {
+  padding: 0.15rem;
+  gap: 0.5rem;
+}
+
+.board-overlay .die {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+}
+
+.board-overlay .die-dots {
+  width: 28px;
+  height: 28px;
+}
+
+.board-overlay .die-dot {
+  width: 6px;
+  height: 6px;
+}

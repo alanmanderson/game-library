@@ -420,23 +420,38 @@ function Game() {
             )}
           </div>
 
-          <Board
-            gameState={gameState}
-            myColor={myColor}
-            selectedPoint={selectedPoint}
-            validMoves={isMyTurn ? validMoves : []}
-            onPointClick={handlePointClick}
-            onBarClick={handleBarClick}
-            onBearOffClick={handleBearOffClick}
-            cubeValue={gameState.cube_value}
-            cubeOwner={gameState.cube_owner}
-          />
-          <Dice
-            dice={gameState.dice}
-            remainingDice={gameState.remaining_dice}
-            currentTurn={diceColor}
-            openingRoll={gameState.opening_roll}
-          />
+          <div className={`board-area perspective-${myColor}`}>
+            <Board
+              gameState={gameState}
+              myColor={myColor}
+              selectedPoint={selectedPoint}
+              validMoves={isMyTurn ? validMoves : []}
+              onPointClick={handlePointClick}
+              onBarClick={handleBarClick}
+              onBearOffClick={handleBearOffClick}
+              cubeValue={gameState.cube_value}
+              cubeOwner={gameState.cube_owner}
+            />
+            <div className="board-overlay">
+              <Dice
+                dice={gameState.dice}
+                remainingDice={gameState.remaining_dice}
+                currentTurn={diceColor}
+                openingRoll={gameState.opening_roll}
+              />
+              <GameControls
+                gameState={gameState}
+                myColor={myColor}
+                opponentName={opponentName}
+                onRollDice={rollDice}
+                onEndTurn={endTurn}
+                onUndoTurn={undoTurn}
+                onOfferDouble={offerDouble}
+                onAcceptDouble={acceptDouble}
+                onDeclineDouble={declineDouble}
+              />
+            </div>
+          </div>
 
           {/* Player info row */}
           <div className="player-info-row">
@@ -449,18 +464,6 @@ function Game() {
               <span className="match-pts">{myScore} / {table.match_points}</span>
             )}
           </div>
-
-          <GameControls
-            gameState={gameState}
-            myColor={myColor}
-            opponentName={opponentName}
-            onRollDice={rollDice}
-            onEndTurn={endTurn}
-            onUndoTurn={undoTurn}
-            onOfferDouble={offerDouble}
-            onAcceptDouble={acceptDouble}
-            onDeclineDouble={declineDouble}
-          />
 
           <GameInfo table={table} />
         </div>
