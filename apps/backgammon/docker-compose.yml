@@ -25,6 +25,8 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
+      - ~/.ssh/github_claude:/root/.ssh/id_ed25519:ro
+      - ~/.ssh/github_known_hosts:/root/.ssh/known_hosts:ro
     environment:
       DATABASE_URL: postgresql+asyncpg://backgammon:backgammon_secret@db:5432/backgammon
       DATABASE_URL_SYNC: postgresql://backgammon:backgammon_secret@db:5432/backgammon
