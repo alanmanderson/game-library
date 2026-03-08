@@ -17,3 +17,8 @@ output "dns_instructions" {
   description = "DNS configuration instructions"
   value       = "Create an A record: ${var.domain_name} -> ${azurerm_public_ip.backgammon.ip_address}"
 }
+
+output "google_client_id" {
+  description = "Google OAuth client ID"
+  value       = var.google_client_id
+}

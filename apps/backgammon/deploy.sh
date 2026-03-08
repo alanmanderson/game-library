@@ -18,7 +18,8 @@ echo "==> Deploying to $REMOTE"
 
 # 1. Build web client
 echo "==> Building web client..."
-(cd "$SCRIPT_DIR/frontend" && npm run build)
+GOOGLE_CID=$(cd "$SCRIPT_DIR/infra" && terraform output -raw google_client_id 2>/dev/null || echo "")
+(cd "$SCRIPT_DIR/frontend" && VITE_GOOGLE_CLIENT_ID="$GOOGLE_CID" npm run build)
 
 # 2. Build Docker image
 echo "==> Building Docker image..."
