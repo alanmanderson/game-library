@@ -31,6 +31,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://backgammon:backgammon_secret@db:5432/backgammon
       DATABASE_URL_SYNC: postgresql://backgammon:backgammon_secret@db:5432/backgammon
       JWT_SECRET: backgammon-dev-jwt-secret-do-not-use-in-prod
+      GOOGLE_CLIENT_ID: 682610190321-ereinc0diskjhc5qglvk90jt6h2lem7l.apps.googleusercontent.com
     depends_on:
       db:
         condition: service_healthy
@@ -49,6 +50,7 @@ services:
     environment:
       # Internal URL for the Vite dev-server proxy (container-to-container)
       VITE_BACKEND_INTERNAL_URL: http://backend:8000
+      VITE_GOOGLE_CLIENT_ID: 682610190321-ereinc0diskjhc5qglvk90jt6h2lem7l.apps.googleusercontent.com
     depends_on:
       - backend
 
