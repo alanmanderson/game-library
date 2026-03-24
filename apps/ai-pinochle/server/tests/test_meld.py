@@ -251,12 +251,12 @@ def test_run_and_pinochle():
 
 
 def test_double_run_with_dix():
-    """Double Run does NOT subsume 9 of trump — 9 is not in a run."""
+    """Double Run subsumes both 9s of trump — Dix should not be scored separately."""
     hand = ["AH", "AH", "10H", "10H", "KH", "KH", "QH", "QH", "JH", "JH", "9H", "9H"]
     melds = calculate_melds(hand, "HEARTS")
     dix = [m for m in melds if m["name"] == "Dix"]
-    assert len(dix) == 2
-    assert _total(melds) == 150 + 2  # Double Run + 2 Dix
+    assert len(dix) == 0
+    assert _total(melds) == 150  # Double Run only, Dix subsumed
 
 
 def test_empty_hand():

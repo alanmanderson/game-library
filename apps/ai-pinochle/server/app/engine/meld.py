@@ -40,7 +40,7 @@ def calculate_melds(hand: list[str], trump_suit: str) -> list[dict]:
     _check_marriages(counts, trump, runs_used, melds)
 
     # --- Dix (9 of trump) ---
-    _check_dix(counts, trump, melds)
+    _check_dix(counts, trump, runs_used, melds)
 
     return melds
 
@@ -141,8 +141,13 @@ def _check_marriages(
                 })
 
 
-def _check_dix(counts: Counter, trump: str, melds: list[dict]) -> None:
-    """Check for Dix (9 of trump). Each 9 of trump = 1 pt."""
+def _check_dix(counts: Counter, trump: str, runs_used: int, melds: list[dict]) -> None:
+    """Check for Dix (9 of trump). Each 9 of trump = 1 pt.
+
+    A Double Run (runs_used == 2) subsumes both 9s of trump, so no Dix is scored.
+    """
+    if runs_used == 2:
+        return
     nine_trump = f"9{trump}"
     for _ in range(counts[nine_trump]):
         melds.append({"name": "Dix", "cards": [nine_trump], "points": 1})
