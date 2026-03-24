@@ -120,6 +120,7 @@ export function GamePage({
     const { event, payload } = lastEvent;
 
     if (event === "ERROR") {
+      if (!payload) return;
       const p = payload as { message: string };
       setError(p.message);
       if (pendingCardRef.current) {
@@ -133,6 +134,7 @@ export function GamePage({
     setError(null);
 
     if (event === "HAND_DEALT") {
+      if (!payload) return;
       const p = payload as { cards: string[] };
       setHand(p.cards);
       // Reset per-hand state for new hand
@@ -150,17 +152,21 @@ export function GamePage({
       setNextToActSeat(null);
       setLegalCards([]);
     } else if (event === "BIDDING_TURN") {
+      if (!payload) return;
       const p = payload as unknown as BiddingState;
       setBiddingState(p);
       setPhase("BIDDING");
     } else if (event === "BIDDING_COMPLETED") {
+      if (!payload) return;
       const p = payload as unknown as BiddingResult;
       setBiddingResult(p);
       setPhase("NAMING_TRUMP");
     } else if (event === "TRUMP_NAMED") {
+      if (!payload) return;
       const p = payload as { trump_suit: string };
       setTrumpSuit(p.trump_suit);
     } else if (event === "PASSING_PHASE_STARTED") {
+      if (!payload) return;
       const p = payload as {
         trump_suit: string;
         bidding_team: string;
@@ -176,14 +182,17 @@ export function GamePage({
       });
       setPhase("PASSING_CARDS");
     } else if (event === "CARDS_PASSED") {
+      if (!payload) return;
       const p = payload as { seat: string; submitted_seats: string[] };
       setPassingState((prev) =>
         prev ? { ...prev, submitted_seats: p.submitted_seats } : prev
       );
     } else if (event === "CARDS_RECEIVED") {
+      if (!payload) return;
       const p = payload as { cards_received: string[]; new_hand: string[] };
       setHand(p.new_hand);
     } else if (event === "MELD_BROADCAST") {
+      if (!payload) return;
       const p = payload as {
         trump_suit: string;
         winning_bid: number;
@@ -203,6 +212,7 @@ export function GamePage({
       setAcknowledgedSeats([]);
       setPhase("SHOWING_MELD");
     } else if (event === "MELD_ACKNOWLEDGED") {
+      if (!payload) return;
       const p = payload as { acknowledged_seats: string[] };
       setAcknowledgedSeats(p.acknowledged_seats);
     } else if (event === "MELD_PHASE_COMPLETED") {
@@ -216,6 +226,7 @@ export function GamePage({
       setNextToActSeat(null);
       setHandResult(null);
     } else if (event === "TRICK_STATE") {
+      if (!payload) return;
       const p = payload as {
         trick_number: number;
         tricks_taken: Record<string, number>;
@@ -226,6 +237,7 @@ export function GamePage({
       setTrickScores(p.trick_scores);
     } else if (event === "YOUR_TURN") {
       cancelTrickTimer();
+      if (!payload) return;
       const p = payload as {
         seat: string;
         legal_cards: string[];
@@ -239,6 +251,7 @@ export function GamePage({
       setLegalCards(p.legal_cards);
     } else if (event === "CARD_PLAYED") {
       cancelTrickTimer();
+      if (!payload) return;
       const p = payload as {
         seat: string;
         card: string;
@@ -265,6 +278,7 @@ export function GamePage({
       setNextToActSeat(p.next_to_act_seat);
       setLegalCards([]);
     } else if (event === "TRICK_COMPLETED") {
+      if (!payload) return;
       const p = payload as {
         trick_number: number;
         winner_seat: string;
@@ -294,6 +308,7 @@ export function GamePage({
       }
     } else if (event === "HAND_COMPLETED") {
       cancelTrickTimer();
+      if (!payload) return;
       const p = payload as {
         trick_scores: Record<string, number>;
         team_meld: Record<string, number>;
@@ -313,6 +328,7 @@ export function GamePage({
       setHandResultAckedSeats([]);
       setPhase("HAND_COMPLETE");
     } else if (event === "HAND_RESULT_ACKNOWLEDGED") {
+      if (!payload) return;
       const p = payload as { acknowledged_seats: string[] };
       setHandResultAckedSeats(p.acknowledged_seats);
     }
@@ -358,6 +374,8 @@ export function GamePage({
         <span className={styles.phaseLabel}>{phaseLabel(phase)}</span>
         <span
           className={`${styles.connectionDot} ${connected ? styles.dotConnected : styles.dotDisconnected}`}
+          aria-label={connected ? "Connected" : "Disconnected"}
+          role="status"
         />
         <button className={styles.leaveButton} onClick={onLeave}>
           Leave

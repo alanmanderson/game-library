@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { TEAM_FOR_SEAT } from "@pinochle/shared";
+import { TEAM_FOR_SEAT, cardLabel } from "@pinochle/shared";
 import styles from "./PassCardsPhase.module.css";
 
 interface Props {
@@ -11,7 +11,12 @@ interface Props {
   sendMessage: (msg: Record<string, unknown>) => void;
 }
 
+const VALID_CARD_RE = /^(A|10|K|Q|J|9)[CDHS]$/;
+
 function cardToImage(code: string): string {
+  if (!VALID_CARD_RE.test(code)) {
+    return "/img/back.svg";
+  }
   return `/img/${code}.png`;
 }
 
@@ -80,9 +85,14 @@ export function PassCardsPhase({
             <img
               key={`${card}-${i}`}
               src={cardToImage(card)}
-              alt={card}
+              alt={cardLabel(card)}
               className={classes}
               onClick={() => toggleCard(i)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleCard(i); } }}
+              tabIndex={0}
+              role="checkbox"
+              aria-checked={isSelected}
+              aria-label={`${cardLabel(card)}${isSelected ? ", selected" : ""}`}
             />
           );
         })}

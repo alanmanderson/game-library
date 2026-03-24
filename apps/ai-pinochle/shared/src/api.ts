@@ -19,7 +19,7 @@ export async function post<T>(apiBase: string, path: string, body: unknown): Pro
   const data = await res.json();
 
   if (!res.ok) {
-    throw new ApiError(res.status, data.detail ?? "Request failed");
+    throw new ApiError(res.status, data.detail || data.message || "Request failed");
   }
 
   return data as T;
@@ -40,7 +40,7 @@ export async function getAuth<T>(
   const data = await res.json();
 
   if (!res.ok) {
-    throw new ApiError(res.status, data.detail ?? "Request failed");
+    throw new ApiError(res.status, data.detail || data.message || "Request failed");
   }
 
   return data as T;
@@ -64,7 +64,7 @@ export async function postAuth<T>(
   const data = await res.json();
 
   if (!res.ok) {
-    throw new ApiError(res.status, data.detail ?? "Request failed");
+    throw new ApiError(res.status, data.detail || data.message || "Request failed");
   }
 
   return data as T;
