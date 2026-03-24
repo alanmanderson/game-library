@@ -1,9 +1,14 @@
 import os
+import sys
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
+
+# Ensure the server package is importable (alembic.ini sets prepend_sys_path=.
+# but add it explicitly so env.py works regardless of invocation directory).
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 config = context.config
 
@@ -15,12 +20,15 @@ if config.config_file_name is not None:
 database_url = os.environ.get("DATABASE_URL")
 if not database_url:
     raise RuntimeError("DATABASE_URL environment variable is not set")
+# Convert async driver URL to sync — Alembic runs synchronously.
+database_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
 config.set_main_option("sqlalchemy.url", database_url)
 
-# When SQLAlchemy models exist, import their metadata here for autogenerate:
-#   from app.models.base import Base
-#   target_metadata = Base.metadata
-target_metadata = None
+# Import models so they register on Base.metadata for autogenerate support.
+from app.models.base import Base  # noqa: E402
+import app.models  # noqa: E402, F401
+
+target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
