@@ -337,7 +337,7 @@ async def handle_submit_bid(
                 },
             })
     else:
-        if not isinstance(amount, int):
+        if not isinstance(amount, int) or isinstance(amount, bool):
             await manager.send_personal(websocket, {
                 "event": "ERROR",
                 "payload": {"message": "Bid amount must be an integer"},
@@ -349,6 +349,13 @@ async def handle_submit_bid(
             await manager.send_personal(websocket, {
                 "event": "ERROR",
                 "payload": {"message": f"Bid must be at least {minimum}"},
+            })
+            return
+
+        if amount > 500:
+            await manager.send_personal(websocket, {
+                "event": "ERROR",
+                "payload": {"message": "Bid amount is unreasonably large"},
             })
             return
 
@@ -527,6 +534,13 @@ async def handle_pass_cards(
         await manager.send_personal(websocket, {
             "event": "ERROR",
             "payload": {"message": "You must pass exactly 3 cards"},
+        })
+        return
+
+    if not all(isinstance(c, str) for c in cards):
+        await manager.send_personal(websocket, {
+            "event": "ERROR",
+            "payload": {"message": "Cards must be strings"},
         })
         return
 

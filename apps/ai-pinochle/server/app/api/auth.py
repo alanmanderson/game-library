@@ -34,10 +34,14 @@ def _check_rate_limit(ip: str | None) -> bool:
     now = time.time()
     attempts = _login_attempts[ip]
     # Clean old attempts outside the window
-    _login_attempts[ip] = [t for t in attempts if now - t < RATE_LIMIT_WINDOW]
-    if len(_login_attempts[ip]) >= MAX_LOGIN_ATTEMPTS:
+    fresh = [t for t in attempts if now - t < RATE_LIMIT_WINDOW]
+    if fresh:
+        _login_attempts[ip] = fresh
+    else:
+        _login_attempts.pop(ip, None)
+    if len(fresh) >= MAX_LOGIN_ATTEMPTS:
         return True
-    _login_attempts[ip].append(now)
+    _login_attempts.setdefault(ip, []).append(now)
     return False
 
 

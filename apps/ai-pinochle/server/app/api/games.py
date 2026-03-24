@@ -64,7 +64,7 @@ async def create_game(
             await db.rollback()
 
     # Extremely unlikely — all 10 attempts collided
-    raise Exception("failed to generate unique room code")
+    raise RuntimeError("failed to generate unique room code")
 
 
 SEAT_COLUMNS = ["north", "east", "south", "west"]
@@ -154,10 +154,12 @@ async def join_game(
     attempts = _failed_join_attempts[user.id]
     # Prune old attempts outside the window
     cutoff = now.timestamp() - _FAILED_JOIN_WINDOW_SECONDS
-    _failed_join_attempts[user.id] = [
-        t for t in attempts if t.timestamp() > cutoff
-    ]
-    attempts = _failed_join_attempts[user.id]
+    fresh = [t for t in attempts if t.timestamp() > cutoff]
+    if fresh:
+        _failed_join_attempts[user.id] = fresh
+    else:
+        _failed_join_attempts.pop(user.id, None)
+    attempts = fresh
 
     if len(attempts) >= _MAX_FAILED_JOINS:
         raise HTTPException(
