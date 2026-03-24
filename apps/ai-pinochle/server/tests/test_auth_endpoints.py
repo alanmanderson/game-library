@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 import bcrypt
-from jose import jwt
+import jwt
 from sqlalchemy import select
 
 from app.config import settings
@@ -12,8 +12,8 @@ GOOGLE_SUB = "google-uid-12345"
 GOOGLE_EMAIL = "googleuser@gmail.com"
 
 
-def _google_id_info(sub=GOOGLE_SUB, email=GOOGLE_EMAIL, given_name=None, family_name=None):
-    info = {"sub": sub, "email": email}
+def _google_id_info(sub=GOOGLE_SUB, email=GOOGLE_EMAIL, given_name=None, family_name=None, email_verified=True):
+    info = {"sub": sub, "email": email, "email_verified": email_verified}
     if given_name is not None:
         info["given_name"] = given_name
     if family_name is not None:

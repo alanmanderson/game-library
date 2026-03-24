@@ -58,12 +58,14 @@ engine = create_async_engine("sqlite+aiosqlite://", echo=False)
 
 @pytest.fixture(autouse=True)
 async def _setup_db():
+    from app.api.auth import _login_attempts
     from app.websocket.connection_manager import manager
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
     manager.clear()
+    _login_attempts.clear()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
 

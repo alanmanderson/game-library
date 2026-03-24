@@ -1,11 +1,13 @@
+import time
 import uuid
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
-from jose import jwt
+import jwt
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -16,6 +18,27 @@ from app.database import get_db
 from app.models.user import User
 
 router = APIRouter()
+
+# ---------------------------------------------------------------------------
+# In-memory rate limiting (per IP)
+# ---------------------------------------------------------------------------
+_login_attempts: dict[str, list[float]] = defaultdict(list)
+MAX_LOGIN_ATTEMPTS = 10
+RATE_LIMIT_WINDOW = 60  # seconds
+
+
+def _check_rate_limit(ip: str | None) -> bool:
+    """Return True if the IP should be rate-limited."""
+    if not ip:
+        return False
+    now = time.time()
+    attempts = _login_attempts[ip]
+    # Clean old attempts outside the window
+    _login_attempts[ip] = [t for t in attempts if now - t < RATE_LIMIT_WINDOW]
+    if len(_login_attempts[ip]) >= MAX_LOGIN_ATTEMPTS:
+        return True
+    _login_attempts[ip].append(now)
+    return False
 
 
 class RegisterRequest(BaseModel):
@@ -53,7 +76,12 @@ def _create_access_token(user_id: uuid.UUID) -> str:
 
 
 @router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
-async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
+async def register(body: RegisterRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    if _check_rate_limit(request.client.host if request.client else None):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="too many requests, please try again later",
+        )
     user = User(
         username=body.email,
         first_name=body.first_name,
@@ -82,7 +110,12 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/login", response_model=AuthResponse)
-async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(body: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    if _check_rate_limit(request.client.host if request.client else None):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="too many requests, please try again later",
+        )
     result = await db.execute(select(User).where(User.email == body.email))
     user = result.scalar_one_or_none()
     if user is None or user.password_hash is None or not bcrypt.checkpw(
@@ -104,7 +137,12 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/google", response_model=AuthResponse)
-async def google_auth(body: GoogleAuthRequest, db: AsyncSession = Depends(get_db)):
+async def google_auth(body: GoogleAuthRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    if _check_rate_limit(request.client.host if request.client else None):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="too many requests, please try again later",
+        )
     try:
         id_info = google_id_token.verify_oauth2_token(
             body.token,
@@ -119,6 +157,13 @@ async def google_auth(body: GoogleAuthRequest, db: AsyncSession = Depends(get_db
 
     google_sub = id_info["sub"]
     email = id_info["email"]
+
+    if not id_info.get("email_verified", False):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Google email not verified",
+        )
+
     given_name = id_info.get("given_name") or email.split("@")[0]
     family_name = id_info.get("family_name", "")
 
