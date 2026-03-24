@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 from flask import Flask, jsonify
 from flask_sqlalchemy import SQLAlchemy
@@ -7,7 +9,7 @@ db = SQLAlchemy()
 migrate = Migrate()
 
 
-def create_app(config_name=None):
+def create_app(config_name: str | None = None) -> Flask:
     """Application factory for creating the Flask app."""
     if config_name is None:
         config_name = os.getenv('FLASK_CONFIG', 'development')
@@ -22,15 +24,15 @@ def create_app(config_name=None):
     import models  # noqa: F401 — register models with SQLAlchemy
 
     @app.route('/')
-    def hello_world():
+    def hello_world() -> str:
         return 'Hello, World!'
 
     @app.errorhandler(404)
-    def not_found(e):
+    def not_found(e: Exception) -> tuple:
         return jsonify(error='Not found'), 404
 
     @app.errorhandler(500)
-    def internal_error(e):
+    def internal_error(e: Exception) -> tuple:
         return jsonify(error='Internal server error'), 500
 
     return app
