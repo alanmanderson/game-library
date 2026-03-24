@@ -2,7 +2,8 @@ import uuid
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
+import jwt
+from jwt.exceptions import PyJWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,9 +22,9 @@ async def get_current_user(
         payload = jwt.decode(credentials.credentials, settings.secret_key, algorithms=["HS256"])
         user_id_str = payload.get("sub")
         if user_id_str is None:
-            raise JWTError()
+            raise PyJWTError()
         user_id = uuid.UUID(user_id_str)
-    except JWTError:
+    except PyJWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="invalid or expired token",

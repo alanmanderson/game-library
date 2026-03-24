@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from jose import jwt
+import jwt
 
 from app.api.auth import _create_access_token
 from app.config import settings

@@ -2,7 +2,8 @@ import logging
 import uuid
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from jose import JWTError, jwt
+import jwt
+from jwt.exceptions import PyJWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,7 +35,7 @@ async def _authenticate(token: str, db: AsyncSession) -> User | None:
         if user_id_str is None:
             return None
         user_id = uuid.UUID(user_id_str)
-    except (JWTError, ValueError):
+    except (PyJWTError, ValueError):
         return None
 
     result = await db.execute(select(User).where(User.id == user_id))
@@ -77,20 +78,25 @@ async def _run_websocket(
     await manager.connect(room_code, conn)
     log_event(room_code, user.username, "connected")
 
-    # Send current game state on connect
+    # Reject connections to non-existent rooms
     result = await db.execute(
         select(Game).where(Game.room_code == room_code, Game.status == "IN_PROGRESS")
     )
     game = result.scalar_one_or_none()
-    if game is not None:
-        seats = await _build_seats_dict(game, db)
-        your_seat = _your_seat(game, user.id)
-        await manager.send_personal(websocket, {
-            "event": "LOBBY_STATE_UPDATED",
-            "payload": {"seats": seats, "your_seat": your_seat},
-        })
+    if game is None:
+        await websocket.close(code=4004, reason="Room not found")
+        manager.disconnect(room_code, websocket)
+        return
 
-        await _send_game_state_on_reconnect(websocket, game, user.id, db)
+    # Send current game state on connect
+    seats = await _build_seats_dict(game, db)
+    your_seat = _your_seat(game, user.id)
+    await manager.send_personal(websocket, {
+        "event": "LOBBY_STATE_UPDATED",
+        "payload": {"seats": seats, "your_seat": your_seat},
+    })
+
+    await _send_game_state_on_reconnect(websocket, game, user.id, db)
 
     try:
         while True:
