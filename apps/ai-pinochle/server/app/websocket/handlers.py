@@ -922,6 +922,7 @@ async def handle_play_card(
                 trick_scores=trick_play["trick_scores"],
                 tricks_taken=trick_play["tricks_taken"],
                 team_meld=hand["team_meld"],
+                is_shoot_the_moon=bidding.get("is_shoot_the_moon", False),
             )
 
             game_scores = state["game_scores"]
