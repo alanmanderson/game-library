@@ -155,11 +155,21 @@ async def handle_start_game(
         })
         return
 
-    phase = (game.current_state_json or {}).get("phase")
+    state = game.current_state_json or {}
+    phase = state.get("phase")
     if phase != "LOBBY_WAITING":
         await manager.send_personal(websocket, {
             "event": "ERROR",
             "payload": {"message": "Game is not in the lobby phase"},
+        })
+        return
+
+    # Only the game creator can start the game
+    created_by = state.get("created_by")
+    if created_by and str(user_id) != created_by:
+        await manager.send_personal(websocket, {
+            "event": "ERROR",
+            "payload": {"message": "Only the game creator can start the game"},
         })
         return
 

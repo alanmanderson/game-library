@@ -1,7 +1,8 @@
 import random
 import string
 import uuid
-from datetime import datetime
+from collections import defaultdict
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -13,6 +14,12 @@ from app.api.dependencies import get_current_user
 from app.database import get_db
 from app.models.game import Game
 from app.models.user import User
+
+# Brute-force protection for room code joining.
+# Maps user_id -> list of timestamps of failed join attempts.
+_failed_join_attempts: dict[uuid.UUID, list[datetime]] = defaultdict(list)
+_MAX_FAILED_JOINS = 5
+_FAILED_JOIN_WINDOW_SECONDS = 60
 
 router = APIRouter()
 
@@ -43,7 +50,11 @@ async def create_game(
         game = Game(
             room_code=code,
             status="IN_PROGRESS",
-            current_state_json={"room_code": code, "phase": "LOBBY_WAITING"},
+            current_state_json={
+                "room_code": code,
+                "phase": "LOBBY_WAITING",
+                "created_by": str(user.id),
+            },
         )
         db.add(game)
         try:
@@ -138,11 +149,28 @@ async def join_game(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Brute-force protection: check recent failed attempts for this user
+    now = datetime.now(timezone.utc)
+    attempts = _failed_join_attempts[user.id]
+    # Prune old attempts outside the window
+    cutoff = now.timestamp() - _FAILED_JOIN_WINDOW_SECONDS
+    _failed_join_attempts[user.id] = [
+        t for t in attempts if t.timestamp() > cutoff
+    ]
+    attempts = _failed_join_attempts[user.id]
+
+    if len(attempts) >= _MAX_FAILED_JOINS:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many failed join attempts. Please wait before trying again.",
+        )
+
     result = await db.execute(
         select(Game).where(Game.room_code == room_code, Game.status == "IN_PROGRESS")
     )
     game = result.scalar_one_or_none()
     if game is None:
+        _failed_join_attempts[user.id].append(now)
         raise HTTPException(status_code=404, detail="Game not found")
 
     phase = (game.current_state_json or {}).get("phase", "LOBBY_WAITING")

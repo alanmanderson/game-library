@@ -22,6 +22,27 @@ class ConnectionManager:
 
     async def connect(self, room_code: str, connection: Connection):
         await connection.websocket.accept()
+
+        # Close any existing connection from the same user in this room
+        existing_conns = self._rooms.get(room_code, [])
+        for old_conn in existing_conns:
+            if old_conn.user_id == connection.user_id:
+                logger.info(
+                    "Closing duplicate connection for user %s in room %s",
+                    connection.user_id,
+                    room_code,
+                )
+                try:
+                    await old_conn.websocket.close(
+                        code=4002, reason="Superseded by new connection"
+                    )
+                except Exception:
+                    logger.debug("Failed to close old websocket for user %s", connection.user_id)
+        # Remove old connections for this user before adding the new one
+        self._rooms[room_code] = [
+            c for c in existing_conns if c.user_id != connection.user_id
+        ]
+
         self._rooms.setdefault(room_code, []).append(connection)
 
     def disconnect(self, room_code: str, websocket: WebSocket):
