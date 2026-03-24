@@ -3,7 +3,7 @@ import random
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.websockets import WebSocket
 
@@ -104,25 +104,36 @@ async def handle_select_seat(
         })
         return
 
-    # Check if user already occupies a different seat — unseat them first
-    for s, col in SEAT_COLUMNS.items():
-        if getattr(game, col) == user_id and s != seat:
-            setattr(game, col, None)
-
-    # Attempt to claim the seat (atomic: only set if currently empty)
+    # Unseat the user from any other seat they currently occupy
     col = SEAT_COLUMNS[seat]
-    current_occupant = getattr(game, col)
-    if current_occupant is not None and current_occupant != user_id:
-        await manager.send_personal(websocket, {
-            "event": "SEAT_CLAIM_FAILED",
-            "payload": {
-                "message": f"The {seat.capitalize()} seat was claimed by another player.",
-                "requested_seat": seat,
-            },
-        })
-        return
+    for s, other_col in SEAT_COLUMNS.items():
+        if s != seat:
+            await db.execute(
+                update(Game)
+                .where(Game.id == game.id, getattr(Game, other_col) == user_id)
+                .values(**{other_col: None})
+            )
 
-    setattr(game, col, user_id)
+    # Attempt to claim the seat atomically (only succeeds if currently empty)
+    result = await db.execute(
+        update(Game)
+        .where(Game.id == game.id, getattr(Game, col) == None)  # noqa: E711
+        .values(**{col: user_id})
+    )
+
+    if result.rowcount == 0:
+        # The seat was not empty. Check if we already own it (re-select).
+        await db.refresh(game)
+        if getattr(game, col) != user_id:
+            await manager.send_personal(websocket, {
+                "event": "SEAT_CLAIM_FAILED",
+                "payload": {
+                    "message": f"The {seat.capitalize()} seat was claimed by another player.",
+                    "requested_seat": seat,
+                },
+            })
+            return
+
     await db.flush()
     await db.refresh(game)
 
