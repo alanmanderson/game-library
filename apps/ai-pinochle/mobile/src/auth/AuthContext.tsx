@@ -52,6 +52,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
+        // SECURITY: AsyncStorage is unencrypted on both iOS and Android.
+        // In production, sensitive auth tokens should be stored in secure storage
+        // such as react-native-keychain or expo-secure-store instead.
         const token = await AsyncStorage.getItem("token");
         const raw = await AsyncStorage.getItem("user");
         if (token && raw) {
@@ -72,6 +75,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = (token: string, user: User) => {
+    // SECURITY: AsyncStorage is unencrypted. Consider using secure storage
+    // (react-native-keychain, expo-secure-store) in production environments.
     AsyncStorage.setItem("token", token);
     AsyncStorage.setItem("user", JSON.stringify(user));
     dispatch({ type: "LOGIN_SUCCESS", token, user });
