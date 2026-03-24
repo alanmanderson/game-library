@@ -23,6 +23,7 @@ export function BiddingPhase({ biddingState, mySeat, sendMessage }: Props) {
   }, [minimum_valid_bid]);
 
   function handleBid() {
+    if (isNaN(bidAmount)) return;
     sendMessage({ action: "SUBMIT_BID", payload: { amount: bidAmount } });
   }
 

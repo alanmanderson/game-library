@@ -51,6 +51,10 @@ export function LobbyPage() {
   async function handleJoin() {
     const code = joinCode.trim().toUpperCase();
     if (!code) return;
+    if (!/^[A-Z]{4}$/.test(code)) {
+      setJoinError("Room code must be 4 letters");
+      return;
+    }
     setJoinLoading(true);
     setJoinError("");
     try {
