@@ -184,13 +184,6 @@ function Board({
     return selectedPoint === barPoint;
   }, [selectedPoint, myColor]);
 
-  const handlePointClick = useCallback(
-    (point: number) => {
-      onPointClick(point);
-    },
-    [onPointClick],
-  );
-
   // ----- Render helpers -----
 
   function renderTriangle(
@@ -235,21 +228,42 @@ function Board({
     color: Color,
     key: string,
   ) {
-    const fill = color === "white" ? WHITE_CHECKER_FILL : BLACK_CHECKER_FILL;
-    const stroke = color === "white" ? WHITE_CHECKER_STROKE : BLACK_CHECKER_STROKE;
+    const gradId = color === "white" ? "glass-white" : "glass-black";
+    const rimId = color === "white" ? "rim-white" : "rim-black";
+    const edgeStroke = color === "white" ? "rgba(255,255,255,0.6)" : "rgba(150,150,150,0.4)";
 
     return (
-      <g key={key} className="checker">
-        <circle cx={cx} cy={cy} r={CHECKER_RADIUS} fill={fill} stroke={stroke} strokeWidth={1.5} />
-        {/* Inner ring for visual depth */}
+      <g key={key} className="checker" filter="url(#glass-shadow)">
+        {/* Base glass body */}
+        <circle cx={cx} cy={cy} r={CHECKER_RADIUS} fill={`url(#${gradId})`} stroke={edgeStroke} strokeWidth={1} />
+        {/* Rim light around edge */}
+        <circle cx={cx} cy={cy} r={CHECKER_RADIUS} fill={`url(#${rimId})`} />
+        {/* Inner ring visible through glass */}
         <circle
           cx={cx}
           cy={cy}
-          r={CHECKER_RADIUS - 5}
+          r={CHECKER_RADIUS - 6}
           fill="none"
-          stroke={stroke}
+          stroke={edgeStroke}
           strokeWidth={0.5}
-          opacity={0.5}
+          opacity={0.35}
+        />
+        {/* Specular highlight — offset top-left */}
+        <ellipse
+          cx={cx - 5}
+          cy={cy - 6}
+          rx={10}
+          ry={7}
+          fill="url(#glass-shine)"
+        />
+        {/* Small secondary highlight */}
+        <ellipse
+          cx={cx + 6}
+          cy={cy + 5}
+          rx={4}
+          ry={3}
+          fill="#ffffff"
+          opacity={color === "white" ? 0.2 : 0.1}
         />
       </g>
     );
@@ -399,17 +413,27 @@ function Board({
           ? BOARD_HEIGHT - MARGIN - 6 - i * 8
           : MARGIN + 6 + i * 8;
         elements.push(
-          <rect
-            key={`off-white-${i}`}
-            x={bearCx - 14}
-            y={cy - 5}
-            width={28}
-            height={10}
-            rx={3}
-            fill={WHITE_CHECKER_FILL}
-            stroke={WHITE_CHECKER_STROKE}
-            strokeWidth={0.5}
-          />,
+          <g key={`off-white-${i}`}>
+            <rect
+              x={bearCx - 14}
+              y={cy - 5}
+              width={28}
+              height={10}
+              rx={3}
+              fill="url(#glass-white)"
+              stroke="rgba(255,255,255,0.5)"
+              strokeWidth={0.5}
+            />
+            <rect
+              x={bearCx - 10}
+              y={cy - 4}
+              width={12}
+              height={4}
+              rx={2}
+              fill="#ffffff"
+              opacity={0.25}
+            />
+          </g>,
         );
       }
     }
@@ -423,17 +447,27 @@ function Board({
           ? BOARD_HEIGHT - MARGIN - 6 - i * 8
           : MARGIN + 6 + i * 8;
         elements.push(
-          <rect
-            key={`off-black-${i}`}
-            x={bearCx - 14}
-            y={cy - 5}
-            width={28}
-            height={10}
-            rx={3}
-            fill={BLACK_CHECKER_FILL}
-            stroke={BLACK_CHECKER_STROKE}
-            strokeWidth={0.5}
-          />,
+          <g key={`off-black-${i}`}>
+            <rect
+              x={bearCx - 14}
+              y={cy - 5}
+              width={28}
+              height={10}
+              rx={3}
+              fill="url(#glass-black)"
+              stroke="rgba(150,150,150,0.35)"
+              strokeWidth={0.5}
+            />
+            <rect
+              x={bearCx - 10}
+              y={cy - 4}
+              width={12}
+              height={4}
+              rx={2}
+              fill="#ffffff"
+              opacity={0.1}
+            />
+          </g>,
         );
       }
     }
@@ -496,7 +530,11 @@ function Board({
         width={POINT_WIDTH}
         height={TRIANGLE_HEIGHT}
         fill="transparent"
-        onClick={() => handlePointClick(point)}
+        role="button"
+        aria-label={`Point ${point}`}
+        tabIndex={0}
+        onClick={() => onPointClick(point)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onPointClick(point); }}
       />
     );
   }
@@ -613,9 +651,44 @@ function Board({
       <svg
         className="board-svg"
         viewBox={`0 0 ${BOARD_WIDTH} ${BOARD_HEIGHT}`}
-        width={BOARD_WIDTH}
-        height={BOARD_HEIGHT}
       >
+        <defs>
+          {/* White glass checker gradient */}
+          <radialGradient id="glass-white" cx="40%" cy="35%" r="60%">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity={0.95} />
+            <stop offset="40%" stopColor="#f0e6d3" stopOpacity={0.7} />
+            <stop offset="75%" stopColor="#d4c4a8" stopOpacity={0.55} />
+            <stop offset="100%" stopColor="#b8a88a" stopOpacity={0.45} />
+          </radialGradient>
+          {/* Black glass checker gradient */}
+          <radialGradient id="glass-black" cx="40%" cy="35%" r="60%">
+            <stop offset="0%" stopColor="#888888" stopOpacity={0.85} />
+            <stop offset="40%" stopColor="#4a4a4a" stopOpacity={0.65} />
+            <stop offset="75%" stopColor="#2b2b2b" stopOpacity={0.55} />
+            <stop offset="100%" stopColor="#1a1a1a" stopOpacity={0.5} />
+          </radialGradient>
+          {/* Specular highlight for glass */}
+          <radialGradient id="glass-shine" cx="35%" cy="30%" r="35%">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity={0.8} />
+            <stop offset="100%" stopColor="#ffffff" stopOpacity={0} />
+          </radialGradient>
+          {/* Soft shadow under glass checkers */}
+          <filter id="glass-shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx={1} dy={2} stdDeviation={2} floodColor="#000" floodOpacity={0.35} />
+          </filter>
+          {/* Edge rim light gradient */}
+          <radialGradient id="rim-white" cx="50%" cy="50%" r="50%">
+            <stop offset="80%" stopColor="#f0e6d3" stopOpacity={0} />
+            <stop offset="95%" stopColor="#ffffff" stopOpacity={0.5} />
+            <stop offset="100%" stopColor="#ffffff" stopOpacity={0.15} />
+          </radialGradient>
+          <radialGradient id="rim-black" cx="50%" cy="50%" r="50%">
+            <stop offset="80%" stopColor="#2b2b2b" stopOpacity={0} />
+            <stop offset="95%" stopColor="#999999" stopOpacity={0.4} />
+            <stop offset="100%" stopColor="#666666" stopOpacity={0.15} />
+          </radialGradient>
+        </defs>
+
         {/* Board background - total width is always the same regardless of orientation */}
         <rect
           x={MARGIN}
@@ -712,7 +785,11 @@ function Board({
           width={BAR_WIDTH}
           height={BOARD_HEIGHT - 2 * MARGIN}
           fill="transparent"
+          role="button"
+          aria-label="Bar"
+          tabIndex={0}
           onClick={onBarClick}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onBarClick(); }}
         />
 
         {/* Bear-off click area */}
@@ -723,7 +800,11 @@ function Board({
           width={BEAROFF_WIDTH}
           height={BOARD_HEIGHT - 2 * MARGIN}
           fill="transparent"
+          role="button"
+          aria-label="Bear off"
+          tabIndex={0}
           onClick={onBearOffClick}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onBearOffClick(); }}
         />
 
         {/* "BAR" label */}
