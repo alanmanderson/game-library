@@ -1,7 +1,7 @@
 import copy
 import random
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -907,6 +907,9 @@ async def handle_play_card(
             game_scores["NS"] += score_deltas["NS"]
             game_scores["EW"] += score_deltas["EW"]
 
+            game.ns_total_score = game_scores["NS"]
+            game.ew_total_score = game_scores["EW"]
+
             state["phase"] = "HAND_COMPLETE"
             hand["score_deltas"] = score_deltas
             hand["hand_result_acknowledged_seats"] = []
@@ -987,7 +990,49 @@ async def handle_acknowledge_hand_result(
             },
         })
     else:
-        # All 4 acknowledged — deal next hand
+        # All 4 acknowledged — check for win condition before dealing
+        game_scores = state["game_scores"]
+        ns_score = game_scores["NS"]
+        ew_score = game_scores["EW"]
+        ns_reached = ns_score >= 150
+        ew_reached = ew_score >= 150
+
+        if ns_reached or ew_reached:
+            # Determine winner
+            bidding_team = TEAM_FOR_SEAT[hand["bidding"]["winning_seat"]]
+            trick_play = hand["trick_play"]
+            tricks_taken = trick_play["tricks_taken"]
+
+            winner_team = None
+            if ns_reached and ew_reached:
+                # Both reached 150 — bidding team wins
+                winner_team = bidding_team
+            elif ns_reached:
+                # NS wins only if they took at least one trick
+                if tricks_taken["NS"] > 0:
+                    winner_team = "NS"
+            elif ew_reached:
+                # EW wins only if they took at least one trick
+                if tricks_taken["EW"] > 0:
+                    winner_team = "EW"
+
+            if winner_team is not None:
+                state["phase"] = "GAME_OVER"
+                game.current_state_json = state
+                game.status = "COMPLETED"
+                game.ended_at = datetime.now(timezone.utc)
+                await db.flush()
+
+                await manager.broadcast(room_code, {
+                    "event": "GAME_OVER",
+                    "payload": {
+                        "winner_team": winner_team,
+                        "final_scores": game_scores,
+                    },
+                })
+                return
+
+        # No winner yet — deal next hand
         player_hands = shuffle_and_deal()
         prev_hand = hand
         new_dealer = _next_seat(prev_hand["dealer_seat"])
