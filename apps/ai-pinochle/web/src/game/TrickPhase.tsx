@@ -49,7 +49,7 @@ export function TrickPhase({
 
   const isMyTurn = nextToActSeat === mySeat;
   const winnerPosition = trickResult
-    ? getPositionForSeat(trickResult.winnerSeat, mySeat)
+    ? getPositionForSeat(trickResult.winner_seat, mySeat)
     : null;
 
   return (
@@ -72,8 +72,8 @@ export function TrickPhase({
         <div className={styles.centerSlot}>
           {trickResult && (
             <div className={styles.winnerBadge}>
-              {SEAT_LABELS[trickResult.winnerSeat]} wins!
-              <span className={styles.winnerPoints}>+{trickResult.trickPoints}</span>
+              {SEAT_LABELS[trickResult.winner_seat]} wins!
+              <span className={styles.winnerPoints}>+{trickResult.trick_points}</span>
             </div>
           )}
         </div>

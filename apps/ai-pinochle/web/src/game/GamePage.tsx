@@ -45,10 +45,10 @@ export function GamePage({
   const [phase, setPhase] = useState<Phase>("BIDDING");
   const [hand, setHand] = useState<string[]>(initialHand);
   const [biddingState, setBiddingState] = useState<BiddingState>({
-    currentBid: null,
-    highestBidderSeat: null,
-    nextSeat: "",
-    minBid: 25,
+    current_highest_bid: null,
+    highest_bidder_seat: null,
+    next_to_act_seat: "",
+    minimum_valid_bid: 25,
   });
   const [biddingResult, setBiddingResult] = useState<BiddingResult | null>(null);
   const [trumpSuit, setTrumpSuit] = useState<string | null>(null);
@@ -112,28 +112,12 @@ export function GamePage({
       setNextToActSeat(null);
       setLegalCards([]);
     } else if (event === "BIDDING_TURN") {
-      const p = payload as {
-        current_highest_bid: number | null;
-        highest_bidder_seat: string | null;
-        next_to_act_seat: string;
-        minimum_valid_bid: number;
-      };
-      setBiddingState({
-        currentBid: p.current_highest_bid,
-        highestBidderSeat: p.highest_bidder_seat,
-        nextSeat: p.next_to_act_seat,
-        minBid: p.minimum_valid_bid,
-      });
+      const p = payload as unknown as BiddingState;
+      setBiddingState(p);
       setPhase("BIDDING");
     } else if (event === "BIDDING_COMPLETED") {
-      const p = payload as {
-        winning_seat: string;
-        winning_bid: number;
-      };
-      setBiddingResult({
-        winningSeat: p.winning_seat,
-        winningBid: p.winning_bid,
-      });
+      const p = payload as unknown as BiddingResult;
+      setBiddingResult(p);
       setPhase("NAMING_TRUMP");
     } else if (event === "TRUMP_NAMED") {
       const p = payload as { trump_suit: string };
@@ -146,17 +130,17 @@ export function GamePage({
         partner_seat: string;
       };
       setPassingState({
-        trumpSuit: p.trump_suit,
-        biddingTeam: p.bidding_team,
-        bidderSeat: p.bidder_seat,
-        partnerSeat: p.partner_seat,
-        submittedSeats: [],
+        trump_suit: p.trump_suit,
+        bidding_team: p.bidding_team,
+        bidder_seat: p.bidder_seat,
+        partner_seat: p.partner_seat,
+        submitted_seats: [],
       });
       setPhase("PASSING_CARDS");
     } else if (event === "CARDS_PASSED") {
       const p = payload as { seat: string; submitted_seats: string[] };
       setPassingState((prev) =>
-        prev ? { ...prev, submittedSeats: p.submitted_seats } : prev
+        prev ? { ...prev, submitted_seats: p.submitted_seats } : prev
       );
     } else if (event === "CARDS_RECEIVED") {
       const p = payload as { cards_received: string[]; new_hand: string[] };
@@ -171,11 +155,12 @@ export function GamePage({
       };
       setTrumpSuit(p.trump_suit);
       setMeldData({
-        trumpSuit: p.trump_suit,
-        winningBid: p.winning_bid,
-        biddingTeam: p.bidding_team,
-        teamMeld: p.team_meld,
-        playerMelds: p.player_melds,
+        trump_suit: p.trump_suit,
+        winning_bid: p.winning_bid,
+        is_shoot_the_moon: !!(p as Record<string, unknown>).is_shoot_the_moon,
+        bidding_team: p.bidding_team,
+        team_meld: p.team_meld,
+        player_melds: p.player_melds,
       });
       setAcknowledgedSeats([]);
       setPhase("SHOWING_MELD");
@@ -240,9 +225,12 @@ export function GamePage({
         trick_scores: Record<string, number>;
       };
       setTrickResult({
-        trickNumber: p.trick_number,
-        winnerSeat: p.winner_seat,
-        trickPoints: p.trick_points,
+        trick_number: p.trick_number,
+        winner_seat: p.winner_seat,
+        trick_points: p.trick_points,
+        cards_played: currentTrick,
+        tricks_taken: p.tricks_taken,
+        trick_scores: p.trick_scores,
       });
       setTricksTaken(p.tricks_taken);
       setTrickScores(p.trick_scores);
@@ -267,12 +255,12 @@ export function GamePage({
         game_scores: Record<string, number>;
       };
       setHandResult({
-        trickScores: p.trick_scores,
-        teamMeld: p.team_meld,
+        trick_scores: p.trick_scores,
+        team_meld: p.team_meld,
         bid: p.bid,
-        biddingTeam: p.bidding_team,
-        scoreDeltas: p.score_deltas,
-        gameScores: p.game_scores,
+        bidding_team: p.bidding_team,
+        score_deltas: p.score_deltas,
+        game_scores: p.game_scores,
       });
       setHandResultAckedSeats([]);
       setPhase("HAND_COMPLETE");
@@ -315,6 +303,13 @@ export function GamePage({
 
   return (
     <div className={styles.table}>
+      {!connected && (
+        <div className={styles.disconnectOverlay}>
+          <div className={styles.disconnectMessage}>
+            Connection lost. Reconnecting...
+          </div>
+        </div>
+      )}
       <div className={styles.statusBar}>
         <span className={styles.phaseLabel}>{phaseLabel(phase)}</span>
         <span
@@ -349,7 +344,7 @@ export function GamePage({
         {phase === "NAMING_TRUMP" && biddingResult && (
           <TrumpPhase
             biddingResult={biddingResult}
-            isBidWinner={biddingResult.winningSeat === mySeat}
+            isBidWinner={biddingResult.winning_seat === mySeat}
             sendMessage={sendMessage}
           />
         )}
@@ -358,9 +353,9 @@ export function GamePage({
           <PassCardsPhase
             hand={hand}
             mySeat={mySeat}
-            biddingTeam={passingState.biddingTeam}
-            submittedSeats={passingState.submittedSeats}
-            hasSubmitted={passingState.submittedSeats.includes(mySeat)}
+            biddingTeam={passingState.bidding_team}
+            submittedSeats={passingState.submitted_seats}
+            hasSubmitted={passingState.submitted_seats.includes(mySeat)}
             sendMessage={sendMessage}
           />
         )}
@@ -418,6 +413,8 @@ export function GamePage({
 
 function phaseLabel(phase: Phase): string {
   switch (phase) {
+    case "LOBBY_WAITING":
+      return "Waiting for Players";
     case "BIDDING":
       return "Bidding Phase";
     case "NAMING_TRUMP":
@@ -430,5 +427,7 @@ function phaseLabel(phase: Phase): string {
       return "Trick Play";
     case "HAND_COMPLETE":
       return "Hand Complete";
+    case "GAME_OVER":
+      return "Game Over";
   }
 }

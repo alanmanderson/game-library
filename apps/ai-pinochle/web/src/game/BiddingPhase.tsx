@@ -14,13 +14,13 @@ function seatLabel(seat: string): string {
 }
 
 export function BiddingPhase({ biddingState, mySeat, sendMessage }: Props) {
-  const { currentBid, highestBidderSeat, nextSeat, minBid } = biddingState;
-  const isMyTurn = nextSeat === mySeat;
-  const [bidAmount, setBidAmount] = useState(minBid);
+  const { current_highest_bid, highest_bidder_seat, next_to_act_seat, minimum_valid_bid } = biddingState;
+  const isMyTurn = next_to_act_seat === mySeat;
+  const [bidAmount, setBidAmount] = useState(minimum_valid_bid);
 
   useEffect(() => {
-    setBidAmount(minBid);
-  }, [minBid]);
+    setBidAmount(minimum_valid_bid);
+  }, [minimum_valid_bid]);
 
   function handleBid() {
     sendMessage({ action: "SUBMIT_BID", payload: { amount: bidAmount } });
@@ -35,10 +35,10 @@ export function BiddingPhase({ biddingState, mySeat, sendMessage }: Props) {
       <h2 className={styles.title}>Bidding</h2>
 
       <div className={styles.status}>
-        {currentBid !== null ? (
+        {current_highest_bid !== null ? (
           <p>
-            Current bid: <strong>{currentBid}</strong> by{" "}
-            <strong>{seatLabel(highestBidderSeat!)}</strong>
+            Current bid: <strong>{current_highest_bid}</strong> by{" "}
+            <strong>{seatLabel(highest_bidder_seat!)}</strong>
           </p>
         ) : (
           <p>No bids yet</p>
@@ -52,7 +52,7 @@ export function BiddingPhase({ biddingState, mySeat, sendMessage }: Props) {
             <input
               type="number"
               className={styles.bidInput}
-              min={minBid}
+              min={minimum_valid_bid}
               value={bidAmount}
               onChange={(e) => setBidAmount(Number(e.target.value))}
             />
@@ -66,7 +66,7 @@ export function BiddingPhase({ biddingState, mySeat, sendMessage }: Props) {
         </div>
       ) : (
         <p className={styles.waiting}>
-          Waiting for <strong>{seatLabel(nextSeat)}</strong> to bid...
+          Waiting for <strong>{seatLabel(next_to_act_seat)}</strong> to bid...
         </p>
       )}
     </div>

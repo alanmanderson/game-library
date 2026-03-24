@@ -20,7 +20,7 @@ export function TrumpPhase({ biddingResult, isBidWinner, sendMessage }: Props) {
   }
 
   if (!isBidWinner) {
-    const label = SEAT_LABELS[biddingResult.winningSeat] ?? biddingResult.winningSeat;
+    const label = SEAT_LABELS[biddingResult.winning_seat] ?? biddingResult.winning_seat;
     return (
       <div className={styles.container}>
         <h2 className={styles.title}>Naming Trump</h2>
@@ -35,7 +35,7 @@ export function TrumpPhase({ biddingResult, isBidWinner, sendMessage }: Props) {
     <div className={styles.container}>
       <h2 className={styles.title}>Choose Trump Suit</h2>
       <p className={styles.subtitle}>
-        You won the bid with <strong>{biddingResult.winningBid}</strong>
+        You won the bid with <strong>{biddingResult.winning_bid}</strong>
       </p>
 
       <div className={styles.suits}>
