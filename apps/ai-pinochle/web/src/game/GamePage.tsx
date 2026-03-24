@@ -69,6 +69,8 @@ export function GamePage({
   const [passingState, setPassingState] = useState<PassingState | null>(null);
 
   const trickTimerRef = useRef<number | null>(null);
+  const errorTimerRef = useRef<number | null>(null);
+  const pendingCardRef = useRef<{ card: string; handSnapshot: string[] } | null>(null);
 
   function cancelTrickTimer() {
     if (trickTimerRef.current !== null) {
@@ -82,6 +84,37 @@ export function GamePage({
   }, []);
 
   useEffect(() => {
+    if (errorTimerRef.current !== null) {
+      clearTimeout(errorTimerRef.current);
+      errorTimerRef.current = null;
+    }
+    if (error !== null) {
+      errorTimerRef.current = window.setTimeout(() => {
+        setError(null);
+        errorTimerRef.current = null;
+      }, 5000);
+    }
+    return () => {
+      if (errorTimerRef.current !== null) {
+        clearTimeout(errorTimerRef.current);
+        errorTimerRef.current = null;
+      }
+    };
+  }, [error]);
+
+  useEffect(() => {
+    const isActiveGame = phase !== "LOBBY_WAITING" && phase !== "GAME_OVER";
+    if (!isActiveGame) return;
+
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      e.preventDefault();
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [phase]);
+
+  useEffect(() => {
     if (!lastEvent) return;
 
     const { event, payload } = lastEvent;
@@ -89,6 +122,11 @@ export function GamePage({
     if (event === "ERROR") {
       const p = payload as { message: string };
       setError(p.message);
+      if (pendingCardRef.current) {
+        setHand(pendingCardRef.current.handSnapshot);
+        setLegalCards([]); // keep disabled until next YOUR_TURN
+        pendingCardRef.current = null;
+      }
       return;
     }
 
@@ -206,6 +244,16 @@ export function GamePage({
         card: string;
         next_to_act_seat: string | null;
       };
+      // Server confirmed our card play — remove it from hand now.
+      if (p.seat === mySeat && pendingCardRef.current) {
+        const { card, handSnapshot } = pendingCardRef.current;
+        pendingCardRef.current = null;
+        setHand(() => {
+          const idx = handSnapshot.indexOf(card);
+          if (idx === -1) return handSnapshot;
+          return [...handSnapshot.slice(0, idx), ...handSnapshot.slice(idx + 1)];
+        });
+      }
       // If trickResult is showing, a completed trick is still on the table
       // and this card starts a new trick.
       if (trickResult) {
@@ -272,13 +320,9 @@ export function GamePage({
   }, [lastEvent]);
 
   function handleCardPlay(card: string) {
+    // Snapshot the hand before sending so we can roll back if the server rejects the play.
+    pendingCardRef.current = { card, handSnapshot: hand };
     sendMessage({ action: "PLAY_CARD", payload: { card } });
-    // Optimistic removal from hand
-    setHand((prev) => {
-      const idx = prev.indexOf(card);
-      if (idx === -1) return prev;
-      return [...prev.slice(0, idx), ...prev.slice(idx + 1)];
-    });
     setLegalCards([]);
   }
 

@@ -101,6 +101,8 @@ export function GameScreen({
   const [passingState, setPassingState] = useState<PassingState | null>(null);
 
   const trickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingCardRef = useRef<{ card: string; handSnapshot: string[] } | null>(null);
 
   function cancelTrickTimer() {
     if (trickTimerRef.current !== null) {
@@ -112,6 +114,25 @@ export function GameScreen({
   useEffect(() => {
     return () => cancelTrickTimer();
   }, []);
+
+  useEffect(() => {
+    if (errorTimerRef.current !== null) {
+      clearTimeout(errorTimerRef.current);
+      errorTimerRef.current = null;
+    }
+    if (error !== null) {
+      errorTimerRef.current = setTimeout(() => {
+        setError(null);
+        errorTimerRef.current = null;
+      }, 5000);
+    }
+    return () => {
+      if (errorTimerRef.current !== null) {
+        clearTimeout(errorTimerRef.current);
+        errorTimerRef.current = null;
+      }
+    };
+  }, [error]);
 
   // Lock to landscape when game screen mounts, restore portrait on unmount
   useEffect(() => {
@@ -133,6 +154,11 @@ export function GameScreen({
     if (event === "ERROR") {
       const p = payload as { message: string };
       setError(p.message);
+      if (pendingCardRef.current) {
+        setHand(pendingCardRef.current.handSnapshot);
+        setLegalCards([]); // keep disabled until next YOUR_TURN
+        pendingCardRef.current = null;
+      }
       return;
     }
 
@@ -255,6 +281,16 @@ export function GameScreen({
         card: string;
         next_to_act_seat: string | null;
       };
+      // Server confirmed our card play — remove it from hand now.
+      if (p.seat === mySeat && pendingCardRef.current) {
+        const { card, handSnapshot } = pendingCardRef.current;
+        pendingCardRef.current = null;
+        setHand(() => {
+          const idx = handSnapshot.indexOf(card);
+          if (idx === -1) return handSnapshot;
+          return [...handSnapshot.slice(0, idx), ...handSnapshot.slice(idx + 1)];
+        });
+      }
       if (trickResult) {
         setTrickResult(null);
         setCurrentTrick([{ seat: p.seat, card: p.card }]);
@@ -319,12 +355,9 @@ export function GameScreen({
   }, [lastEvent]);
 
   function handleCardPlay(card: string) {
+    // Snapshot the hand before sending so we can roll back if the server rejects the play.
+    pendingCardRef.current = { card, handSnapshot: hand };
     sendMessage({ action: "PLAY_CARD", payload: { card } });
-    setHand((prev) => {
-      const idx = prev.indexOf(card);
-      if (idx === -1) return prev;
-      return [...prev.slice(0, idx), ...prev.slice(idx + 1)];
-    });
     setLegalCards([]);
   }
 
@@ -361,6 +394,7 @@ export function GameScreen({
             connected ? styles.dotConnected : styles.dotDisconnected,
           ]}
         />
+        {/* TODO: Add navigation blocking to warn the user before leaving a game mid-play (requires React Navigation's beforeRemove event or a similar mechanism). */}
         <TouchableOpacity onPress={onLeave}>
           <Text style={styles.leaveText}>Leave</Text>
         </TouchableOpacity>
