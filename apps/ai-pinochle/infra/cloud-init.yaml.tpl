@@ -11,6 +11,18 @@ packages:
   - ca-certificates
   - curl
 
+write_files:
+  - path: /opt/pinochle/.env
+    owner: azureuser:azureuser
+    permissions: '0644'
+    content: |
+      DATABASE_URL=postgresql+asyncpg://pinochleadmin:${db_admin_password}@${db_host}:5432/pinochle?ssl=require
+      DATABASE_URL_SYNC=postgresql://pinochleadmin:${db_admin_password}@${db_host}:5432/pinochle?sslmode=require
+      SECRET_KEY=${app_secret_key}
+      ALLOWED_ORIGINS=https://${domain_name}
+      GOOGLE_CLIENT_ID=${google_client_id}
+      DOMAIN=${domain_name}
+
 runcmd:
   # Install Docker (official method)
   - install -m 0755 -d /etc/apt/keyrings
@@ -22,18 +34,6 @@ runcmd:
   - systemctl enable docker
   - usermod -aG docker azureuser
 
-  # Create app directory
+  # Create app directory (write_files creates the file but we ensure the dir exists)
   - mkdir -p /opt/pinochle
-
-  # Write .env file
-  - |
-    cat > /opt/pinochle/.env << 'ENVEOF'
-    DATABASE_URL=postgresql+asyncpg://pinochleadmin:${db_admin_password}@${db_host}:5432/pinochle?ssl=require
-    DATABASE_URL_SYNC=postgresql://pinochleadmin:${db_admin_password}@${db_host}:5432/pinochle?sslmode=require
-    SECRET_KEY=${app_secret_key}
-    ALLOWED_ORIGINS=https://${domain_name}
-    GOOGLE_CLIENT_ID=${google_client_id}
-    DOMAIN=${domain_name}
-    ENVEOF
-
   - chown -R azureuser:azureuser /opt/pinochle
