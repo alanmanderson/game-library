@@ -45,7 +45,8 @@ resource "azurerm_network_security_group" "pinochle" {
     protocol                   = "Tcp"
     source_port_range          = "*"
     destination_port_range     = "22"
-    source_address_prefix      = "*"
+    # TODO: Restrict to specific IPs in production by setting the ssh_allowed_cidr variable
+    source_address_prefix      = var.ssh_allowed_cidr
     destination_address_prefix = "*"
   }
 
