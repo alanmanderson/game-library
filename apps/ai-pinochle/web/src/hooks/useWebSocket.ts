@@ -21,6 +21,7 @@ export function useWebSocket(
   const retriesRef = useRef(0);
   const unmountedRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     unmountedRef.current = false;
@@ -34,6 +35,11 @@ export function useWebSocket(
       ws.onopen = () => {
         setConnected(true);
         retriesRef.current = 0;
+        pingRef.current = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ action: "PING" }));
+          }
+        }, 30000);
       };
 
       ws.onmessage = (e) => {
@@ -47,9 +53,21 @@ export function useWebSocket(
         }
       };
 
-      ws.onclose = () => {
+      ws.onclose = (event) => {
+        if (pingRef.current) { clearInterval(pingRef.current); pingRef.current = null; }
         setConnected(false);
         wsRef.current = null;
+        if (event.code === 4001) {
+          console.warn("[useWebSocket] Authentication failed — not reconnecting");
+          return;
+        }
+        if (event.code === 4004) {
+          console.warn("[useWebSocket] Room not found — not reconnecting");
+          return;
+        }
+        if (event.code === 1000) {
+          return;
+        }
         if (!unmountedRef.current) {
           const delay =
             RECONNECT_DELAYS[Math.min(retriesRef.current, RECONNECT_DELAYS.length - 1)];
@@ -64,6 +82,7 @@ export function useWebSocket(
     return () => {
       unmountedRef.current = true;
       if (timerRef.current) clearTimeout(timerRef.current);
+      if (pingRef.current) { clearInterval(pingRef.current); pingRef.current = null; }
       wsRef.current?.close();
       wsRef.current = null;
     };

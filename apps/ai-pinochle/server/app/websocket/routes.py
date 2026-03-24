@@ -110,9 +110,13 @@ async def _run_websocket(
                 continue
 
             log_message(room_code, "IN", user.username, data)
+            if data.get("action") == "PING":
+                await manager.send_personal(websocket, {"event": "PONG"})
+                continue
             try:
-                await handle_message(websocket, data, room_code, user.id, db)
-                await db.commit()
+                async with manager.get_room_lock(room_code):
+                    await handle_message(websocket, data, room_code, user.id, db)
+                    await db.commit()
             except WebSocketDisconnect:
                 raise
             except Exception:
