@@ -62,8 +62,8 @@ async def game_websocket(websocket: WebSocket, room_code: str):
     finally:
         try:
             await db.__aexit__(None, None, None)
-        except Exception:
-            logger.debug("Session cleanup error (connection already closed)")
+        except Exception as e:
+            logger.debug("Session cleanup error (%s: %s)", type(e).__name__, e)
 
 
 async def _run_websocket(

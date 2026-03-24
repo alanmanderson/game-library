@@ -34,6 +34,11 @@ def _get_game_logger(room_code: str) -> logging.Logger:
     return _game_loggers[room_code]
 
 
+def _sanitize(value: str) -> str:
+    """Replace newlines and control characters with spaces."""
+    return value.replace("\n", " ").replace("\r", " ").replace("\t", " ")
+
+
 def log_message(
     room_code: str, direction: str, who: str, message: dict
 ) -> None:
@@ -45,7 +50,8 @@ def log_message(
     logger = _get_game_logger(room_code)
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
     compact = json.dumps(message, separators=(",", ":"))
-    line = f"[{ts}] {direction:<3} {who:<16} {compact}"
+    safe_who = _sanitize(who)
+    line = f"[{ts}] {direction:<3} {safe_who:<16} {compact}"
     logger.debug(line)
 
 
@@ -53,5 +59,6 @@ def log_event(room_code: str, who: str, event_text: str) -> None:
     """Log a non-message event (connect, disconnect)."""
     logger = _get_game_logger(room_code)
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-    line = f"[{ts}] --- {who:<16} {event_text}"
+    safe_who = _sanitize(who)
+    line = f"[{ts}] --- {safe_who:<16} {event_text}"
     logger.debug(line)
