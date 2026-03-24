@@ -54,8 +54,8 @@ export function RoomScreen({ route, navigation }: Props) {
       }
       setError("");
     } else if (lastEvent.event === "SEAT_CLAIM_FAILED") {
-      const payload = lastEvent.payload as { reason: string };
-      setError(payload.reason);
+      const payload = lastEvent.payload as { message: string };
+      setError(payload.message);
     } else if (lastEvent.event === "HAND_DEALT") {
       const payload = lastEvent.payload as { cards: string[] };
       setMyHand(payload.cards);
