@@ -3,6 +3,8 @@
 export type {
   User,
   AuthState,
+  ServerEvent,
+  ClientAction,
   WsEvent,
   UseWebSocketResult,
   Phase,
