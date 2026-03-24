@@ -77,14 +77,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = (token: string, user: User) => {
     // SECURITY: AsyncStorage is unencrypted. Consider using secure storage
     // (react-native-keychain, expo-secure-store) in production environments.
-    AsyncStorage.setItem("token", token);
-    AsyncStorage.setItem("user", JSON.stringify(user));
+    (async () => {
+      try {
+        await AsyncStorage.setItem("token", token);
+        await AsyncStorage.setItem("user", JSON.stringify(user));
+      } catch {
+        // ignore storage errors
+      }
+    })();
     dispatch({ type: "LOGIN_SUCCESS", token, user });
   };
 
   const logout = () => {
-    AsyncStorage.removeItem("token");
-    AsyncStorage.removeItem("user");
+    (async () => {
+      try {
+        await AsyncStorage.removeItem("token");
+        await AsyncStorage.removeItem("user");
+      } catch {
+        // ignore storage errors
+      }
+    })();
     dispatch({ type: "LOGOUT" });
   };
 
