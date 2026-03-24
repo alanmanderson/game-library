@@ -8,6 +8,9 @@ class Config:
     SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
     SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', 'sqlite:///app.db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SQLALCHEMY_ENGINE_OPTIONS: dict = {
+        'pool_pre_ping': True,
+    }
     LOG_LEVEL: str = os.getenv('LOG_LEVEL', 'INFO')
 
 
@@ -19,6 +22,11 @@ class DevelopmentConfig(Config):
 class ProductionConfig(Config):
     """Production configuration."""
     DEBUG = False
+    SQLALCHEMY_ENGINE_OPTIONS: dict = {
+        'pool_pre_ping': True,
+        'pool_size': 10,
+        'pool_recycle': 300,
+    }
 
     @classmethod
     def init_app(cls):
