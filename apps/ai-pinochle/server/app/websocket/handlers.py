@@ -208,7 +208,7 @@ async def handle_start_game(
         },
         "player_hands": player_hands,
     }
-    game.started_at = datetime.utcnow()
+    game.started_at = datetime.now(timezone.utc)
     await db.flush()
 
     # Build seat -> user_id mapping for targeted sends
