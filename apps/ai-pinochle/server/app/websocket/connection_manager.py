@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import uuid
 from dataclasses import dataclass
@@ -19,6 +20,13 @@ class Connection:
 class ConnectionManager:
     def __init__(self):
         self._rooms: dict[str, list[Connection]] = {}
+        self._room_locks: dict[str, asyncio.Lock] = {}
+
+    def get_room_lock(self, room_code: str) -> asyncio.Lock:
+        """Return the asyncio.Lock for a room, creating it if it doesn't exist."""
+        if room_code not in self._room_locks:
+            self._room_locks[room_code] = asyncio.Lock()
+        return self._room_locks[room_code]
 
     async def connect(self, room_code: str, connection: Connection):
         await connection.websocket.accept()
@@ -50,6 +58,7 @@ class ConnectionManager:
         self._rooms[room_code] = [c for c in conns if c.websocket is not websocket]
         if not self._rooms[room_code]:
             del self._rooms[room_code]
+            self._room_locks.pop(room_code, None)
 
     def _find_connection(self, websocket: WebSocket) -> tuple[str | None, Connection | None]:
         """Look up room_code and Connection for a websocket."""
