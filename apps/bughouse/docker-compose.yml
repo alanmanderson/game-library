@@ -1,0 +1,35 @@
+version: "3.9"
+
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - BUGHOUSE_DATABASE_URL=postgresql+asyncpg://bughouse:bughouse@db:5432/bughouse
+      - BUGHOUSE_JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-me-in-production}
+      - BUGHOUSE_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - BUGHOUSE_GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - BUGHOUSE_GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-http://localhost:8000/api/auth/google/callback}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: bughouse
+      POSTGRES_PASSWORD: bughouse
+      POSTGRES_DB: bughouse
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bughouse"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  pgdata:
