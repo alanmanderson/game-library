@@ -4,12 +4,18 @@ import json
 import logging
 from typing import Optional
 
+import jwt
 from fastapi import WebSocket, WebSocketDisconnect
 
+from app.config import settings
 from app.database import async_session
 from app.models import Player, Table
 from app.game_engine import GameStatus
 from app.services.game_service import game_manager
+from app.services.bot_service import (
+    is_bot_game, is_bot_player, schedule_bot_turn_if_needed,
+    schedule_bot_double_response_if_needed,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,12 +44,16 @@ class ConnectionManager:
         self._connections[table_id][player_id] = ws
 
         # Notify opponent of reconnection
+        failed = []
         for pid, conn in self._connections[table_id].items():
             if pid != player_id:
                 try:
                     await conn.send_json({"type": "opponent_reconnected", "data": {}})
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Failed to send to player {pid}: {e}")
+                    failed.append(pid)
+        for pid in failed:
+            self.disconnect(table_id, pid)
 
     def disconnect(self, table_id: str, player_id: str) -> None:
         """Remove a player's WebSocket connection from the registry."""
@@ -61,8 +71,9 @@ class ConnectionManager:
         if ws:
             try:
                 await ws.send_json(message)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to send to player {player_id}: {e}")
+                self.disconnect(table_id, player_id)
 
     async def broadcast_to_table(
         self, table_id: str, message: dict, exclude: Optional[str] = None
@@ -72,24 +83,32 @@ class ConnectionManager:
         Optionally exclude one player (e.g. the sender).
         """
         conns = self._connections.get(table_id, {})
+        failed = []
         for pid, ws in conns.items():
             if pid != exclude:
                 try:
                     await ws.send_json(message)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Failed to send to player {pid}: {e}")
+                    failed.append(pid)
+        for pid in failed:
+            self.disconnect(table_id, pid)
 
     async def notify_opponent_disconnect(
         self, table_id: str, player_id: str
     ) -> None:
         """Notify the opponent that a player has disconnected."""
         conns = self._connections.get(table_id, {})
+        failed = []
         for pid, ws in conns.items():
             if pid != player_id:
                 try:
                     await ws.send_json({"type": "opponent_disconnected", "data": {}})
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Failed to send to player {pid}: {e}")
+                    failed.append(pid)
+        for pid in failed:
+            self.disconnect(table_id, pid)
 
     def get_player_ids(self, table_id: str) -> list[str]:
         """Return a list of currently connected player IDs for a table."""
@@ -191,6 +210,21 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, player_id: str
     After each action, updated game state is broadcast to both players
     with personalized valid_moves.
     """
+    # Validate JWT token before anything else
+    token = websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=4001, reason="Authentication required")
+        return
+    try:
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
+        token_player_id = payload.get("sub")
+        if token_player_id != player_id:
+            await websocket.close(code=4001, reason="Player ID mismatch")
+            return
+    except jwt.InvalidTokenError:
+        await websocket.close(code=4001, reason="Invalid token")
+        return
+
     # Validate player and table exist before accepting the connection
     async with async_session() as db:
         player = await db.get(Player, player_id)
@@ -206,11 +240,15 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, player_id: str
     await manager.connect(table_id, player_id, websocket)
 
     try:
-        # Send initial game state if engine is active
-        engine = game_manager.get_engine(table_id)
+        # Send initial game state if engine is active (or can be restored)
+        async with async_session() as db:
+            engine = await game_manager.get_or_restore_engine(table_id, db)
         if engine:
             message = await _build_full_message(table_id, player_id)
             await websocket.send_json(message)
+            # If this is a bot game and it's the bot's turn, re-trigger the bot
+            if is_bot_game(table_id):
+                schedule_bot_turn_if_needed(table_id)
         else:
             # Game not started yet or already finished -- send table status
             async with async_session() as db:
@@ -234,55 +272,84 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, player_id: str
                 await _send_error(websocket, "Missing 'action' field")
                 continue
 
-            # All game actions require a database session
-            async with async_session() as db:
-                try:
-                    if action == "roll_dice":
-                        await _handle_roll_dice(db, websocket, table_id, player_id)
+            # All game actions require a database session and per-table lock
+            trigger_bot = False
+            trigger_bot_double = False
 
-                    elif action == "make_move":
-                        from_point = message.get("from_point")
-                        to_point = message.get("to_point")
-                        if from_point is None or to_point is None:
-                            await _send_error(
-                                websocket,
-                                "make_move requires 'from_point' and 'to_point'",
+            async with game_manager._get_lock(table_id):
+                # Snapshot engine state before action so we can restore on DB failure
+                engine = game_manager.get_engine(table_id)
+                state_snapshot = engine.get_state_snapshot() if engine else None
+
+                async with async_session() as db:
+                    try:
+                        if action == "roll_dice":
+                            await _handle_roll_dice(db, websocket, table_id, player_id)
+
+                        elif action == "make_move":
+                            from_point = message.get("from_point")
+                            to_point = message.get("to_point")
+                            if from_point is None or to_point is None:
+                                await _send_error(
+                                    websocket,
+                                    "make_move requires 'from_point' and 'to_point'",
+                                )
+                                continue
+                            if not isinstance(from_point, int) or not isinstance(to_point, int):
+                                await manager.send_to_player(table_id, player_id, {
+                                    "type": "error",
+                                    "data": {"message": "from_point and to_point must be integers"}
+                                })
+                                continue
+                            await _handle_make_move(
+                                db, websocket, table_id, player_id, from_point, to_point
                             )
-                            continue
-                        await _handle_make_move(
-                            db, websocket, table_id, player_id, from_point, to_point
+
+                        elif action == "end_turn":
+                            await _handle_end_turn(db, websocket, table_id, player_id)
+
+                        elif action == "undo_turn":
+                            await _handle_undo_turn(db, websocket, table_id, player_id)
+
+                        elif action == "offer_double":
+                            await _handle_offer_double(db, websocket, table_id, player_id)
+                            trigger_bot_double = True
+
+                        elif action == "accept_double":
+                            await _handle_accept_double(db, websocket, table_id, player_id)
+
+                        elif action == "decline_double":
+                            await _handle_decline_double(db, websocket, table_id, player_id)
+
+                        else:
+                            await _send_error(websocket, f"Unknown action: {action}")
+
+                        await db.commit()
+                        trigger_bot = True
+
+                    except ValueError as e:
+                        await db.rollback()
+                        # Restore engine state on DB failure
+                        if engine and state_snapshot:
+                            await game_manager.restore_engine_from_snapshot(table_id, engine, state_snapshot)
+                        await _send_error(websocket, str(e))
+                    except Exception:
+                        await db.rollback()
+                        # Restore engine state on DB failure
+                        if engine and state_snapshot:
+                            await game_manager.restore_engine_from_snapshot(table_id, engine, state_snapshot)
+                        logger.exception(
+                            "Unexpected error handling action '%s' for player %s at table %s",
+                            action, player_id, table_id,
                         )
+                        await _send_error(websocket, "Internal server error")
 
-                    elif action == "end_turn":
-                        await _handle_end_turn(db, websocket, table_id, player_id)
-
-                    elif action == "undo_turn":
-                        await _handle_undo_turn(db, websocket, table_id, player_id)
-
-                    elif action == "offer_double":
-                        await _handle_offer_double(db, websocket, table_id, player_id)
-
-                    elif action == "accept_double":
-                        await _handle_accept_double(db, websocket, table_id, player_id)
-
-                    elif action == "decline_double":
-                        await _handle_decline_double(db, websocket, table_id, player_id)
-
-                    else:
-                        await _send_error(websocket, f"Unknown action: {action}")
-
-                    await db.commit()
-
-                except ValueError as e:
-                    await db.rollback()
-                    await _send_error(websocket, str(e))
-                except Exception:
-                    await db.rollback()
-                    logger.exception(
-                        "Unexpected error handling action '%s' for player %s at table %s",
-                        action, player_id, table_id,
-                    )
-                    await _send_error(websocket, "Internal server error")
+            # Schedule bot turn outside the lock to avoid deadlocks
+            if trigger_bot and is_bot_game(table_id):
+                if trigger_bot_double:
+                    schedule_bot_double_response_if_needed(table_id)
+                else:
+                    schedule_bot_turn_if_needed(table_id)
 
     except WebSocketDisconnect:
         logger.info("Player %s disconnected from table %s", player_id, table_id)
@@ -376,7 +443,7 @@ async def _handle_decline_double(
     db, websocket: WebSocket, table_id: str, player_id: str
 ) -> None:
     """Handle a decline_double action: opponent forfeits the game."""
-    result = await game_manager.decline_double(db, table_id, player_id)
+    await game_manager.decline_double(db, table_id, player_id)
 
     await _send_game_state_to_all(table_id, db=db)
 

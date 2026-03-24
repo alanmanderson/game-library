@@ -13,6 +13,7 @@ import type {
   DashboardData,
   AuthResponse,
 } from "../types/game";
+import { TOKEN_KEY } from "../constants";
 
 // ---------------------------------------------------------------------------
 // Base URL -- can be overridden via the VITE_API_URL env variable.
@@ -25,8 +26,6 @@ const API_URL: string = import.meta.env.VITE_API_URL || "";
 // ---------------------------------------------------------------------------
 // Token management
 // ---------------------------------------------------------------------------
-
-const TOKEN_KEY = "backgammon_token";
 
 export function getStoredToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
@@ -64,8 +63,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   }
 
   const response = await fetch(`${API_URL}${path}`, {
-    headers,
     ...options,
+    headers: { ...headers, ...(options?.headers as Record<string, string>) },
   });
 
   if (!response.ok) {
@@ -170,6 +169,14 @@ export function joinTable(tableId: string, playerId: string): Promise<Table> {
   return request<Table>(`/api/tables/${tableId}/join`, {
     method: "POST",
     body: JSON.stringify({ player_id: playerId }),
+  });
+}
+
+/** Invite a bot to join the table as the opponent. */
+export function inviteBot(tableId: string): Promise<Table> {
+  return request<Table>(`/api/tables/${tableId}/invite-bot`, {
+    method: "POST",
+    body: JSON.stringify({}),
   });
 }
 

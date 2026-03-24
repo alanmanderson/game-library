@@ -1,7 +1,9 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import type { GameState, Color, Table, Move, WSMessage } from "../types/game";
 import { useWebSocket } from "../hooks/useWebSocket";
+import { STORAGE_KEY, BOT_PLAYER_ID } from "../constants";
+import { inviteBot } from "../services/api";
 import Board from "./Board";
 import Dice from "./Dice";
 import GameControls from "./GameControls";
@@ -19,11 +21,16 @@ function Game() {
   const [opponentConnected, setOpponentConnected] = useState(true);
   const [opponentReconnected, setOpponentReconnected] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [invitingBot, setInvitingBot] = useState(false);
+
+  const errorTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const reconnectedTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const copiedTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
   // Get player from localStorage
   const player = useMemo(() => {
     try {
-      const stored = localStorage.getItem("backgammon_player");
+      const stored = localStorage.getItem(STORAGE_KEY);
       return stored ? JSON.parse(stored) : null;
     } catch {
       return null;
@@ -75,7 +82,8 @@ function Game() {
 
       case "error":
         setError(message.data.message);
-        setTimeout(() => setError(null), 5000);
+        if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current);
+        errorTimeoutRef.current = setTimeout(() => setError(null), 5000);
         break;
 
       case "opponent_disconnected":
@@ -86,7 +94,8 @@ function Game() {
       case "opponent_reconnected":
         setOpponentConnected(true);
         setOpponentReconnected(true);
-        setTimeout(() => setOpponentReconnected(false), 3000);
+        if (reconnectedTimeoutRef.current) clearTimeout(reconnectedTimeoutRef.current);
+        reconnectedTimeoutRef.current = setTimeout(() => setOpponentReconnected(false), 3000);
         break;
     }
   }, []);
@@ -101,9 +110,13 @@ function Game() {
     onOpen: handleWsOpen,
   });
 
-  // Clear error on unmount
+  // Clear timeouts on unmount
   useEffect(() => {
-    return () => setError(null);
+    return () => {
+      if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current);
+      if (reconnectedTimeoutRef.current) clearTimeout(reconnectedTimeoutRef.current);
+      if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
+    };
   }, []);
 
   // ----- Actions -----
@@ -232,6 +245,10 @@ function Game() {
 
   const pipCounts = useMemo(() => {
     if (!gameState) return { white: 0, black: 0 };
+    if (gameState.pip_white !== undefined && gameState.pip_black !== undefined) {
+      return { white: gameState.pip_white, black: gameState.pip_black };
+    }
+    // Fallback to client-side calculation
     let whitePips = 0;
     let blackPips = 0;
     for (let i = 1; i <= 24; i++) {
@@ -244,6 +261,22 @@ function Game() {
     return { white: whitePips, black: blackPips };
   }, [gameState]);
 
+  const isBotGame = !!(table && (
+    table.white_player?.id === BOT_PLAYER_ID || table.black_player?.id === BOT_PLAYER_ID
+  ));
+
+  const handleInviteBot = useCallback(async () => {
+    if (!tableId) return;
+    setInvitingBot(true);
+    try {
+      await inviteBot(tableId);
+    } catch {
+      // Game state will arrive via WebSocket
+    } finally {
+      setInvitingBot(false);
+    }
+  }, [tableId]);
+
   const myScore = table && myColor ? (myColor === "white" ? table.white_match_score : table.black_match_score) : 0;
   const opponentScore = table && myColor ? (myColor === "white" ? table.black_match_score : table.white_match_score) : 0;
   const myPips = myColor === "white" ? pipCounts.white : pipCounts.black;
@@ -254,7 +287,8 @@ function Game() {
     try {
       await navigator.clipboard.writeText(tableId);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
+      copiedTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
     } catch {
       const el = document.createElement("input");
       el.value = tableId;
@@ -263,7 +297,8 @@ function Game() {
       document.execCommand("copy");
       document.body.removeChild(el);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
+      copiedTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
     }
   }, [tableId]);
 
@@ -341,13 +376,19 @@ function Game() {
             <code className="table-id-code">{tableId}</code>
             <button
               className="copy-id-btn"
-              onClick={() => {
-                navigator.clipboard.writeText(tableId!).catch(() => {});
-              }}
+              onClick={handleCopy}
             >
-              Copy
+              {copied ? "Copied!" : "Copy"}
             </button>
           </div>
+          <div className="waiting-or">or</div>
+          <button
+            className="invite-bot-btn"
+            onClick={handleInviteBot}
+            disabled={invitingBot}
+          >
+            {invitingBot ? "Inviting..." : "Play vs Bot"}
+          </button>
         </div>
       </div>
     );
@@ -393,13 +434,13 @@ function Game() {
         </Link>
       </div>
 
-      {/* Connection/error banners */}
-      {!opponentConnected && !opponentReconnected && (
+      {/* Connection/error banners (hidden for bot games) */}
+      {!isBotGame && !opponentConnected && !opponentReconnected && (
         <div className="connection-banner">
           {opponentName} disconnected. Waiting for them to reconnect...
         </div>
       )}
-      {opponentReconnected && (
+      {!isBotGame && opponentReconnected && (
         <div className="connection-banner reconnected">
           {opponentName} reconnected!
         </div>
@@ -472,7 +513,7 @@ function Game() {
             )}
           </div>
 
-          <GameInfo table={table} />
+          <GameInfo table={table} gameStatus={gameState.status} />
         </div>
       </div>
     </div>

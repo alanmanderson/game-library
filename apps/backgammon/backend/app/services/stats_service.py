@@ -15,13 +15,20 @@ async def update_stats(
     black_player_id: str,
     winner_id: Optional[str],
     win_type: Optional[WinType],
+    cube_value: int = 1,
 ) -> None:
     """Update PlayerStats for both players after a game.
 
     Creates stats records if they don't exist yet for a given player/opponent pair.
     Increments wins/losses and type-specific counters based on the game result.
+    The score is multiplied by the doubling cube value.
+    Skips stats for bot games.
     """
-    score = win_type.value if win_type else 1
+    from app.services.bot_service import BOT_PLAYER_ID
+    if white_player_id == BOT_PLAYER_ID or black_player_id == BOT_PLAYER_ID:
+        return
+
+    score = (win_type.value if win_type else 1) * cube_value
 
     for player_id, opponent_id in [
         (white_player_id, black_player_id),
@@ -83,9 +90,19 @@ async def get_player_stats(db: AsyncSession, player_id: str) -> dict:
     total_wins = sum(s.games_won for s in stats_list)
     total_losses = sum(s.games_lost for s in stats_list)
 
+    # Batch-load all opponents to avoid N+1 queries
+    opponent_ids = {s.opponent_id for s in stats_list if s.opponent_id}
+    if opponent_ids:
+        opponents_result = await db.execute(
+            select(Player).where(Player.id.in_(opponent_ids))
+        )
+        opponent_lookup = {p.id: p for p in opponents_result.scalars().all()}
+    else:
+        opponent_lookup = {}
+
     per_opponent = []
     for s in stats_list:
-        opponent = await db.get(Player, s.opponent_id)
+        opponent = opponent_lookup.get(s.opponent_id)
         per_opponent.append({
             "opponent_nickname": opponent.nickname if opponent else "Unknown",
             "games_played": s.games_played,

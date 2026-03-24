@@ -260,6 +260,34 @@
   opacity: 0.85;
 }
 
+.waiting-or {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  margin: 0.25rem 0;
+}
+
+.invite-bot-btn {
+  background: var(--bg-secondary);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  padding: 0.5rem 1.2rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: all 0.15s;
+}
+
+.invite-bot-btn:hover {
+  background: var(--accent);
+  color: var(--bg-primary);
+}
+
+.invite-bot-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .player-pill {
   display: inline-flex;
   align-items: center;

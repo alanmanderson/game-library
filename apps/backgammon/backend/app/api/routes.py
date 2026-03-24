@@ -2,12 +2,11 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_
+from sqlalchemy import select, or_, func
 
 from app.database import get_db
 from app.models import Player, Table, MoveRecord
 from app.schemas import (
-    PlayerCreate,
     PlayerResponse,
     TableCreate,
     TableResponse,
@@ -19,7 +18,11 @@ from app.schemas import (
 )
 from app.services.game_service import game_manager
 from app.services.stats_service import get_player_stats
+from app.services.bot_service import (
+    BOT_PLAYER_ID, ensure_bot_player, schedule_bot_turn_if_needed,
+)
 from app.api.websocket import notify_game_started
+from app.api.auth import get_current_player
 
 router = APIRouter(prefix="/api")
 
@@ -29,21 +32,11 @@ router = APIRouter(prefix="/api")
 # ------------------------------------------------------------------
 
 
-@router.post("/players", response_model=PlayerResponse)
-async def create_player(
-    data: PlayerCreate, db: AsyncSession = Depends(get_db)
-) -> Player:
-    """Register a new player with a nickname (backwards-compatible guest creation)."""
-    player = Player(nickname=data.nickname, is_guest=True, auth_provider="guest")
-    db.add(player)
-    await db.flush()
-    await db.refresh(player)
-    return player
-
-
 @router.get("/players/{player_id}", response_model=PlayerResponse)
 async def get_player(
-    player_id: str, db: AsyncSession = Depends(get_db)
+    player_id: str,
+    current_player: Player = Depends(get_current_player),
+    db: AsyncSession = Depends(get_db),
 ) -> Player:
     """Retrieve a player by ID."""
     player = await db.get(Player, player_id)
@@ -54,12 +47,16 @@ async def get_player(
 
 @router.get("/players/{player_id}/stats", response_model=StatsOverview)
 async def player_stats(
-    player_id: str, db: AsyncSession = Depends(get_db)
+    player_id: str,
+    current_player: Player = Depends(get_current_player),
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Get aggregated statistics for a player across all opponents.
 
     Returns 403 for guest players since their stats are not persisted.
     """
+    if current_player.id != player_id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this resource")
     player = await db.get(Player, player_id)
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
@@ -73,12 +70,19 @@ async def player_stats(
 
 @router.get("/players/{player_id}/dashboard", response_model=DashboardResponse)
 async def player_dashboard(
-    player_id: str, db: AsyncSession = Depends(get_db)
+    player_id: str,
+    current_player: Player = Depends(get_current_player),
+    db: AsyncSession = Depends(get_db),
+    limit: int = 50,
+    offset: int = 0,
 ) -> dict:
     """Get a player's dashboard with past games, results, and summary stats.
 
     Returns 404 if the player does not exist, 403 for guest players.
+    Supports pagination via limit and offset query parameters.
     """
+    if current_player.id != player_id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this resource")
     player = await db.get(Player, player_id)
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
@@ -88,20 +92,49 @@ async def player_dashboard(
             detail="Dashboard is not available for guest players",
         )
 
-    # Query all tables where the player participated and the game actually started
+    # Base filter for tables where the player participated and the game started
+    table_filter = [
+        or_(
+            Table.white_player_id == player_id,
+            Table.black_player_id == player_id,
+        ),
+        Table.status != "waiting",
+    ]
+
+    # Get total count of matching tables
+    count_result = await db.execute(
+        select(func.count(Table.id)).where(*table_filter)
+    )
+    total_count = count_result.scalar()
+
+    # Query tables with pagination
     stmt = (
         select(Table)
-        .where(
-            or_(
-                Table.white_player_id == player_id,
-                Table.black_player_id == player_id,
-            ),
-            Table.status != "waiting",
-        )
+        .where(*table_filter)
         .order_by(Table.created_at.desc())
+        .limit(limit)
+        .offset(offset)
     )
     result = await db.execute(stmt)
     tables = result.scalars().all()
+
+    # Batch-load all opponents to avoid N+1 queries
+    opponent_ids: set[str] = set()
+    for table in tables:
+        if table.white_player_id == player_id:
+            if table.black_player_id:
+                opponent_ids.add(table.black_player_id)
+        else:
+            if table.white_player_id:
+                opponent_ids.add(table.white_player_id)
+
+    if opponent_ids:
+        opponents_result = await db.execute(
+            select(Player).where(Player.id.in_(opponent_ids))
+        )
+        opponent_lookup = {p.id: p for p in opponents_result.scalars().all()}
+    else:
+        opponent_lookup = {}
 
     games: list[GameHistoryItem] = []
     wins = 0
@@ -117,9 +150,9 @@ async def player_dashboard(
             player_color = "black"
             opponent_id = table.white_player_id
 
-        # Load opponent nickname
+        # Look up opponent nickname from batch-loaded dict
         if opponent_id:
-            opponent = await db.get(Player, opponent_id)
+            opponent = opponent_lookup.get(opponent_id)
             opponent_nickname = opponent.nickname if opponent else "Unknown"
         else:
             opponent_nickname = "Unknown"
@@ -163,6 +196,7 @@ async def player_dashboard(
         losses=losses,
         win_rate=win_rate,
         abandoned_games=abandoned_games,
+        total_count=total_count,
         games=games,
     )
 
@@ -174,16 +208,15 @@ async def player_dashboard(
 
 @router.post("/tables", response_model=TableResponse)
 async def create_table(
-    data: TableCreate, db: AsyncSession = Depends(get_db)
+    data: TableCreate,
+    current_player: Player = Depends(get_current_player),
+    db: AsyncSession = Depends(get_db),
 ) -> Table:
     """Create a new game table. The creating player waits for an opponent."""
-    player = await db.get(Player, data.player_id)
-    if not player:
-        raise HTTPException(status_code=404, detail="Player not found")
-    table = await game_manager.create_table(db, data.player_id)
+    table = await game_manager.create_table(db, current_player.id)
     await db.refresh(table)
     # Eagerly load the white_player relationship for the response
-    table.white_player = player
+    table.white_player = current_player
     return table
 
 
@@ -205,14 +238,14 @@ async def get_table(
 
 @router.post("/tables/{table_id}/join", response_model=TableResponse)
 async def join_table(
-    table_id: str, data: JoinTableRequest, db: AsyncSession = Depends(get_db)
+    table_id: str,
+    data: JoinTableRequest,
+    current_player: Player = Depends(get_current_player),
+    db: AsyncSession = Depends(get_db),
 ) -> Table:
     """Join an existing table as the second player. Starts the game."""
-    player = await db.get(Player, data.player_id)
-    if not player:
-        raise HTTPException(status_code=404, detail="Player not found")
     try:
-        table = await game_manager.join_table(db, table_id, data.player_id)
+        table = await game_manager.join_table(db, table_id, current_player.id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     # Load relationships for the response
@@ -224,6 +257,35 @@ async def join_table(
     # Notify any WebSocket clients already connected (the first player
     # is sitting on a "waiting" screen and needs the initial game state).
     await notify_game_started(table_id)
+
+    return table
+
+
+@router.post("/tables/{table_id}/invite-bot", response_model=TableResponse)
+async def invite_bot(
+    table_id: str,
+    current_player: Player = Depends(get_current_player),
+    db: AsyncSession = Depends(get_db),
+) -> Table:
+    """Invite the bot to join a table as the opponent."""
+    await ensure_bot_player(db)
+    try:
+        table = await game_manager.join_table(db, table_id, BOT_PLAYER_ID)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    # Load relationships for the response
+    if table.white_player_id:
+        table.white_player = await db.get(Player, table.white_player_id)
+    if table.black_player_id:
+        table.black_player = await db.get(Player, table.black_player_id)
+
+    await db.commit()
+
+    # Notify WebSocket clients of game start
+    await notify_game_started(table_id)
+
+    # If the bot goes first, schedule its turn
+    schedule_bot_turn_if_needed(table_id)
 
     return table
 
