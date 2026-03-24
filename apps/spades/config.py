@@ -8,6 +8,7 @@ class Config:
     SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
     SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', 'sqlite:///app.db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    LOG_LEVEL: str = os.getenv('LOG_LEVEL', 'INFO')
 
 
 class DevelopmentConfig(Config):

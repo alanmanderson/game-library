@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from flask import Flask, jsonify
 from flask_sqlalchemy import SQLAlchemy
@@ -17,6 +18,13 @@ def create_app(config_name: str | None = None) -> Flask:
     from config import config as config_map
     app = Flask(__name__)
     app.config.from_object(config_map.get(config_name, config_map['default']))
+
+    # Configure logging
+    logging.basicConfig(
+        level=app.config.get('LOG_LEVEL', 'INFO'),
+        format='%(asctime)s %(levelname)s %(name)s: %(message)s',
+    )
+    app.logger.setLevel(app.config.get('LOG_LEVEL', 'INFO'))
 
     db.init_app(app)
     migrate.init_app(app, db)
