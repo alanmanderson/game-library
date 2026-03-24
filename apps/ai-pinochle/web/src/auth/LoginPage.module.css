@@ -29,11 +29,6 @@
   font-weight: 500;
 }
 
-.optional {
-  font-weight: 400;
-  color: #888;
-}
-
 .input {
   padding: 0.5rem 0.75rem;
   border: 1px solid #ccc;
@@ -45,11 +40,6 @@
   outline: none;
   border-color: #4a90d9;
   box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.25);
-}
-
-.fieldError {
-  color: #d32f2f;
-  font-size: 0.75rem;
 }
 
 .serverError {

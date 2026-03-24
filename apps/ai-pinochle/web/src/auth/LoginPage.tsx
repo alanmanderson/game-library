@@ -1,23 +1,19 @@
 import { GoogleLogin, type CredentialResponse } from "@react-oauth/google";
 import { type FormEvent, useState } from "react";
-import type { AuthResponse, FieldErrors } from "@pinochle/shared";
-import { validate } from "@pinochle/shared";
+import type { AuthResponse } from "@pinochle/shared";
 import { ApiError, post } from "../api/client.ts";
 import { useAuth } from "./AuthContext.tsx";
-import styles from "./RegisterPage.module.css";
+import styles from "./LoginPage.module.css";
 
-interface RegisterPageProps {
-  onSwitchToLogin: () => void;
+interface LoginPageProps {
+  onSwitchToRegister: () => void;
 }
 
-export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
+export function LoginPage({ onSwitchToRegister }: LoginPageProps) {
   const { login } = useAuth();
 
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [serverError, setServerError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -25,15 +21,14 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
     e.preventDefault();
     setServerError("");
 
-    const errors = validate(email, password, firstName, lastName);
-    setFieldErrors(errors);
-    if (Object.keys(errors).length > 0) return;
+    if (!email || !password) {
+      setServerError("Please enter your email and password.");
+      return;
+    }
 
     setSubmitting(true);
     try {
-      const res = await post<AuthResponse>("/auth/register", {
-        first_name: firstName,
-        last_name: lastName,
+      const res = await post<AuthResponse>("/auth/login", {
         email,
         password,
       });
@@ -81,35 +76,7 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
   return (
     <div className={styles.container}>
       <form className={styles.form} onSubmit={handleSubmit}>
-        <h1 className={styles.title}>Create Account</h1>
-
-        <label className={styles.label}>
-          First Name
-          <input
-            className={styles.input}
-            type="text"
-            value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
-            autoComplete="given-name"
-          />
-          {fieldErrors.first_name && (
-            <span className={styles.fieldError}>{fieldErrors.first_name}</span>
-          )}
-        </label>
-
-        <label className={styles.label}>
-          Last Name
-          <input
-            className={styles.input}
-            type="text"
-            value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
-            autoComplete="family-name"
-          />
-          {fieldErrors.last_name && (
-            <span className={styles.fieldError}>{fieldErrors.last_name}</span>
-          )}
-        </label>
+        <h1 className={styles.title}>Sign In</h1>
 
         <label className={styles.label}>
           Email
@@ -120,9 +87,6 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
             onChange={(e) => setEmail(e.target.value)}
             autoComplete="email"
           />
-          {fieldErrors.email && (
-            <span className={styles.fieldError}>{fieldErrors.email}</span>
-          )}
         </label>
 
         <label className={styles.label}>
@@ -132,17 +96,14 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            autoComplete="new-password"
+            autoComplete="current-password"
           />
-          {fieldErrors.password && (
-            <span className={styles.fieldError}>{fieldErrors.password}</span>
-          )}
         </label>
 
         {serverError && <p className={styles.serverError}>{serverError}</p>}
 
         <button className={styles.button} type="submit" disabled={submitting}>
-          {submitting ? "Creating account..." : "Register"}
+          {submitting ? "Signing in..." : "Sign In"}
         </button>
       </form>
 
@@ -153,14 +114,16 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
       <div className={styles.googleButton}>
         <GoogleLogin
           onSuccess={handleGoogleSuccess}
-          onError={() => setServerError("Google sign-in failed. Please try again.")}
+          onError={() =>
+            setServerError("Google sign-in failed. Please try again.")
+          }
         />
       </div>
 
       <p className={styles.switchLink}>
-        Already have an account?{" "}
-        <button type="button" onClick={onSwitchToLogin}>
-          Sign in
+        Don't have an account?{" "}
+        <button type="button" onClick={onSwitchToRegister}>
+          Create one
         </button>
       </p>
     </div>
