@@ -85,7 +85,7 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
 async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == body.email))
     user = result.scalar_one_or_none()
-    if user is None or not bcrypt.checkpw(
+    if user is None or user.password_hash is None or not bcrypt.checkpw(
         body.password.encode(), user.password_hash.encode()
     ):
         raise HTTPException(
