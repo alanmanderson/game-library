@@ -43,6 +43,7 @@ export {
   SUIT_LETTER,
   cardSuit,
   cardRank,
+  cardLabel,
   sortHand,
 } from "./cards";
 

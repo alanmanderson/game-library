@@ -50,13 +50,16 @@ export function BiddingPhase({ biddingState, mySeat, sendMessage }: Props) {
         <div className={styles.controls}>
           <p className={styles.turnLabel}>Your turn to bid</p>
           <div className={styles.bidRow}>
-            <input
-              type="number"
-              className={styles.bidInput}
-              min={minimum_valid_bid}
-              value={bidAmount}
-              onChange={(e) => setBidAmount(Number(e.target.value))}
-            />
+            <label className={styles.bidLabel}>
+              Bid amount
+              <input
+                type="number"
+                className={styles.bidInput}
+                min={minimum_valid_bid}
+                value={bidAmount}
+                onChange={(e) => setBidAmount(Number(e.target.value))}
+              />
+            </label>
             <button className={styles.bidButton} onClick={handleBid}>
               Bid
             </button>

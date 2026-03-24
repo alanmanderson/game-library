@@ -1,4 +1,4 @@
-import { cardSuit, sortHand, SUIT_LETTER } from "@pinochle/shared";
+import { cardSuit, cardLabel, sortHand, SUIT_LETTER } from "@pinochle/shared";
 import styles from "./HandDisplay.module.css";
 
 interface Props {
@@ -35,9 +35,13 @@ export function HandDisplay({ cards, trumpSuit, onCardClick, legalCards }: Props
           <img
             key={`${card}-${i}`}
             src={cardToImage(card)}
-            alt={card}
+            alt={cardLabel(card)}
             className={classes}
             onClick={clickable ? () => onCardClick!(card) : undefined}
+            onKeyDown={clickable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onCardClick!(card); } } : undefined}
+            tabIndex={clickable ? 0 : undefined}
+            role={clickable ? "button" : undefined}
+            aria-label={clickable ? `Play ${cardLabel(card)}` : undefined}
           />
         );
       })}

@@ -1,5 +1,5 @@
 import type { CardPlayed, TrickResult } from "@pinochle/shared";
-import { SEAT_LABELS } from "@pinochle/shared";
+import { SEAT_LABELS, cardLabel } from "@pinochle/shared";
 import styles from "./TrickPhase.module.css";
 
 interface Props {
@@ -106,7 +106,7 @@ function CardSlot({ entry, isWinner }: { entry: CardPlayed | null; isWinner: boo
   return (
     <img
       src={cardToImage(entry.card)}
-      alt={entry.card}
+      alt={cardLabel(entry.card)}
       className={`${styles.trickCard} ${isWinner ? styles.winner : ""}`}
     />
   );

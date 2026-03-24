@@ -147,7 +147,11 @@ export function LobbyPage() {
         <div className={styles.section}>
           <h2 className={styles.sectionTitle}>Join Room</h2>
           <div className={styles.joinRow}>
+            <label className={styles.srOnly} htmlFor="joinCodeInput">
+              Room code
+            </label>
             <input
+              id="joinCodeInput"
               className={styles.input}
               type="text"
               placeholder="Room code"
