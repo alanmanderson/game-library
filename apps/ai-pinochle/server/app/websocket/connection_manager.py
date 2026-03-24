@@ -2,6 +2,7 @@ import asyncio
 import logging
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from starlette.websockets import WebSocket
 
@@ -21,6 +22,12 @@ class ConnectionManager:
     def __init__(self):
         self._rooms: dict[str, list[Connection]] = {}
         self._room_locks: dict[str, asyncio.Lock] = {}
+        # Tracks when a player disconnected from a room.
+        # Shape: {room_code: {user_id: datetime}}
+        # A background task should periodically check these timestamps and
+        # forfeit the game if a player has been disconnected for longer than
+        # a configurable timeout (e.g. 5 minutes).
+        self.disconnect_times: dict[str, dict[uuid.UUID, datetime]] = {}
 
     def get_room_lock(self, room_code: str) -> asyncio.Lock:
         """Return the asyncio.Lock for a room, creating it if it doesn't exist."""
@@ -59,6 +66,16 @@ class ConnectionManager:
         if not self._rooms[room_code]:
             del self._rooms[room_code]
             self._room_locks.pop(room_code, None)
+
+    def record_disconnect(self, room_code: str, user_id: uuid.UUID):
+        """Record the time a player disconnected from a room."""
+        self.disconnect_times.setdefault(room_code, {})[user_id] = datetime.now(timezone.utc)
+
+    def clear_disconnect(self, room_code: str, user_id: uuid.UUID):
+        """Remove a player's disconnect timestamp when they reconnect."""
+        self.disconnect_times.get(room_code, {}).pop(user_id, None)
+        if not self.disconnect_times.get(room_code):
+            self.disconnect_times.pop(room_code, None)
 
     def _find_connection(self, websocket: WebSocket) -> tuple[str | None, Connection | None]:
         """Look up room_code and Connection for a websocket."""

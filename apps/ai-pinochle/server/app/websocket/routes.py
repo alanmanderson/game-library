@@ -76,6 +76,7 @@ async def _run_websocket(
 
     conn = Connection(websocket=websocket, user_id=user.id, username=user.username)
     await manager.connect(room_code, conn)
+    manager.clear_disconnect(room_code, user.id)
     log_event(room_code, user.username, "connected")
 
     # Reject connections to non-existent rooms
@@ -133,6 +134,7 @@ async def _run_websocket(
         pass
     finally:
         manager.disconnect(room_code, websocket)
+        manager.record_disconnect(room_code, user.id)
         log_event(room_code, user.username, "disconnected")
 
 
