@@ -53,17 +53,24 @@ async def game_websocket(websocket: WebSocket, room_code: str):
 
     if db_factory:
         db = db_factory()
+        session = await db.__aenter__()
+        try:
+            await _run_websocket(websocket, room_code, token, session)
+        finally:
+            try:
+                await db.__aexit__(None, None, None)
+            except Exception:
+                pass
     else:
         db = AsyncSessionLocal()
-
-    session = await db.__aenter__()
-    try:
-        await _run_websocket(websocket, room_code, token, session)
-    finally:
+        session = await db.__aenter__()
         try:
-            await db.__aexit__(None, None, None)
-        except Exception as e:
-            logger.debug("Session cleanup error (%s: %s)", type(e).__name__, e)
+            await _run_websocket(websocket, room_code, token, session)
+        finally:
+            try:
+                await db.__aexit__(None, None, None)
+            except Exception as e:
+                logger.debug("Session cleanup error (%s: %s)", type(e).__name__, e)
 
 
 async def _run_websocket(

@@ -233,6 +233,7 @@ async def test_start_game_unique_hands(client: AsyncClient, sync_client: TestCli
     for token in tokens:
         ctx = sync_client.websocket_connect(f"/ws/{room_code}?token={token}")
         ws = ctx.__enter__()
+        ws.receive_json()  # drain initial LOBBY_STATE_UPDATED
         contexts.append(ctx)
         websockets.append(ws)
 
@@ -265,6 +266,7 @@ async def test_four_websockets_connected(client: AsyncClient, sync_client: TestC
     for token in tokens:
         ctx = sync_client.websocket_connect(f"/ws/{room_code}?token={token}")
         ws = ctx.__enter__()
+        ws.receive_json()  # drain initial LOBBY_STATE_UPDATED
         contexts.append(ctx)
         websockets.append(ws)
 
@@ -298,6 +300,7 @@ async def test_four_websockets_broadcast_after_seating(client: AsyncClient, sync
     for token in tokens:
         ctx = sync_client.websocket_connect(f"/ws/{room_code}?token={token}")
         ws = ctx.__enter__()
+        ws.receive_json()  # drain initial LOBBY_STATE_UPDATED
         contexts.append(ctx)
         websockets.append(ws)
 
@@ -313,12 +316,10 @@ async def test_four_websockets_broadcast_after_seating(client: AsyncClient, sync
             data = ws.receive_json()
             assert data["event"] == "BIDDING_TURN", f"ws[{i}] got {data['event']}"
 
-        # Now send another action that triggers a broadcast — this is the key part.
-        # Since we're in BIDDING phase, SELECT_SEAT returns personal ERROR (no broadcast).
-        # Use an UNKNOWN action to get a personal ERROR, confirming WS is still alive.
+        # Confirm WS is still alive after the broadcast cycle.
         websockets[1].send_json({"action": "PING", "payload": {}})
         data = websockets[1].receive_json()
-        assert data["event"] == "ERROR"
+        assert data["event"] == "PONG"
     finally:
         for ctx in contexts:
             ctx.__exit__(None, None, None)
@@ -334,6 +335,7 @@ def _open_four_ws(sync_client, room_code, tokens):
     for token in tokens:
         ctx = sync_client.websocket_connect(f"/ws/{room_code}?token={token}")
         ws = ctx.__enter__()
+        ws.receive_json()  # drain initial LOBBY_STATE_UPDATED
         contexts.append(ctx)
         websockets.append(ws)
     return websockets, contexts
@@ -342,20 +344,22 @@ def _open_four_ws(sync_client, room_code, tokens):
 def _start_game_and_get_bidding_state(sync_client, room_code, tokens):
     """Start game with 4 connected websockets, drain HAND_DEALT + BIDDING_TURN.
 
-    Returns (websockets, contexts, bidding_turn_payload).
+    Returns (websockets, contexts, bidding_turn_payload, hands_by_seat).
     """
     websockets, contexts = _open_four_ws(sync_client, room_code, tokens)
 
     websockets[0].send_json({"action": "START_GAME", "payload": {}})
 
-    for ws in websockets:
-        ws.receive_json()  # HAND_DEALT
+    hands = {}
+    for i, ws in enumerate(websockets):
+        data = ws.receive_json()  # HAND_DEALT
+        hands[SEATS[i]] = data["payload"]["cards"]
 
     bidding_turn = websockets[0].receive_json()  # BIDDING_TURN
     for ws in websockets[1:]:
         ws.receive_json()  # drain BIDDING_TURN from others
 
-    return websockets, contexts, bidding_turn["payload"]
+    return websockets, contexts, bidding_turn["payload"], hands
 
 
 def _drain_broadcast(websockets):
@@ -372,7 +376,7 @@ def _drain_broadcast(websockets):
 async def test_submit_bid_success(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
     """First player bids 25 → BIDDING_TURN with correct highest bid, next bidder, min=26."""
     room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
-    websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
+    websockets, contexts, bt, hands = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
     try:
         first_bidder = bt["next_to_act_seat"]
         bidder_idx = SEATS.index(first_bidder)
@@ -386,7 +390,7 @@ async def test_submit_bid_success(client: AsyncClient, sync_client: TestClient, 
         assert data["event"] == "BIDDING_TURN"
         assert data["payload"]["current_highest_bid"] == 25
         assert data["payload"]["highest_bidder_seat"] == first_bidder
-        assert data["payload"]["minimum_valid_bid"] == 21
+        assert data["payload"]["minimum_valid_bid"] == 26
         expected_next = SEATS[(bidder_idx + 1) % 4]
         assert data["payload"]["next_to_act_seat"] == expected_next
     finally:
@@ -397,7 +401,7 @@ async def test_submit_bid_success(client: AsyncClient, sync_client: TestClient, 
 async def test_submit_bid_not_your_turn(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
     """Wrong player bids → ERROR."""
     room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
-    websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
+    websockets, contexts, bt, hands = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
     try:
         first_bidder = bt["next_to_act_seat"]
         wrong_idx = (SEATS.index(first_bidder) + 1) % 4
@@ -418,7 +422,7 @@ async def test_submit_bid_not_your_turn(client: AsyncClient, sync_client: TestCl
 async def test_submit_bid_too_low(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
     """Bid below minimum → ERROR."""
     room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
-    websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
+    websockets, contexts, bt, hands = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
     try:
         bidder_idx = SEATS.index(bt["next_to_act_seat"])
 
@@ -438,7 +442,7 @@ async def test_submit_bid_too_low(client: AsyncClient, sync_client: TestClient, 
 async def test_submit_bid_pass(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
     """Player passes → next player's turn."""
     room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
-    websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
+    websockets, contexts, bt, hands = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
     try:
         first_bidder = bt["next_to_act_seat"]
         bidder_idx = SEATS.index(first_bidder)
@@ -460,7 +464,7 @@ async def test_submit_bid_pass(client: AsyncClient, sync_client: TestClient, aut
 async def test_submit_bid_three_passes_ends_bidding(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
     """3 passes after a bid → BIDDING_COMPLETED."""
     room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
-    websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
+    websockets, contexts, bt, hands = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
     try:
         current_idx = SEATS.index(bt["next_to_act_seat"])
         bidder_seat = bt["next_to_act_seat"]
@@ -496,7 +500,7 @@ async def test_submit_bid_three_passes_ends_bidding(client: AsyncClient, sync_cl
 async def test_submit_bid_all_pass_dealer_forced(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
     """All 3 non-dealers pass with no bids → dealer forced to take 25."""
     room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
-    websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
+    websockets, contexts, bt, hands = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
     try:
         # First bidder is one seat left of dealer, so we need to figure out dealer
         first_bidder = bt["next_to_act_seat"]
@@ -531,24 +535,16 @@ async def test_submit_bid_all_pass_dealer_forced(client: AsyncClient, sync_clien
 async def test_submit_bid_after_bidding_completed(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
     """Bidding already ended → SUBMIT_BID returns ERROR."""
     room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
-    websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
+    websockets, contexts, bt, hands = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
     try:
-        first_bidder = bt["next_to_act_seat"]
-        first_idx = SEATS.index(first_bidder)
-
-        # Shoot the moon to end bidding immediately
-        websockets[first_idx].send_json({
-            "action": "SUBMIT_BID",
-            "payload": {"amount": 25, "shoot_the_moon": True},
-        })
-        _drain_broadcast(websockets)  # BIDDING_COMPLETED
+        winner_seat, winner_idx = _end_bidding(websockets, bt)
 
         # Try to bid again — phase is now NAMING_TRUMP
-        websockets[first_idx].send_json({
+        websockets[winner_idx].send_json({
             "action": "SUBMIT_BID",
             "payload": {"amount": 25},
         })
-        data = websockets[first_idx].receive_json()
+        data = websockets[winner_idx].receive_json()
         assert data["event"] == "ERROR"
         assert "bidding" in data["payload"]["message"].lower()
     finally:
@@ -556,23 +552,22 @@ async def test_submit_bid_after_bidding_completed(client: AsyncClient, sync_clie
             ctx.__exit__(None, None, None)
 
 
-async def test_submit_bid_shoot_the_moon(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
-    """shoot_the_moon=true → bidding ends immediately with BIDDING_COMPLETED."""
+async def test_declare_trump_shoot_the_moon(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
+    """DECLARE_TRUMP with shoot_the_moon=true sets the flag in TRUMP_NAMED."""
     room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
-    websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
+    websockets, contexts, bt, hands = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
     try:
-        bidder_seat = bt["next_to_act_seat"]
-        bidder_idx = SEATS.index(bidder_seat)
+        winner_seat, winner_idx = _end_bidding(websockets, bt)
 
-        websockets[bidder_idx].send_json({
-            "action": "SUBMIT_BID",
-            "payload": {"amount": 25, "shoot_the_moon": True},
+        websockets[winner_idx].send_json({
+            "action": "DECLARE_TRUMP",
+            "payload": {"suit": "HEARTS", "shoot_the_moon": True},
         })
 
         data = _drain_broadcast(websockets)[0]
-        assert data["event"] == "BIDDING_COMPLETED"
-        assert data["payload"]["winning_seat"] == bidder_seat
-        assert data["payload"]["winning_bid"] == 25
+        assert data["event"] == "TRUMP_NAMED"
+        assert data["payload"]["declared_by_seat"] == winner_seat
+        assert data["payload"]["trump_suit"] == "HEARTS"
         assert data["payload"]["is_shoot_the_moon"] is True
     finally:
         for ctx in contexts:
@@ -595,14 +590,28 @@ async def test_submit_bid_wrong_phase(client: AsyncClient, sync_client: TestClie
 # ── Helpers for NAMING_TRUMP tests ──────────────────────────────────
 
 
-def _end_bidding_with_shoot(websockets, bt):
-    """First bidder shoots the moon to quickly end bidding. Returns (winner_seat, winner_idx)."""
+def _end_bidding(websockets, bt):
+    """End bidding: first bidder bids 25, next 3 pass. Returns (winner_seat, winner_idx)."""
     bidder_seat = bt["next_to_act_seat"]
     bidder_idx = SEATS.index(bidder_seat)
+
+    # First player bids 25
     websockets[bidder_idx].send_json({
         "action": "SUBMIT_BID",
-        "payload": {"amount": 25, "shoot_the_moon": True},
+        "payload": {"amount": 25},
     })
+    _drain_broadcast(websockets)  # BIDDING_TURN
+
+    # Next 3 players pass
+    for i in range(1, 4):
+        idx = (bidder_idx + i) % 4
+        websockets[idx].send_json({
+            "action": "SUBMIT_BID",
+            "payload": {"amount": None},
+        })
+        if i < 3:
+            _drain_broadcast(websockets)  # BIDDING_TURN
+
     _drain_broadcast(websockets)  # BIDDING_COMPLETED
     return bidder_seat, bidder_idx
 
@@ -613,9 +622,9 @@ def _end_bidding_with_shoot(websockets, bt):
 async def test_declare_trump_success(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
     """Bid winner declares trump → TRUMP_NAMED broadcast."""
     room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
-    websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
+    websockets, contexts, bt, hands = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
     try:
-        winner_seat, winner_idx = _end_bidding_with_shoot(websockets, bt)
+        winner_seat, winner_idx = _end_bidding(websockets, bt)
 
         websockets[winner_idx].send_json({
             "action": "DECLARE_TRUMP",
@@ -627,7 +636,7 @@ async def test_declare_trump_success(client: AsyncClient, sync_client: TestClien
         assert data["payload"]["trump_suit"] == "HEARTS"
         assert data["payload"]["declared_by_seat"] == winner_seat
         assert data["payload"]["winning_bid"] == 25
-        assert data["payload"]["is_shoot_the_moon"] is True
+        assert data["payload"]["is_shoot_the_moon"] is False
         # Verify team mapping
         expected_team = "NS" if winner_seat in ("NORTH", "SOUTH") else "EW"
         assert data["payload"]["bidding_team"] == expected_team
@@ -639,9 +648,9 @@ async def test_declare_trump_success(client: AsyncClient, sync_client: TestClien
 async def test_declare_trump_not_bid_winner(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
     """Non-winner tries to declare trump → ERROR."""
     room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
-    websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
+    websockets, contexts, bt, hands = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
     try:
-        winner_seat, winner_idx = _end_bidding_with_shoot(websockets, bt)
+        winner_seat, winner_idx = _end_bidding(websockets, bt)
         wrong_idx = (winner_idx + 1) % 4
 
         websockets[wrong_idx].send_json({
@@ -660,9 +669,9 @@ async def test_declare_trump_not_bid_winner(client: AsyncClient, sync_client: Te
 async def test_declare_trump_invalid_suit(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
     """Invalid suit → ERROR."""
     room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
-    websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
+    websockets, contexts, bt, hands = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
     try:
-        _, winner_idx = _end_bidding_with_shoot(websockets, bt)
+        _, winner_idx = _end_bidding(websockets, bt)
 
         websockets[winner_idx].send_json({
             "action": "DECLARE_TRUMP",
@@ -680,7 +689,7 @@ async def test_declare_trump_invalid_suit(client: AsyncClient, sync_client: Test
 async def test_declare_trump_wrong_phase(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
     """DECLARE_TRUMP during BIDDING → ERROR."""
     room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
-    websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
+    websockets, contexts, bt, hands = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
     try:
         # Don't end bidding — still in BIDDING phase
         bidder_idx = SEATS.index(bt["next_to_act_seat"])
@@ -701,18 +710,18 @@ async def test_declare_trump_wrong_phase(client: AsyncClient, sync_client: TestC
 async def test_declare_trump_transitions_phase(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
     """After declaring trump, a second DECLARE_TRUMP returns wrong-phase error."""
     room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
-    websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
+    websockets, contexts, bt, hands = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
     try:
-        _, winner_idx = _end_bidding_with_shoot(websockets, bt)
+        _, winner_idx = _end_bidding(websockets, bt)
 
         websockets[winner_idx].send_json({
             "action": "DECLARE_TRUMP",
             "payload": {"suit": "DIAMONDS"},
         })
         _drain_broadcast(websockets)  # TRUMP_NAMED
-        _drain_broadcast(websockets)  # MELD_BROADCAST
+        _drain_broadcast(websockets)  # PASSING_PHASE_STARTED
 
-        # Try again — phase is now SHOWING_MELD
+        # Try again — phase is now PASSING_CARDS
         websockets[winner_idx].send_json({
             "action": "DECLARE_TRUMP",
             "payload": {"suit": "SPADES"},
@@ -728,18 +737,55 @@ async def test_declare_trump_transitions_phase(client: AsyncClient, sync_client:
 # ── Helpers for SHOWING_MELD tests ───────────────────────────────────
 
 
-def _declare_trump_and_get_meld(websockets, winner_idx, suit="HEARTS"):
-    """Send DECLARE_TRUMP and drain TRUMP_NAMED + MELD_BROADCAST.
+def _drain_until(ws, event_name, max_messages=10):
+    """Read messages from ws until we get the specified event. Return its data."""
+    for _ in range(max_messages):
+        data = ws.receive_json()
+        if data["event"] == event_name:
+            return data
+    raise AssertionError(f"Never received {event_name} within {max_messages} messages")
 
-    Returns the MELD_BROADCAST payload.
+
+def _declare_trump_and_get_meld(websockets, winner_idx, hands, suit="HEARTS"):
+    """Declare trump, pass cards through PASSING_CARDS phase, return MELD_BROADCAST payload.
+
+    Goes through: DECLARE_TRUMP → TRUMP_NAMED → PASSING_PHASE_STARTED →
+    both partners PASS_CARDS → MELD_BROADCAST.
     """
     websockets[winner_idx].send_json({
         "action": "DECLARE_TRUMP",
         "payload": {"suit": suit},
     })
     _drain_broadcast(websockets)  # TRUMP_NAMED
-    meld_msgs = _drain_broadcast(websockets)  # MELD_BROADCAST
-    return meld_msgs[0]["payload"]
+    passing_msgs = _drain_broadcast(websockets)  # PASSING_PHASE_STARTED
+    bidder_seat = passing_msgs[0]["payload"]["bidder_seat"]
+    partner_seat = passing_msgs[0]["payload"]["partner_seat"]
+    bidder_idx = SEATS.index(bidder_seat)
+    partner_idx = SEATS.index(partner_seat)
+
+    # Pass first 3 cards from each partner's hand
+    websockets[bidder_idx].send_json({
+        "action": "PASS_CARDS",
+        "payload": {"cards": hands[bidder_seat][:3]},
+    })
+    _drain_broadcast(websockets)  # CARDS_PASSED (first partner)
+
+    websockets[partner_idx].send_json({
+        "action": "PASS_CARDS",
+        "payload": {"cards": hands[partner_seat][:3]},
+    })
+    # After second partner passes: CARDS_PASSED broadcast, CARDS_RECEIVED personal
+    # to both partners, then MELD_BROADCAST. Drain until MELD_BROADCAST from a
+    # non-bidding-team WS (they don't get CARDS_RECEIVED).
+    non_team_idx = next(i for i in range(4) if i not in (bidder_idx, partner_idx))
+    meld_data = _drain_until(websockets[non_team_idx], "MELD_BROADCAST")
+
+    # Drain MELD_BROADCAST from remaining websockets
+    for i in range(4):
+        if i != non_team_idx:
+            _drain_until(websockets[i], "MELD_BROADCAST")
+
+    return meld_data["payload"]
 
 
 # ── MELD tests ────────────────────────────────────────────────────────
@@ -748,10 +794,10 @@ def _declare_trump_and_get_meld(websockets, winner_idx, suit="HEARTS"):
 async def test_declare_trump_broadcasts_meld(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
     """DECLARE_TRUMP sends MELD_BROADCAST with trump_suit, team_meld, player_melds for all 4 seats."""
     room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
-    websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
+    websockets, contexts, bt, hands = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
     try:
-        _, winner_idx = _end_bidding_with_shoot(websockets, bt)
-        meld_payload = _declare_trump_and_get_meld(websockets, winner_idx, "HEARTS")
+        _, winner_idx = _end_bidding(websockets, bt)
+        meld_payload = _declare_trump_and_get_meld(websockets, winner_idx, hands, "HEARTS")
 
         assert meld_payload["trump_suit"] == "HEARTS"
         assert "team_meld" in meld_payload
@@ -770,10 +816,10 @@ async def test_declare_trump_broadcasts_meld(client: AsyncClient, sync_client: T
 async def test_meld_team_totals_match_player_sums(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
     """NS = NORTH + SOUTH totals, EW = EAST + WEST totals."""
     room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
-    websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
+    websockets, contexts, bt, hands = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
     try:
-        _, winner_idx = _end_bidding_with_shoot(websockets, bt)
-        meld_payload = _declare_trump_and_get_meld(websockets, winner_idx, "SPADES")
+        _, winner_idx = _end_bidding(websockets, bt)
+        meld_payload = _declare_trump_and_get_meld(websockets, winner_idx, hands, "SPADES")
 
         pm = meld_payload["player_melds"]
         tm = meld_payload["team_meld"]
@@ -787,10 +833,10 @@ async def test_meld_team_totals_match_player_sums(client: AsyncClient, sync_clie
 async def test_acknowledge_meld_all_four(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
     """3 acks → MELD_ACKNOWLEDGED each, 4th ack → MELD_PHASE_COMPLETED."""
     room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
-    websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
+    websockets, contexts, bt, hands = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
     try:
-        _, winner_idx = _end_bidding_with_shoot(websockets, bt)
-        _declare_trump_and_get_meld(websockets, winner_idx)
+        _, winner_idx = _end_bidding(websockets, bt)
+        _declare_trump_and_get_meld(websockets, winner_idx, hands)
 
         # First 3 players acknowledge
         for i in range(3):
@@ -813,10 +859,10 @@ async def test_acknowledge_meld_all_four(client: AsyncClient, sync_client: TestC
 async def test_acknowledge_meld_duplicate(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
     """Same player acks twice → ERROR."""
     room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
-    websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
+    websockets, contexts, bt, hands = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
     try:
-        _, winner_idx = _end_bidding_with_shoot(websockets, bt)
-        _declare_trump_and_get_meld(websockets, winner_idx)
+        _, winner_idx = _end_bidding(websockets, bt)
+        _declare_trump_and_get_meld(websockets, winner_idx, hands)
 
         websockets[0].send_json({"action": "ACKNOWLEDGE_MELD", "payload": {}})
         _drain_broadcast(websockets)  # MELD_ACKNOWLEDGED
@@ -833,7 +879,7 @@ async def test_acknowledge_meld_duplicate(client: AsyncClient, sync_client: Test
 async def test_acknowledge_meld_wrong_phase(client: AsyncClient, sync_client: TestClient, auth_headers: dict):
     """ACKNOWLEDGE_MELD during BIDDING → ERROR."""
     room_code, tokens = await _fill_seats_and_get_tokens(client, sync_client, auth_headers)
-    websockets, contexts, bt = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
+    websockets, contexts, bt, hands = _start_game_and_get_bidding_state(sync_client, room_code, tokens)
     try:
         # Still in BIDDING phase — haven't ended bidding
         websockets[0].send_json({"action": "ACKNOWLEDGE_MELD", "payload": {}})

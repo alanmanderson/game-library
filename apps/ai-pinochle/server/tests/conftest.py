@@ -1,4 +1,5 @@
 import os
+import sqlite3
 import uuid
 from datetime import datetime, timezone
 
@@ -10,6 +11,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import String, event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
 
 from app.models.base import Base
 from app.models.game import Game
@@ -53,7 +55,16 @@ def _set_game_defaults(target, args, kwargs):
         target.ew_total_score = 0
 
 
-engine = create_async_engine("sqlite+aiosqlite://", echo=False)
+# Create ONE persistent sqlite3 connection that lives for the entire test run.
+# This avoids aiosqlite's per-task connection lifecycle issues with TestClient.
+_persistent_conn = sqlite3.connect(":memory:", check_same_thread=False)
+
+engine = create_async_engine(
+    "sqlite+aiosqlite://",
+    echo=False,
+    poolclass=StaticPool,
+    creator=lambda: _persistent_conn,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -83,11 +94,16 @@ async def client(db_session: AsyncSession):
     from app.main import app
 
     async def _override_get_db():
-        yield db_session
+        try:
+            yield db_session
+            await db_session.commit()
+        except Exception:
+            await db_session.rollback()
+            raise
 
     app.dependency_overrides[get_db] = _override_get_db
 
-    # Allow WebSocket routes to reuse the test db session
+    # Allow WebSocket routes to reuse the test db session factory
     test_session_factory = async_sessionmaker(engine, expire_on_commit=False)
     app.state._test_db_factory = test_session_factory
 
@@ -101,7 +117,12 @@ async def client(db_session: AsyncSession):
 
 
 @pytest.fixture
-def sync_client():
+def sync_client(client: AsyncClient):
+    """Sync TestClient for WebSocket tests.
+
+    Depends on `client` to ensure app.state._test_db_factory is set
+    before the TestClient's background thread starts.
+    """
     from app.main import app
     from starlette.testclient import TestClient
 
