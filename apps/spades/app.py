@@ -10,6 +10,8 @@ app = Flask(__name__)
 app.config.from_object('config.DevelopmentConfig')
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
+
+@app.route('/')
 def hello_world():
     return 'Hello, World!'
 
