@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { AppState, AppStateStatus } from "react-native";
 import type { WsEvent, UseWebSocketResult } from "@pinochle/shared";
 import { RECONNECT_DELAYS } from "@pinochle/shared";
 import { WS_BASE } from "../config";
@@ -32,6 +33,7 @@ export function useWebSocket(
   // Event queue to prevent batching loss
   const queueRef = useRef<WsEvent[]>([]);
   const processingRef = useRef(false);
+  const connectRef = useRef<(() => void) | null>(null);
 
   function drainQueue() {
     if (processingRef.current || queueRef.current.length === 0) return;
@@ -82,6 +84,10 @@ export function useWebSocket(
         }
       };
 
+      ws.onerror = (event) => {
+        console.warn("[useWebSocket] WebSocket error:", event);
+      };
+
       ws.onclose = (event) => {
         if (pingRef.current) { clearInterval(pingRef.current); pingRef.current = null; }
         setConnected(false);
@@ -108,6 +114,7 @@ export function useWebSocket(
       };
     }
 
+    connectRef.current = connect;
     connect();
 
     return () => {
@@ -118,6 +125,36 @@ export function useWebSocket(
       wsRef.current = null;
     };
   }, [roomCode, token]);
+
+  // Handle app foreground/background transitions.
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener(
+      "change",
+      (nextAppState: AppStateStatus) => {
+        const prev = appStateRef.current;
+        appStateRef.current = nextAppState;
+
+        if (nextAppState === "background" || nextAppState === "inactive") {
+          // Going to background — close cleanly so the server knows we left.
+          if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+          if (pingRef.current) { clearInterval(pingRef.current); pingRef.current = null; }
+          if (wsRef.current) {
+            wsRef.current.onclose = null;
+            wsRef.current.close(1000);
+            wsRef.current = null;
+          }
+          setConnected(false);
+        } else if (nextAppState === "active" && prev !== "active") {
+          // Returning to foreground — reconnect.
+          retriesRef.current = 0;
+          connectRef.current?.();
+        }
+      },
+    );
+    return () => subscription.remove();
+  }, []);
 
   const sendMessage = useCallback((msg: Record<string, unknown>): boolean => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
