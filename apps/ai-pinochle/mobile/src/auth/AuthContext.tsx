@@ -22,6 +22,16 @@ interface AuthContextValue extends AuthState {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function isTokenExpired(token: string): boolean {
+  try {
+    const payload = token.split(".")[1];
+    const decoded = JSON.parse(atob(payload));
+    return decoded.exp * 1000 < Date.now();
+  } catch {
+    return true;
+  }
+}
+
 function authReducer(_state: AuthState, action: AuthAction): AuthState {
   switch (action.type) {
     case "LOGIN_SUCCESS":
@@ -45,8 +55,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const token = await AsyncStorage.getItem("token");
         const raw = await AsyncStorage.getItem("user");
         if (token && raw) {
-          const user = JSON.parse(raw) as User;
-          dispatch({ type: "RESTORE", token, user });
+          if (isTokenExpired(token)) {
+            await AsyncStorage.removeItem("token");
+            await AsyncStorage.removeItem("user");
+          } else {
+            const user = JSON.parse(raw) as User;
+            dispatch({ type: "RESTORE", token, user });
+          }
         }
       } catch {
         // ignore restore errors

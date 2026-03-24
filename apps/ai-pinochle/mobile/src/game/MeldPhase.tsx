@@ -53,24 +53,24 @@ export function MeldPhase({
         <Text style={styles.summaryText}>
           Trump:{" "}
           <Text style={styles.bold}>
-            {SUIT_SYMBOLS[meldData.trumpSuit]} {meldData.trumpSuit}
+            {SUIT_SYMBOLS[meldData.trump_suit]} {meldData.trump_suit}
           </Text>
         </Text>
         <Text style={styles.summaryText}>
           Winning bid:{" "}
-          <Text style={styles.bold}>{meldData.winningBid}</Text> (
-          {meldData.biddingTeam})
+          <Text style={styles.bold}>{meldData.winning_bid}</Text> (
+          {meldData.bidding_team})
         </Text>
         <Text style={styles.summaryText}>
           Team meld — NS:{" "}
-          <Text style={styles.bold}>{meldData.teamMeld.NS}</Text>, EW:{" "}
-          <Text style={styles.bold}>{meldData.teamMeld.EW}</Text>
+          <Text style={styles.bold}>{meldData.team_meld.NS}</Text>, EW:{" "}
+          <Text style={styles.bold}>{meldData.team_meld.EW}</Text>
         </Text>
       </View>
 
       <View style={styles.playersGrid}>
         {SEAT_ORDER.map((seat) => {
-          const pm = meldData.playerMelds[seat];
+          const pm = meldData.player_melds[seat];
           if (!pm) return null;
           const acked = acknowledgedSeats.includes(seat);
 

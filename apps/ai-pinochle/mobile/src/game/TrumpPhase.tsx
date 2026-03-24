@@ -25,7 +25,7 @@ export function TrumpPhase({
 
   if (!isBidWinner) {
     const label =
-      SEAT_LABELS[biddingResult.winningSeat] ?? biddingResult.winningSeat;
+      SEAT_LABELS[biddingResult.winning_seat] ?? biddingResult.winning_seat;
     return (
       <View style={styles.container}>
         <Text style={styles.title}>Naming Trump</Text>
@@ -42,7 +42,7 @@ export function TrumpPhase({
       <Text style={styles.title}>Choose Trump Suit</Text>
       <Text style={styles.subtitle}>
         You won the bid with{" "}
-        <Text style={styles.bold}>{biddingResult.winningBid}</Text>
+        <Text style={styles.bold}>{biddingResult.winning_bid}</Text>
       </Text>
 
       <View style={styles.suits}>

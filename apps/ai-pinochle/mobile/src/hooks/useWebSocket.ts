@@ -100,8 +100,13 @@ export function useWebSocket(
     };
   }, [roomCode, token]);
 
-  const sendMessage = useCallback((msg: Record<string, unknown>) => {
-    wsRef.current?.send(JSON.stringify(msg));
+  const sendMessage = useCallback((msg: Record<string, unknown>): boolean => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      console.warn("[useWebSocket] Message dropped — socket not connected:", msg);
+      return false;
+    }
+    wsRef.current.send(JSON.stringify(msg));
+    return true;
   }, []);
 
   return { sendMessage, lastEvent, connected };

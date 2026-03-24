@@ -14,17 +14,17 @@ function seatLabel(seat: string): string {
 }
 
 export function BiddingPhase({ biddingState, mySeat, sendMessage }: Props) {
-  const { currentBid, highestBidderSeat, nextSeat, minBid } = biddingState;
-  const isMyTurn = nextSeat === mySeat;
-  const [bidAmount, setBidAmount] = useState(String(minBid));
+  const { current_highest_bid, highest_bidder_seat, next_to_act_seat, minimum_valid_bid } = biddingState;
+  const isMyTurn = next_to_act_seat === mySeat;
+  const [bidAmount, setBidAmount] = useState(String(minimum_valid_bid));
 
   useEffect(() => {
-    setBidAmount(String(minBid));
-  }, [minBid]);
+    setBidAmount(String(minimum_valid_bid));
+  }, [minimum_valid_bid]);
 
   function handleBid() {
     const amount = parseInt(bidAmount, 10);
-    if (isNaN(amount) || amount < minBid) return;
+    if (isNaN(amount) || amount < minimum_valid_bid) return;
     sendMessage({ action: "SUBMIT_BID", payload: { amount } });
   }
 
@@ -37,10 +37,10 @@ export function BiddingPhase({ biddingState, mySeat, sendMessage }: Props) {
       <Text style={styles.title}>Bidding</Text>
 
       <View style={styles.status}>
-        {currentBid !== null ? (
+        {current_highest_bid !== null ? (
           <Text style={styles.statusText}>
-            Current bid: <Text style={styles.bold}>{currentBid}</Text> by{" "}
-            <Text style={styles.bold}>{seatLabel(highestBidderSeat!)}</Text>
+            Current bid: <Text style={styles.bold}>{current_highest_bid}</Text> by{" "}
+            <Text style={styles.bold}>{seatLabel(highest_bidder_seat!)}</Text>
           </Text>
         ) : (
           <Text style={styles.statusText}>No bids yet</Text>
@@ -67,7 +67,7 @@ export function BiddingPhase({ biddingState, mySeat, sendMessage }: Props) {
         </View>
       ) : (
         <Text style={styles.waiting}>
-          Waiting for <Text style={styles.bold}>{seatLabel(nextSeat)}</Text> to
+          Waiting for <Text style={styles.bold}>{seatLabel(next_to_act_seat)}</Text> to
           bid...
         </Text>
       )}

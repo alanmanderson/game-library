@@ -15,10 +15,10 @@ export function HandResult({
   acknowledgedSeats,
   onAcknowledge,
 }: Props) {
-  const { trickScores, teamMeld, bid, biddingTeam, scoreDeltas, gameScores } =
+  const { trick_scores, team_meld, bid, bidding_team, score_deltas, game_scores } =
     result;
-  const otherTeam = biddingTeam === "NS" ? "EW" : "NS";
-  const bidMade = scoreDeltas[biddingTeam] >= 0;
+  const otherTeam = bidding_team === "NS" ? "EW" : "NS";
+  const bidMade = score_deltas[bidding_team] >= 0;
 
   return (
     <View style={styles.container}>
@@ -26,7 +26,7 @@ export function HandResult({
 
       <Text style={styles.bidInfo}>
         Bid: <Text style={styles.bold}>{bid}</Text> by{" "}
-        <Text style={styles.bold}>{biddingTeam}</Text>
+        <Text style={styles.bold}>{bidding_team}</Text>
         {" — "}
         <Text style={bidMade ? styles.made : styles.set}>
           {bidMade ? "Made!" : "Set!"}
@@ -40,19 +40,19 @@ export function HandResult({
           <Text style={[styles.cell, styles.headerCell]}>Tricks</Text>
           <Text style={[styles.cell, styles.headerCell]}>Delta</Text>
         </View>
-        {[biddingTeam, otherTeam].map((team) => (
+        {[bidding_team, otherTeam].map((team) => (
           <View key={team} style={styles.row}>
             <Text style={[styles.cell, styles.teamCell]}>{team}</Text>
-            <Text style={styles.cell}>{teamMeld[team]}</Text>
-            <Text style={styles.cell}>{trickScores[team]}</Text>
+            <Text style={styles.cell}>{team_meld[team]}</Text>
+            <Text style={styles.cell}>{trick_scores[team]}</Text>
             <Text
               style={[
                 styles.cell,
-                scoreDeltas[team] >= 0 ? styles.positive : styles.negative,
+                score_deltas[team] >= 0 ? styles.positive : styles.negative,
               ]}
             >
-              {scoreDeltas[team] >= 0 ? "+" : ""}
-              {scoreDeltas[team]}
+              {score_deltas[team] >= 0 ? "+" : ""}
+              {score_deltas[team]}
             </Text>
           </View>
         ))}
@@ -62,10 +62,10 @@ export function HandResult({
         <Text style={styles.gameScoreLabel}>Game Score</Text>
         <View style={styles.gameScoreValues}>
           <Text style={styles.gameScoreText}>
-            NS: <Text style={styles.bold}>{gameScores.NS}</Text>
+            NS: <Text style={styles.bold}>{game_scores.NS}</Text>
           </Text>
           <Text style={styles.gameScoreText}>
-            EW: <Text style={styles.bold}>{gameScores.EW}</Text>
+            EW: <Text style={styles.bold}>{game_scores.EW}</Text>
           </Text>
         </View>
       </View>
