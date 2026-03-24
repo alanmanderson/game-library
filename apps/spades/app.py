@@ -19,6 +19,8 @@ def create_app(config_name=None):
     db.init_app(app)
     migrate.init_app(app, db)
 
+    import models  # noqa: F401 — register models with SQLAlchemy
+
     @app.route('/')
     def hello_world():
         return 'Hello, World!'
