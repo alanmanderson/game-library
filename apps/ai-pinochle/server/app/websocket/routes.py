@@ -94,10 +94,31 @@ async def _run_websocket(
 
     try:
         while True:
-            data = await websocket.receive_json()
+            try:
+                data = await websocket.receive_json()
+            except ValueError:
+                await manager.send_personal(websocket, {
+                    "event": "ERROR",
+                    "payload": {"message": "Invalid JSON"},
+                })
+                continue
+
             log_message(room_code, "IN", user.username, data)
-            await handle_message(websocket, data, room_code, user.id, db)
-            await db.commit()
+            try:
+                await handle_message(websocket, data, room_code, user.id, db)
+                await db.commit()
+            except WebSocketDisconnect:
+                raise
+            except Exception:
+                logger.exception("Error handling message in room %s", room_code)
+                try:
+                    await db.rollback()
+                except Exception:
+                    logger.debug("Rollback failed")
+                await manager.send_personal(websocket, {
+                    "event": "ERROR",
+                    "payload": {"message": "Server error processing your action"},
+                })
     except WebSocketDisconnect:
         pass
     finally:
