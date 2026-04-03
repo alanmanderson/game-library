@@ -7,7 +7,7 @@ set -e
 # Configuration
 SUBSCRIPTION_ID="1a020407-3f63-418b-91be-af42a0a2cfef"
 RESOURCE_GROUP="rg-lemonadestand"
-LOCATION="eastus"
+LOCATION="centralus"
 APP_SERVICE_PLAN="plan-lemonadestand"
 BACKEND_APP="api-lemonadestand"
 FRONTEND_APP="app-lemonadestand"
