@@ -4,43 +4,110 @@
 A browser-based tycoon/idle game where players start with a tiny neighborhood lemonade stand and build a global beverage empire. Built with C# (.NET 8) backend API and React/TypeScript/Vite frontend.
 
 ## Tech Stack
-- **Backend**: C# / .NET 8 Web API
-- **Frontend**: React 18 + TypeScript + Vite
-- **Database**: SQLite (dev) / Azure SQL (prod)
-- **Hosting**: Azure App Service + Azure Static Web Apps
-- **CI/CD**: GitHub Actions
+- **Backend**: C# / .NET 8 Web API (LemonadeStand.Api, LemonadeStand.Core, LemonadeStand.Data)
+- **Frontend**: React 19 + TypeScript + Vite 8 + Zustand + Tailwind CSS 4 + Framer Motion + Recharts
+- **Database**: SQLite (single file `lemonade.db`, JSON-serialized game state)
+- **Hosting**: Azure App Service (B1 plan, Linux, Central US)
+- **CI/CD**: None (manual deploy via `infra/deploy.sh`)
 - **Testing**: xUnit (backend), Vitest + Playwright (frontend)
 
 ## Project Structure
 ```
 /app
 ├── CLAUDE.md
-├── backend/              # .NET 8 Web API
-│   ├── LemonadeStand.Api/
-│   ├── LemonadeStand.Core/
-│   ├── LemonadeStand.Data/
-│   └── LemonadeStand.Tests/
-├── frontend/             # React + TypeScript + Vite
+├── backend/
+│   ├── LemonadeStand.Api/       # Controllers, DTOs, middleware, Program.cs
+│   ├── LemonadeStand.Core/      # Models, Enums, Engine (GameEngine.cs - core simulation)
+│   ├── LemonadeStand.Data/      # EF Core context, GameRepository
+│   └── LemonadeStand.Tests/     # xUnit tests
+├── frontend/
 │   ├── src/
-│   ├── public/
-│   └── tests/
-├── docs/                 # Game design docs, business model
-│   ├── game-design.md
-│   ├── business-model.md
-│   └── architecture.md
-└── infra/                # Azure infrastructure (Bicep/ARM)
+│   │   ├── components/          # UI components (CityMap, StandPanel, RecipeEditor, etc.)
+│   │   ├── screens/             # MainMenu, GameDashboard, GameOver
+│   │   ├── stores/              # Zustand store (gameStore.ts)
+│   │   ├── services/            # API client (api.ts)
+│   │   ├── types/               # TypeScript types matching backend DTOs
+│   │   ├── hooks/               # useGameActions, useMediaQuery
+│   │   └── utils/               # format.ts, game-helpers.ts
+│   └── tests/                   # Playwright e2e tests (NOT vitest unit tests)
+├── docs/                        # game-design.md, business-model.md, architecture.md, product-requirements.md
+└── infra/
+    └── deploy.sh                # Azure deployment script
 ```
 
 ## Development Commands
-- Backend: `cd backend && dotnet run --project LemonadeStand.Api`
-- Frontend: `cd frontend && npm run dev`
-- Backend tests: `cd backend && dotnet test`
-- Frontend tests: `cd frontend && npm test`
-- E2E tests: `cd frontend && npx playwright test`
+- Backend build: `cd backend && PATH="/home/claude/.dotnet:$PATH" dotnet build`
+- Backend run: `cd backend && PATH="/home/claude/.dotnet:$PATH" dotnet run --project LemonadeStand.Api`
+- Backend tests: `cd backend && PATH="/home/claude/.dotnet:$PATH" dotnet test`
+- Frontend dev: `cd frontend && npm run dev`
+- Frontend build: `cd frontend && npm run build`
+- Frontend type-check: `cd frontend && npx tsc --noEmit`
+- **NOTE**: `npm test` runs vitest which incorrectly picks up Playwright e2e tests and fails. This is a pre-existing config issue. Use `npx tsc --noEmit` for validation instead.
+- E2E tests: `cd frontend && npx playwright test` (requires running backend + frontend)
 
 ## Azure Deployment
-- Subscription: 1a020407-3f63-418b-91be-af42a0a2cfef
-- Target domain: lemonadestand.alanmanderson.com (or Azure free subdomain)
+- **Subscription**: 1a020407-3f63-418b-91be-af42a0a2cfef
+- **Resource Group**: rg-lemonadestand (location: eastus)
+- **App Service Plan**: plan-lemonadestand (location: centralus, SKU: B1, Linux)
+- **Backend**: api-lemonadestand.azurewebsites.net
+- **Frontend**: app-lemonadestand-web.azurewebsites.net
+- **Target domain**: lemonadestand.alanmanderson.com (not yet configured)
+- **NOTE**: Resource group is in eastus but resources are in centralus. The deploy script uses centralus.
+
+### Deploy Process
+```bash
+# Full deploy (infra/deploy.sh handles everything):
+bash infra/deploy.sh
+
+# Manual backend deploy:
+cd backend
+PATH="/home/claude/.dotnet:$PATH" dotnet publish LemonadeStand.Api/LemonadeStand.Api.csproj -c Release -o ./publish
+cd publish
+python3 -c "import zipfile,os; z=zipfile.ZipFile('/tmp/backend.zip','w',zipfile.ZIP_DEFLATED); [z.write(os.path.join(r,f)) for r,d,fs in os.walk('.') for f in fs]; z.close()"
+az webapp deploy --name api-lemonadestand --resource-group rg-lemonadestand --src-path /tmp/backend.zip --type zip
+
+# Manual frontend deploy:
+cd frontend
+VITE_API_URL="https://api-lemonadestand.azurewebsites.net" npm run build
+# Copy server.js and package.json into dist/, then zip and deploy to app-lemonadestand-web
+```
+
+## Environment Gotchas
+- **dotnet not on PATH**: Use `PATH="/home/claude/.dotnet:$PATH"` prefix or full path `/home/claude/.dotnet/dotnet`
+- **No `zip` command**: Use Python: `python3 -c "import zipfile,os; ..."`
+- **No `sudo`**: Cannot install packages via apt
+- **No CI/CD**: All deployment is manual via Azure CLI (`az` is available and logged in)
+- **WebFetch can't test SPA**: Frontend is a React SPA - WebFetch only sees the HTML shell. Verify production by checking HTTP status codes and that JS/CSS assets serve correctly.
+- **CORS**: Backend configured to allow frontend origins. If adding new frontend URL, update CORS via `az webapp cors add`.
+
+## Architecture Notes
+
+### Backend
+- **GameEngine.cs** is the core - contains ALL game simulation logic as static methods
+- **GameState** is the root entity; entire state serialized as JSON in SQLite
+- **No migrations** - DB created via `EnsureCreatedAsync()` on startup
+- All game mutations happen server-side; frontend calls API then refreshes state
+
+### Frontend
+- **Zustand store** holds game state + UI state (toasts, day results)
+- **api.ts** is the single API client; all endpoints return typed responses
+- **CityMap** component is the main map view (replaced old stand list + LocationPicker)
+- **GameDashboard** is the primary play screen (3-column layout: map+inventory | stand details | financials+employees+achievements)
+
+### Game Mechanics
+- 10 progression stages unlocked by total revenue ($100 to $100,000)
+- Weather system with seasons (120-day cycle), 9 weather types
+- City events: location-specific traffic multipliers (12% daily chance)
+- Global events: festivals, competitors, supply shortages, etc. (5% + 1%/stand daily chance)
+- Competition: players fight back with quality (>60) + price (<$2.50) to weaken/defeat competitors
+- Recipe quality scored 0-100 based on ingredient ratios + weather conditions
+- Build costs for new stands (one-time) + daily rent (recurring)
+- Bankruptcy: cash < -$10 with no inventory remaining
+
+### Backward Compatibility
+- New fields on models MUST have default values (empty lists, 0, 1.0, etc.)
+- JSON deserialization of existing saves must not break
+- Frontend should use `?? []` or `?? default` for new optional fields from API
 
 ## Key Design Principles
 - Mobile-first responsive design
