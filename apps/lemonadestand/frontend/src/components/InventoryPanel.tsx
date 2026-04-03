@@ -65,7 +65,6 @@ export default function InventoryPanel({ inventory, gameId, cash, recipe }: Inve
   const addToast = useGameStore((s) => s.addToast);
   const [prices, setPrices] = useState<SupplyPrices | null>(null);
   const [buying, setBuying] = useState(false);
-  const [showBuy, setShowBuy] = useState(false);
   const [quantities, setQuantities] = useState({ cups: 0, lemons: 0, sugar: 0, ice: 0, water: 0 });
 
   const fetchPrices = useCallback(async () => {
@@ -78,10 +77,8 @@ export default function InventoryPanel({ inventory, gameId, cash, recipe }: Inve
   }, [gameId]);
 
   useEffect(() => {
-    if (showBuy && !prices) {
-      fetchPrices();
-    }
-  }, [showBuy, prices, fetchPrices]);
+    fetchPrices();
+  }, [fetchPrices]);
 
   const totalCost = prices
     ? quantities.cups * prices.cupsPerPack +
@@ -99,7 +96,6 @@ export default function InventoryPanel({ inventory, gameId, cash, recipe }: Inve
       setGame(newState);
       setQuantities({ cups: 0, lemons: 0, sugar: 0, ice: 0, water: 0 });
       addToast({ type: 'success', title: 'Supplies Purchased!', message: `Spent ${formatCurrency(totalCost)}`, duration: 3000 });
-      setShowBuy(false);
     } catch {
       addToast({ type: 'error', title: 'Purchase Failed', message: 'Could not buy supplies.', duration: 4000 });
     } finally {
@@ -117,18 +113,9 @@ export default function InventoryPanel({ inventory, gameId, cash, recipe }: Inve
 
   return (
     <div className="game-card">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <Package size={20} className="text-amber-600" />
-          <h3 className="font-bold text-ink">Inventory</h3>
-        </div>
-        <button
-          onClick={() => setShowBuy(!showBuy)}
-          className="btn-secondary text-sm py-1.5 px-3"
-        >
-          <ShoppingCart size={14} />
-          Buy Supplies
-        </button>
+      <div className="flex items-center gap-2 mb-4">
+        <Package size={20} className="text-amber-600" />
+        <h3 className="font-bold text-ink">Inventory</h3>
       </div>
 
       {/* Current inventory */}
@@ -152,77 +139,70 @@ export default function InventoryPanel({ inventory, gameId, cash, recipe }: Inve
       {recipe && <DrinksCapacity inventory={inventory} recipe={recipe} />}
 
       {/* Buy interface */}
-      {showBuy && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          exit={{ opacity: 0, height: 0 }}
-          className="border-t border-amber-100 pt-4 mt-3"
-        >
-          {!prices ? (
-            <div className="flex items-center justify-center py-4 text-ink-light">
-              <Loader2 className="animate-spin mr-2" size={16} />
-              Loading prices...
+      <div className="border-t border-amber-100 pt-4 mt-3">
+        {!prices ? (
+          <div className="flex items-center justify-center py-4 text-ink-light">
+            <Loader2 className="animate-spin mr-2" size={16} />
+            Loading prices...
+          </div>
+        ) : (
+          <>
+            <div className="space-y-3">
+              {supplies.map((s) => {
+                const unitPrice = s.price ?? 0;
+                const maxAffordable = unitPrice > 0 ? Math.floor(cash / unitPrice) : 999;
+                const sliderMax = Math.max(10, Math.min(maxAffordable, 999));
+
+                return (
+                  <div key={s.key} className="flex items-center gap-3">
+                    <span className="text-lg w-8 text-center">{s.icon}</span>
+                    <span className="text-sm font-medium text-ink w-16">{s.label}</span>
+                    <span className="text-xs text-ink-light w-20">{formatCurrency(unitPrice)}/{s.unit}</span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={sliderMax}
+                      value={Math.min(quantities[s.key], sliderMax)}
+                      onChange={(e) => setQuantities((q) => ({ ...q, [s.key]: parseInt(e.target.value) }))}
+                      className="flex-1 bg-amber-100"
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      value={quantities[s.key]}
+                      onChange={(e) => {
+                        const val = Math.max(0, parseInt(e.target.value) || 0);
+                        setQuantities((q) => ({ ...q, [s.key]: val }));
+                      }}
+                      className="w-16 text-sm font-bold text-ink text-right bg-white border border-amber-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                    />
+                  </div>
+                );
+              })}
             </div>
-          ) : (
-            <>
-              <div className="space-y-3">
-                {supplies.map((s) => {
-                  const unitPrice = s.price ?? 0;
-                  const maxAffordable = unitPrice > 0 ? Math.floor(cash / unitPrice) : 999;
-                  const sliderMax = Math.max(10, Math.min(maxAffordable, 999));
 
-                  return (
-                    <div key={s.key} className="flex items-center gap-3">
-                      <span className="text-lg w-8 text-center">{s.icon}</span>
-                      <span className="text-sm font-medium text-ink w-16">{s.label}</span>
-                      <span className="text-xs text-ink-light w-20">{formatCurrency(unitPrice)}/{s.unit}</span>
-                      <input
-                        type="range"
-                        min={0}
-                        max={sliderMax}
-                        value={Math.min(quantities[s.key], sliderMax)}
-                        onChange={(e) => setQuantities((q) => ({ ...q, [s.key]: parseInt(e.target.value) }))}
-                        className="flex-1 bg-amber-100"
-                      />
-                      <input
-                        type="number"
-                        min={0}
-                        value={quantities[s.key]}
-                        onChange={(e) => {
-                          const val = Math.max(0, parseInt(e.target.value) || 0);
-                          setQuantities((q) => ({ ...q, [s.key]: val }));
-                        }}
-                        className="w-16 text-sm font-bold text-ink text-right bg-white border border-amber-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-amber-400"
-                      />
-                    </div>
-                  );
-                })}
+            <div className="flex items-center justify-between mt-4 pt-3 border-t border-amber-100">
+              <div>
+                <span className="text-sm text-ink-light">Total: </span>
+                <span className={`font-bold ${totalCost > cash ? 'text-danger' : 'text-ink'}`}>
+                  {formatCurrency(totalCost)}
+                </span>
+                {totalCost > cash && (
+                  <span className="text-xs text-danger ml-2">Not enough cash!</span>
+                )}
               </div>
-
-              <div className="flex items-center justify-between mt-4 pt-3 border-t border-amber-100">
-                <div>
-                  <span className="text-sm text-ink-light">Total: </span>
-                  <span className={`font-bold ${totalCost > cash ? 'text-danger' : 'text-ink'}`}>
-                    {formatCurrency(totalCost)}
-                  </span>
-                  {totalCost > cash && (
-                    <span className="text-xs text-danger ml-2">Not enough cash!</span>
-                  )}
-                </div>
-                <button
-                  onClick={handleBuy}
-                  disabled={buying || totalCost <= 0 || totalCost > cash}
-                  className="btn-primary text-sm py-2 px-4"
-                >
-                  {buying ? <Loader2 className="animate-spin" size={14} /> : <ShoppingCart size={14} />}
-                  Buy
-                </button>
-              </div>
-            </>
-          )}
-        </motion.div>
-      )}
+              <button
+                onClick={handleBuy}
+                disabled={buying || totalCost <= 0 || totalCost > cash}
+                className="btn-primary text-sm py-2 px-4"
+              >
+                {buying ? <Loader2 className="animate-spin" size={14} /> : <ShoppingCart size={14} />}
+                Buy
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
