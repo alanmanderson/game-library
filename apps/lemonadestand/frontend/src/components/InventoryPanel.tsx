@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Package, ShoppingCart, Loader2 } from 'lucide-react';
-import type { Inventory, SupplyPrices } from '@/types/game';
+import type { Inventory, SupplyPrices, Recipe } from '@/types/game';
 import { useGameStore } from '@/stores/gameStore';
 import { api } from '@/services/api';
 import { formatCurrency } from '@/utils/format';
@@ -10,9 +10,57 @@ interface InventoryPanelProps {
   inventory: Inventory;
   gameId: string;
   cash: number;
+  recipe?: Recipe | null;
 }
 
-export default function InventoryPanel({ inventory, gameId, cash }: InventoryPanelProps) {
+function DrinksCapacity({ inventory, recipe }: { inventory: Inventory; recipe: Recipe }) {
+  const items = [
+    { label: 'Cups', emoji: '\uD83E\uDD64', drinks: inventory.cups },
+    { label: 'Lemons', emoji: '\uD83C\uDF4B', drinks: recipe.lemonRatio > 0 ? Math.floor(inventory.lemons / recipe.lemonRatio) : Infinity },
+    { label: 'Sugar', emoji: '\uD83C\uDF6C', drinks: recipe.sugarRatio > 0 ? Math.floor(inventory.sugar / recipe.sugarRatio) : Infinity },
+    { label: 'Ice', emoji: '\uD83E\uDDCA', drinks: recipe.iceRatio > 0 ? Math.floor(inventory.ice / recipe.iceRatio) : Infinity },
+    { label: 'Water', emoji: '\uD83D\uDCA7', drinks: recipe.waterRatio > 0 ? Math.floor(inventory.water / recipe.waterRatio) : Infinity },
+  ];
+
+  const bottleneck = Math.min(...items.map((i) => i.drinks));
+
+  return (
+    <div className="bg-amber-50 rounded-xl p-3 mb-3 border border-amber-100">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-semibold text-ink-light uppercase tracking-wide">Drinks Possible</span>
+        <span className="text-sm font-bold text-ink">{bottleneck === Infinity ? '--' : bottleneck}</span>
+      </div>
+      <div className="space-y-1">
+        {items.map((item) => {
+          const isBottleneck = item.drinks === bottleneck && item.drinks !== Infinity;
+          const displayDrinks = item.drinks === Infinity ? '\u221E' : item.drinks;
+          const barWidth = bottleneck > 0 && item.drinks !== Infinity
+            ? Math.min(100, (item.drinks / Math.max(...items.filter(i => i.drinks !== Infinity).map(i => i.drinks))) * 100)
+            : item.drinks === Infinity ? 100 : 0;
+
+          return (
+            <div key={item.label} className="flex items-center gap-2">
+              <span className="text-sm w-5 text-center">{item.emoji}</span>
+              <div className="flex-1 h-4 bg-white rounded-full overflow-hidden relative">
+                <motion.div
+                  initial={false}
+                  animate={{ width: `${barWidth}%` }}
+                  transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+                  className={`h-full rounded-full ${isBottleneck ? 'bg-red-300' : 'bg-amber-300'}`}
+                />
+              </div>
+              <span className={`text-xs font-bold w-10 text-right ${isBottleneck ? 'text-red-500' : 'text-ink-light'}`}>
+                {displayDrinks}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export default function InventoryPanel({ inventory, gameId, cash, recipe }: InventoryPanelProps) {
   const setGame = useGameStore((s) => s.setGame);
   const addToast = useGameStore((s) => s.addToast);
   const [prices, setPrices] = useState<SupplyPrices | null>(null);
@@ -100,6 +148,9 @@ export default function InventoryPanel({ inventory, gameId, cash }: InventoryPan
         ))}
       </div>
 
+      {/* Drinks possible from inventory */}
+      {recipe && <DrinksCapacity inventory={inventory} recipe={recipe} />}
+
       {/* Buy interface */}
       {showBuy && (
         <motion.div
@@ -116,22 +167,37 @@ export default function InventoryPanel({ inventory, gameId, cash }: InventoryPan
           ) : (
             <>
               <div className="space-y-3">
-                {supplies.map((s) => (
-                  <div key={s.key} className="flex items-center gap-3">
-                    <span className="text-lg w-8 text-center">{s.icon}</span>
-                    <span className="text-sm font-medium text-ink w-16">{s.label}</span>
-                    <span className="text-xs text-ink-light w-20">{formatCurrency(s.price ?? 0)}/{s.unit}</span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={50}
-                      value={quantities[s.key]}
-                      onChange={(e) => setQuantities((q) => ({ ...q, [s.key]: parseInt(e.target.value) }))}
-                      className="flex-1 bg-amber-100"
-                    />
-                    <span className="text-sm font-bold text-ink w-8 text-right">{quantities[s.key]}</span>
-                  </div>
-                ))}
+                {supplies.map((s) => {
+                  const unitPrice = s.price ?? 0;
+                  const maxAffordable = unitPrice > 0 ? Math.floor(cash / unitPrice) : 999;
+                  const sliderMax = Math.max(10, Math.min(maxAffordable, 999));
+
+                  return (
+                    <div key={s.key} className="flex items-center gap-3">
+                      <span className="text-lg w-8 text-center">{s.icon}</span>
+                      <span className="text-sm font-medium text-ink w-16">{s.label}</span>
+                      <span className="text-xs text-ink-light w-20">{formatCurrency(unitPrice)}/{s.unit}</span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={sliderMax}
+                        value={Math.min(quantities[s.key], sliderMax)}
+                        onChange={(e) => setQuantities((q) => ({ ...q, [s.key]: parseInt(e.target.value) }))}
+                        className="flex-1 bg-amber-100"
+                      />
+                      <input
+                        type="number"
+                        min={0}
+                        value={quantities[s.key]}
+                        onChange={(e) => {
+                          const val = Math.max(0, parseInt(e.target.value) || 0);
+                          setQuantities((q) => ({ ...q, [s.key]: val }));
+                        }}
+                        className="w-16 text-sm font-bold text-ink text-right bg-white border border-amber-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                      />
+                    </div>
+                  );
+                })}
               </div>
 
               <div className="flex items-center justify-between mt-4 pt-3 border-t border-amber-100">

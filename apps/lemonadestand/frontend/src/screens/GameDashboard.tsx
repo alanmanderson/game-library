@@ -181,7 +181,12 @@ export default function GameDashboard() {
             />
 
             {/* Inventory */}
-            <InventoryPanel inventory={game.inventory} gameId={game.id} cash={game.cash} />
+            <InventoryPanel
+              inventory={game.inventory}
+              gameId={game.id}
+              cash={game.cash}
+              recipe={selectedStand ? game.recipes.find((r) => r.id === selectedStand.recipeId) ?? null : null}
+            />
           </div>
 
           {/* Center column: Selected Stand Details */}
