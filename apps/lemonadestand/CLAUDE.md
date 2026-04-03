@@ -8,12 +8,13 @@ A browser-based tycoon/idle game where players start with a tiny neighborhood le
 - **Frontend**: React 19 + TypeScript + Vite 8 + Zustand + Tailwind CSS 4 + Framer Motion + Recharts
 - **Database**: SQLite (single file `lemonade.db`, JSON-serialized game state)
 - **Hosting**: Azure App Service (B1 plan, Linux, Central US)
-- **CI/CD**: None (manual deploy via `infra/deploy.sh`)
+- **CI/CD**: GitHub Actions (auto-deploy on push to `master`)
 - **Testing**: xUnit (backend), Vitest + Playwright (frontend)
 
 ## Project Structure
 ```
 /app
+├── .github/workflows/deploy.yml  # CI/CD: auto-deploy on push to master
 ├── CLAUDE.md
 ├── backend/
 │   ├── LemonadeStand.Api/       # Controllers, DTOs, middleware, Program.cs
@@ -72,11 +73,19 @@ VITE_API_URL="https://api-lemonadestand.azurewebsites.net" npm run build
 # Copy server.js and package.json into dist/, then zip and deploy to app-lemonadestand-web
 ```
 
+## CI/CD (GitHub Actions)
+- **Workflow**: `.github/workflows/deploy.yml` — triggers on push to `master`
+- **Jobs**: `test` (xUnit) → `deploy-backend` + `deploy-frontend` (parallel after tests pass)
+- **Secrets** (set in GitHub repo settings):
+  - `AZURE_BACKEND_PUBLISH_PROFILE` — Azure publish profile XML for `api-lemonadestand`
+  - `AZURE_FRONTEND_PUBLISH_PROFILE` — Azure publish profile XML for `app-lemonadestand-web`
+- **Manual deploy** still works via `infra/deploy.sh` if needed
+
 ## Environment Gotchas
 - **dotnet not on PATH**: Use `PATH="/home/claude/.dotnet:$PATH"` prefix or full path `/home/claude/.dotnet/dotnet`
 - **No `zip` command**: Use Python: `python3 -c "import zipfile,os; ..."`
 - **No `sudo`**: Cannot install packages via apt
-- **No CI/CD**: All deployment is manual via Azure CLI (`az` is available and logged in)
+- **CI/CD**: GitHub Actions deploys on push to `master`. Manual deploy still available via `infra/deploy.sh`.
 - **WebFetch can't test SPA**: Frontend is a React SPA - WebFetch only sees the HTML shell. Verify production by checking HTTP status codes and that JS/CSS assets serve correctly.
 - **CORS**: Backend configured to allow frontend origins. If adding new frontend URL, update CORS via `az webapp cors add`.
 
