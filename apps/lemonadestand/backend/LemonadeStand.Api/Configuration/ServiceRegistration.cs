@@ -29,6 +29,23 @@ public static class ServiceRegistration
         var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
         await db.Database.EnsureCreatedAsync();
 
+        // Migrate existing DBs: create Users table if missing (EnsureCreatedAsync
+        // does not add new tables to an already-existing database).
+        await db.Database.ExecuteSqlRawAsync(@"
+            CREATE TABLE IF NOT EXISTS Users (
+                Id TEXT NOT NULL CONSTRAINT PK_Users PRIMARY KEY,
+                Email TEXT NOT NULL,
+                DisplayName TEXT NOT NULL,
+                PasswordHash TEXT NULL,
+                GoogleId TEXT NULL,
+                AvatarUrl TEXT NULL,
+                CreatedAt TEXT NOT NULL,
+                LastLoginAt TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_Users_Email ON Users (Email);
+            CREATE INDEX IF NOT EXISTS IX_Users_GoogleId ON Users (GoogleId);
+        ");
+
         // Migrate existing DBs: add UserId column to GameSaves if missing
         try
         {
@@ -38,6 +55,16 @@ public static class ServiceRegistration
         catch (Microsoft.Data.Sqlite.SqliteException)
         {
             // Column already exists — ignore
+        }
+
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "CREATE INDEX IF NOT EXISTS IX_GameSaves_UserId ON GameSaves (UserId)");
+        }
+        catch (Microsoft.Data.Sqlite.SqliteException)
+        {
+            // Ignore
         }
     }
 }

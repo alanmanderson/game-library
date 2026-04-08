@@ -57,26 +57,26 @@ export default function LoginScreen() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8">
+    <div className="min-h-screen flex flex-col items-center px-4 py-6">
       <motion.div
         initial={{ opacity: 0, y: -30 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
-        className="text-center mb-6"
+        className="text-center mb-3"
       >
-        <h1 className="text-5xl sm:text-6xl font-bold text-amber-800 mb-2 tracking-tight">
+        <h1 className="text-4xl sm:text-5xl font-bold text-amber-800 tracking-tight">
           Lemonade Stand
         </h1>
-        <h2 className="text-2xl sm:text-3xl font-bold text-amber-500">Tycoon</h2>
+        <h2 className="text-xl sm:text-2xl font-bold text-amber-500">Tycoon</h2>
       </motion.div>
 
       <motion.div
         initial={{ opacity: 0, scale: 0.8 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ delay: 0.2, duration: 0.5 }}
-        className="mb-6"
+        className="mb-4"
       >
-        <LemonadeStandGraphic size="lg" animated={true} />
+        <LemonadeStandGraphic size="md" animated={true} />
       </motion.div>
 
       <motion.div

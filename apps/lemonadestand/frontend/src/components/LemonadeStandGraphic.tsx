@@ -11,8 +11,17 @@ export default function LemonadeStandGraphic({ size = 'md', animated = true }: L
   return (
     <div
       className="relative select-none"
-      style={{ width: 200 * scale, height: 220 * scale, transform: `scale(${scale})`, transformOrigin: 'center center' }}
+      style={{ width: 200 * scale, height: 220 * scale }}
     >
+      <div
+        style={{
+          width: 200,
+          height: 220,
+          transform: `scale(${scale})`,
+          transformOrigin: 'top left',
+          position: 'relative',
+        }}
+      >
       {/* Stand base / counter */}
       <div
         className="absolute bottom-0 left-1/2 -translate-x-1/2"
@@ -227,6 +236,7 @@ export default function LemonadeStandGraphic({ size = 'md', animated = true }: L
         }}
       >
         OPEN!
+      </div>
       </div>
     </div>
   );
