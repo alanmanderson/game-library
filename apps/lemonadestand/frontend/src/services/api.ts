@@ -9,14 +9,32 @@ import type {
   SupplyPrices,
   LocationOption,
 } from '@/types/game';
+import type { AuthResponse, RegisterRequest, LoginRequest } from '@/types/auth';
 
 const BASE = (import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL : '') + '/api';
 
+function getAuthHeaders(): Record<string, string> {
+  const token = localStorage.getItem('auth_token');
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: getAuthHeaders(),
     ...options,
   });
+  if (res.status === 401) {
+    localStorage.removeItem('auth_token');
+    window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+    throw new Error('Unauthorized');
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`API error ${res.status}: ${text}`);
@@ -27,6 +45,32 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  // Auth
+  register(data: RegisterRequest): Promise<AuthResponse> {
+    return request(`${BASE}/auth/register`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  login(data: LoginRequest): Promise<AuthResponse> {
+    return request(`${BASE}/auth/login`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  googleLogin(credential: string): Promise<AuthResponse> {
+    return request(`${BASE}/auth/google`, {
+      method: 'POST',
+      body: JSON.stringify({ credential }),
+    });
+  },
+
+  getMe(): Promise<{ id: string; email: string; displayName: string; avatarUrl?: string }> {
+    return request(`${BASE}/auth/me`);
+  },
+
   // Game management
   newGame(playerName: string): Promise<GameState> {
     return request(`${BASE}/game/new`, {

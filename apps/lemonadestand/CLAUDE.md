@@ -91,6 +91,18 @@ VITE_API_URL="https://api-lemonadestand.azurewebsites.net" npm run build
 
 ## Architecture Notes
 
+### Authentication
+- **JWT auth** with BCrypt passwords + Google OAuth (ID token validation server-side)
+- `AuthController` handles `/api/auth/register`, `/api/auth/login`, `/api/auth/google`, `/api/auth/me`
+- `AuthService` generates 30-day JWTs, validates Google tokens via `GoogleJsonWebSignature`
+- `GameController` is `[Authorize]` — all game endpoints require a valid JWT
+- `GameRepository` methods filter by `userId` for ownership isolation
+- Frontend stores JWT in `localStorage`, sends via `Authorization: Bearer` header
+- `useAuthStore` (Zustand) manages auth state; `useAuthInit` validates token on mount
+- Google OAuth uses `@react-oauth/google` with popup flow
+- **Env vars for production**: `Jwt__Secret`, `Google__ClientId` (backend), `VITE_GOOGLE_CLIENT_ID` (frontend build)
+- User model: `User.cs` in Core, `UserEntity` + `UserRepository` in Data layer
+
 ### Backend
 - **GameEngine.cs** is the core - contains ALL game simulation logic as static methods
 - **GameState** is the root entity; entire state serialized as JSON in SQLite

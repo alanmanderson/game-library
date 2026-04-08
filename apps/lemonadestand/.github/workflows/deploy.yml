@@ -4,6 +4,10 @@ on:
   push:
     branches: [master]
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -32,10 +36,15 @@ jobs:
         run: dotnet publish LemonadeStand.Api/LemonadeStand.Api.csproj -c Release -o ./publish
         working-directory: backend
 
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
       - uses: azure/webapps-deploy@v3
         with:
           app-name: api-lemonadestand
-          publish-profile: ${{ secrets.AZURE_BACKEND_PUBLISH_PROFILE }}
           package: backend/publish
 
   deploy-frontend:
@@ -57,6 +66,7 @@ jobs:
         working-directory: frontend
         env:
           VITE_API_URL: https://api-lemonadestand.azurewebsites.net
+          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
 
       - name: Prepare deployment package
         working-directory: frontend/dist
@@ -85,8 +95,13 @@ jobs:
           {"name":"lemonade-stand-frontend","version":"1.0.0","scripts":{"start":"node server.js"}}
           EOF
 
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
       - uses: azure/webapps-deploy@v3
         with:
           app-name: app-lemonadestand-web
-          publish-profile: ${{ secrets.AZURE_FRONTEND_PUBLISH_PROFILE }}
           package: frontend/dist

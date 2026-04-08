@@ -1,13 +1,16 @@
+using System.Security.Claims;
 using LemonadeStand.Api.DTOs;
 using LemonadeStand.Core.Engine;
 using LemonadeStand.Core.Enums;
 using LemonadeStand.Data.Repositories;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LemonadeStand.Api.Controllers;
 
 [ApiController]
 [Route("api/game")]
+[Authorize]
 public class GameController : ControllerBase
 {
     private readonly GameRepository _repo;
@@ -17,18 +20,21 @@ public class GameController : ControllerBase
         _repo = repo;
     }
 
+    private string GetUserId() =>
+        User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
+
     [HttpPost("new")]
     public async Task<ActionResult<GameStateResponse>> NewGame([FromBody] NewGameRequest request)
     {
         var gameState = GameEngine.NewGame(request.PlayerName);
-        await _repo.SaveGameAsync(gameState);
+        await _repo.SaveGameAsync(gameState, GetUserId());
         return Ok(MapToResponse(gameState));
     }
 
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<GameStateResponse>> GetGame(Guid id)
     {
-        var gameState = await _repo.LoadGameAsync(id);
+        var gameState = await _repo.LoadGameAsync(id, GetUserId());
         if (gameState == null) return NotFound(new { error = "Game not found" });
         return Ok(MapToResponse(gameState));
     }
@@ -36,7 +42,7 @@ public class GameController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<List<GameSaveListItem>>> ListGames()
     {
-        var saves = await _repo.ListGamesAsync();
+        var saves = await _repo.ListGamesAsync(GetUserId());
         return Ok(saves.Select(s => new GameSaveListItem
         {
             Id = Guid.Parse(s.Id),
@@ -53,7 +59,7 @@ public class GameController : ControllerBase
     [HttpDelete("{id:guid}")]
     public async Task<ActionResult> DeleteGame(Guid id)
     {
-        var deleted = await _repo.DeleteGameAsync(id);
+        var deleted = await _repo.DeleteGameAsync(id, GetUserId());
         if (!deleted) return NotFound(new { error = "Game not found" });
         return NoContent();
     }
@@ -61,32 +67,32 @@ public class GameController : ControllerBase
     [HttpPost("{id:guid}/advance-day")]
     public async Task<ActionResult<DayResultResponse>> AdvanceDay(Guid id)
     {
-        var gameState = await _repo.LoadGameAsync(id);
+        var gameState = await _repo.LoadGameAsync(id, GetUserId());
         if (gameState == null) return NotFound(new { error = "Game not found" });
         if (gameState.IsGameOver) return BadRequest(new { error = "Game is over" });
 
         var result = GameEngine.AdvanceDay(gameState);
-        await _repo.SaveGameAsync(gameState);
+        await _repo.SaveGameAsync(gameState, GetUserId());
         return Ok(MapDayResult(result));
     }
 
     [HttpPost("{id:guid}/buy-supplies")]
     public async Task<ActionResult<GameStateResponse>> BuySupplies(Guid id, [FromBody] BuySuppliesRequest request)
     {
-        var gameState = await _repo.LoadGameAsync(id);
+        var gameState = await _repo.LoadGameAsync(id, GetUserId());
         if (gameState == null) return NotFound(new { error = "Game not found" });
 
         bool ok = GameEngine.BuySupplies(gameState, request.Cups, request.Lemons, request.Sugar, request.Ice, request.Water);
         if (!ok) return BadRequest(new { error = "Not enough cash" });
 
-        await _repo.SaveGameAsync(gameState);
+        await _repo.SaveGameAsync(gameState, GetUserId());
         return Ok(MapToResponse(gameState));
     }
 
     [HttpPost("{id:guid}/set-recipe")]
     public async Task<ActionResult<GameStateResponse>> SetRecipe(Guid id, [FromBody] SetRecipeRequest request)
     {
-        var gameState = await _repo.LoadGameAsync(id);
+        var gameState = await _repo.LoadGameAsync(id, GetUserId());
         if (gameState == null) return NotFound(new { error = "Game not found" });
 
         var stand = gameState.Stands.FirstOrDefault(s => s.Id == request.StandId);
@@ -104,28 +110,28 @@ public class GameController : ControllerBase
         recipe.SugarRatio = request.SugarRatio;
         recipe.IceRatio = request.IceRatio;
 
-        await _repo.SaveGameAsync(gameState);
+        await _repo.SaveGameAsync(gameState, GetUserId());
         return Ok(MapToResponse(gameState));
     }
 
     [HttpPost("{id:guid}/set-price")]
     public async Task<ActionResult<GameStateResponse>> SetPrice(Guid id, [FromBody] SetPriceRequest request)
     {
-        var gameState = await _repo.LoadGameAsync(id);
+        var gameState = await _repo.LoadGameAsync(id, GetUserId());
         if (gameState == null) return NotFound(new { error = "Game not found" });
 
         var stand = gameState.Stands.FirstOrDefault(s => s.Id == request.StandId);
         if (stand == null) return BadRequest(new { error = "Stand not found" });
 
         stand.PricePerCup = request.Price;
-        await _repo.SaveGameAsync(gameState);
+        await _repo.SaveGameAsync(gameState, GetUserId());
         return Ok(MapToResponse(gameState));
     }
 
     [HttpPost("{id:guid}/open-stand")]
     public async Task<ActionResult<GameStateResponse>> OpenStand(Guid id, [FromBody] OpenStandRequest request)
     {
-        var gameState = await _repo.LoadGameAsync(id);
+        var gameState = await _repo.LoadGameAsync(id, GetUserId());
         if (gameState == null) return NotFound(new { error = "Game not found" });
 
         if (!Enum.TryParse<LocationType>(request.LocationType, true, out var locType))
@@ -134,28 +140,28 @@ public class GameController : ControllerBase
         var stand = GameEngine.OpenNewStand(gameState, request.LocationName, locType);
         if (stand == null) return BadRequest(new { error = "Cannot open stand here" });
 
-        await _repo.SaveGameAsync(gameState);
+        await _repo.SaveGameAsync(gameState, GetUserId());
         return Ok(MapToResponse(gameState));
     }
 
     [HttpPost("{id:guid}/hire-employee")]
     public async Task<ActionResult<GameStateResponse>> HireEmployee(Guid id, [FromBody] HireEmployeeRequest request)
     {
-        var gameState = await _repo.LoadGameAsync(id);
+        var gameState = await _repo.LoadGameAsync(id, GetUserId());
         if (gameState == null) return NotFound(new { error = "Game not found" });
 
         if (!Enum.TryParse<EmployeeRole>(request.Role, true, out var role))
             role = EmployeeRole.Cashier;
 
         GameEngine.HireEmployee(gameState, request.Name, role);
-        await _repo.SaveGameAsync(gameState);
+        await _repo.SaveGameAsync(gameState, GetUserId());
         return Ok(MapToResponse(gameState));
     }
 
     [HttpGet("{id:guid}/locations")]
     public async Task<ActionResult> GetLocations(Guid id)
     {
-        var gameState = await _repo.LoadGameAsync(id);
+        var gameState = await _repo.LoadGameAsync(id, GetUserId());
         if (gameState == null) return NotFound(new { error = "Game not found" });
 
         var locations = GameEngine.GetAvailableLocations(gameState);
@@ -174,7 +180,7 @@ public class GameController : ControllerBase
     [HttpGet("{id:guid}/prices")]
     public async Task<ActionResult> GetPrices(Guid id)
     {
-        var gameState = await _repo.LoadGameAsync(id);
+        var gameState = await _repo.LoadGameAsync(id, GetUserId());
         if (gameState == null) return NotFound(new { error = "Game not found" });
 
         var prices = GameEngine.GetSupplyPrices(gameState);

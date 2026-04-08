@@ -1,3 +1,4 @@
+using LemonadeStand.Api.Services;
 using LemonadeStand.Data.Context;
 using LemonadeStand.Data.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -12,8 +13,12 @@ public static class ServiceRegistration
         var connectionString = configuration.GetConnectionString("GameDb") ?? "Data Source=lemonade.db";
         services.AddDbContext<GameDbContext>(options => options.UseSqlite(connectionString));
 
-        // --- Repository ---
+        // --- Repositories ---
         services.AddScoped<GameRepository>();
+        services.AddScoped<UserRepository>();
+
+        // --- Services ---
+        services.AddScoped<AuthService>();
 
         return services;
     }
@@ -23,5 +28,16 @@ public static class ServiceRegistration
         using var scope = app.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
         await db.Database.EnsureCreatedAsync();
+
+        // Migrate existing DBs: add UserId column to GameSaves if missing
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE GameSaves ADD COLUMN UserId TEXT NOT NULL DEFAULT ''");
+        }
+        catch (Microsoft.Data.Sqlite.SqliteException)
+        {
+            // Column already exists — ignore
+        }
     }
 }

@@ -1,6 +1,9 @@
+using System.Text;
 using LemonadeStand.Api.Configuration;
 using LemonadeStand.Api.Middleware;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,6 +22,24 @@ builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new() { Title = "Lemonade Stand Tycoon API", Version = "v1" });
 });
+
+// --- JWT Authentication ---
+var jwtSecret = builder.Configuration["Jwt:Secret"] ?? "dev-secret-key-change-in-production-min-32-chars!!";
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"] ?? "LemonadeStand",
+            ValidAudience = builder.Configuration["Jwt:Audience"] ?? "LemonadeStand",
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+        };
+    });
+builder.Services.AddAuthorization();
 
 // --- CORS (allow frontend dev server) ---
 builder.Services.AddCors(options =>
@@ -47,6 +68,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapControllers();
 
 // --- Ensure database is created ---

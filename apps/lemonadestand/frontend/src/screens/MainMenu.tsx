@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, FolderOpen, Trash2, Info, Loader2, X } from 'lucide-react';
+import { Play, FolderOpen, Trash2, Info, Loader2, X, LogOut } from 'lucide-react';
 import { api } from '@/services/api';
 import { useGameStore } from '@/stores/gameStore';
+import { useAuthStore } from '@/stores/authStore';
 import LemonadeStandGraphic from '@/components/LemonadeStandGraphic';
 import { formatCurrency } from '@/utils/format';
 import { StageNames } from '@/types/game';
@@ -13,7 +14,7 @@ export default function MainMenu() {
   const navigate = useNavigate();
   const setGame = useGameStore((s) => s.setGame);
   const addToast = useGameStore((s) => s.addToast);
-  const [playerName, setPlayerName] = useState('');
+  const { user, clearAuth } = useAuthStore();
   const [creating, setCreating] = useState(false);
   const [showLoad, setShowLoad] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
@@ -40,10 +41,10 @@ export default function MainMenu() {
   }, [showLoad, fetchSaves]);
 
   const handleNewGame = async () => {
-    if (!playerName.trim()) return;
+    const playerName = user?.displayName || 'Player';
     setCreating(true);
     try {
-      const gameState = await api.newGame(playerName.trim());
+      const gameState = await api.newGame(playerName);
       setGame(gameState);
       navigate(`/game/${gameState.id}`);
     } catch {
@@ -79,8 +80,38 @@ export default function MainMenu() {
     }
   };
 
+  const handleLogout = () => {
+    clearAuth();
+    navigate('/login');
+  };
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8">
+      {/* User bar */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="fixed top-4 right-4 flex items-center gap-2 z-10"
+      >
+        {user?.avatarUrl ? (
+          <img src={user.avatarUrl} alt="" className="w-8 h-8 rounded-full" referrerPolicy="no-referrer" />
+        ) : (
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-100 to-amber-200 flex items-center justify-center text-sm font-bold text-amber-700">
+            {user?.displayName?.charAt(0)?.toUpperCase() ?? '?'}
+          </div>
+        )}
+        <span className="text-sm text-ink font-medium hidden sm:inline">
+          {user?.displayName}
+        </span>
+        <button
+          onClick={handleLogout}
+          className="text-ink-lighter hover:text-red-500 transition-colors p-1"
+          title="Sign out"
+        >
+          <LogOut size={16} />
+        </button>
+      </motion.div>
+
       {/* Title */}
       <motion.div
         initial={{ opacity: 0, y: -30 }}
@@ -109,34 +140,21 @@ export default function MainMenu() {
         <LemonadeStandGraphic size="lg" animated={true} />
       </motion.div>
 
-      {/* New Game form */}
+      {/* New Game button */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.4 }}
-        className="game-card w-full max-w-sm mb-4"
+        className="w-full max-w-sm mb-4 flex justify-center"
       >
-        <h3 className="font-bold text-ink mb-3 text-center">New Game</h3>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            placeholder="Enter your name..."
-            value={playerName}
-            onChange={(e) => setPlayerName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleNewGame()}
-            className="flex-1 rounded-xl border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 focus:border-amber-300"
-            maxLength={30}
-            autoFocus
-          />
-          <button
-            onClick={handleNewGame}
-            disabled={creating || !playerName.trim()}
-            className="btn-primary"
-          >
-            {creating ? <Loader2 className="animate-spin" size={18} /> : <Play size={18} />}
-            Play
-          </button>
-        </div>
+        <button
+          onClick={handleNewGame}
+          disabled={creating}
+          className="btn-primary"
+        >
+          {creating ? <Loader2 className="animate-spin" size={18} /> : <Play size={18} />}
+          New Game
+        </button>
       </motion.div>
 
       {/* Action buttons */}

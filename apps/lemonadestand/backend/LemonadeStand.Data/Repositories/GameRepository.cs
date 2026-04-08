@@ -16,14 +16,15 @@ public class GameRepository
 
     public GameRepository(GameDbContext db) => _db = db;
 
-    public async Task<GameState?> LoadGameAsync(Guid id)
+    public async Task<GameState?> LoadGameAsync(Guid id, string? userId = null)
     {
         var entity = await _db.GameSaves.FindAsync(id.ToString());
         if (entity == null) return null;
+        if (userId != null && entity.UserId != userId) return null;
         return JsonSerializer.Deserialize<GameState>(entity.JsonData, JsonOpts);
     }
 
-    public async Task SaveGameAsync(GameState state)
+    public async Task SaveGameAsync(GameState state, string? userId = null)
     {
         var json = JsonSerializer.Serialize(state, JsonOpts);
         var existing = await _db.GameSaves.FindAsync(state.Id.ToString());
@@ -36,6 +37,7 @@ public class GameRepository
             existing.IsGameOver = state.IsGameOver;
             existing.JsonData = json;
             existing.UpdatedAt = DateTime.UtcNow;
+            if (userId != null) existing.UserId = userId;
         }
         else
         {
@@ -48,6 +50,7 @@ public class GameRepository
                 Stage = state.Stage.ToString(),
                 IsGameOver = state.IsGameOver,
                 JsonData = json,
+                UserId = userId ?? "",
                 CreatedAt = state.CreatedAt,
                 UpdatedAt = DateTime.UtcNow
             });
@@ -55,15 +58,18 @@ public class GameRepository
         await _db.SaveChangesAsync();
     }
 
-    public async Task<List<GameSaveEntity>> ListGamesAsync()
+    public async Task<List<GameSaveEntity>> ListGamesAsync(string? userId = null)
     {
-        return await _db.GameSaves.OrderByDescending(g => g.UpdatedAt).ToListAsync();
+        var query = _db.GameSaves.AsQueryable();
+        if (userId != null) query = query.Where(g => g.UserId == userId);
+        return await query.OrderByDescending(g => g.UpdatedAt).ToListAsync();
     }
 
-    public async Task<bool> DeleteGameAsync(Guid id)
+    public async Task<bool> DeleteGameAsync(Guid id, string? userId = null)
     {
         var entity = await _db.GameSaves.FindAsync(id.ToString());
         if (entity == null) return false;
+        if (userId != null && entity.UserId != userId) return false;
         _db.GameSaves.Remove(entity);
         await _db.SaveChangesAsync();
         return true;
