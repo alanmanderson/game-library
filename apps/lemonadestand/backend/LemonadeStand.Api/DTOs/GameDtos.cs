@@ -40,6 +40,7 @@ public class GameStateResponse
     public List<EventResponse> ActiveEvents { get; set; } = new();
     public List<PermitResponse> Permits { get; set; } = new();
     public List<CityEventResponse> CityEvents { get; set; } = new();
+    public List<DayResultResponse> DayHistory { get; set; } = new();
 }
 
 public class DayResultResponse

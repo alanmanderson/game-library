@@ -28,7 +28,7 @@ export default function GameDashboard() {
   const dayResults = useGameStore((s) => s.dayResults);
   const addDayResult = useGameStore((s) => s.addDayResult);
   const addDayResults = useGameStore((s) => s.addDayResults);
-  const clearDayResults = useGameStore((s) => s.clearDayResults);
+  const setDayResults = useGameStore((s) => s.setDayResults);
   const lastDayResult = useGameStore((s) => s.lastDayResult);
   const setLastDayResult = useGameStore((s) => s.setLastDayResult);
   const showDayResult = useGameStore((s) => s.showDayResult);
@@ -47,7 +47,7 @@ export default function GameDashboard() {
     try {
       const gameState = await api.getGame(id);
       setGame(gameState);
-      clearDayResults();
+      setDayResults(gameState.dayHistory ?? []);
       if (gameState.isGameOver) {
         navigate(`/game-over/${gameState.id}`);
       }
@@ -57,7 +57,7 @@ export default function GameDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [id, setGame, clearDayResults, addToast, navigate]);
+  }, [id, setGame, setDayResults, addToast, navigate]);
 
   useEffect(() => {
     if (!game || game.id !== id) {

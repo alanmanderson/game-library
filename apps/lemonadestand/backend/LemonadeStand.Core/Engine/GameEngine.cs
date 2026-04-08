@@ -196,8 +196,6 @@ public static class GameEngine
         }
         else state.Reputation = Math.Clamp(state.Reputation - 0.05, 1.0, 5.0);
 
-        state.Inventory.Ice = Math.Max(0, state.Inventory.Ice * 0.8);
-
         var progression = CheckProgression(state);
         if (progression != null) { result.NewStageReached = progression; result.Notifications.Add("You reached stage: " + progression + "!"); }
 
@@ -214,6 +212,9 @@ public static class GameEngine
 
         result.CashAfter = state.Cash;
         state.DayHistory.Add(result);
+        const int MaxDayHistory = 120;
+        if (state.DayHistory.Count > MaxDayHistory)
+            state.DayHistory.RemoveRange(0, state.DayHistory.Count - MaxDayHistory);
         state.Day++;
         state.UpdatedAt = DateTime.UtcNow;
         return result;

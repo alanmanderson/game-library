@@ -319,6 +319,7 @@ public class GameController : ControllerBase
             AffectedLocationType = e.AffectedLocationType.ToString(),
             TrafficMultiplier = e.TrafficMultiplier, Duration = e.Duration, IsActive = e.IsActive,
         }).ToList(),
+        DayHistory = s.DayHistory.Select(MapDayResult).ToList(),
     };
 
     private static DayResultResponse MapDayResult(LemonadeStand.Core.Models.DayResult r) => new()

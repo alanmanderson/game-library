@@ -25,6 +25,7 @@ export interface GameState {
   activeEvents: GameEvent[];
   permits: Permit[];
   cityEvents: CityEvent[];
+  dayHistory: DayResult[];
 }
 
 export interface Inventory {

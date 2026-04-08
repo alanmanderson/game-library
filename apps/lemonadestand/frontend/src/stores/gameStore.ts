@@ -11,10 +11,12 @@ interface GameStore {
   game: GameState | null;
   setGame: (game: GameState | null) => void;
 
-  // Accumulated day results (frontend-only, since backend doesn't return history in GameState)
+  // Accumulated day results (hydrated from backend GameState.dayHistory on load,
+  // appended to as days advance)
   dayResults: DayResult[];
   addDayResult: (result: DayResult) => void;
   addDayResults: (results: DayResult[]) => void;
+  setDayResults: (results: DayResult[]) => void;
   clearDayResults: () => void;
 
   // Last day result (shown in the modal)
@@ -44,6 +46,7 @@ export const useGameStore = create<GameStore>()((set) => ({
   dayResults: [],
   addDayResult: (result) => set((s) => ({ dayResults: [...s.dayResults, result] })),
   addDayResults: (results) => set((s) => ({ dayResults: [...s.dayResults, ...results] })),
+  setDayResults: (results) => set({ dayResults: results }),
   clearDayResults: () => set({ dayResults: [] }),
 
   lastDayResult: null,
