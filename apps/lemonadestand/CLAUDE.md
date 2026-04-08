@@ -50,9 +50,9 @@ A browser-based tycoon/idle game where players start with a tiny neighborhood le
 - **Subscription**: 1a020407-3f63-418b-91be-af42a0a2cfef
 - **Resource Group**: rg-lemonadestand (location: eastus)
 - **App Service Plan**: plan-lemonadestand (location: centralus, SKU: B1, Linux)
-- **Backend**: api-lemonadestand.azurewebsites.net
-- **Frontend**: app-lemonadestand-web.azurewebsites.net
-- **Target domain**: lemonadestand.alanmanderson.com (not yet configured)
+- **Backend**: api.lemonadestand.alanmanderson.com (custom) → api-lemonadestand.azurewebsites.net (Azure default)
+- **Frontend**: lemonadestand.alanmanderson.com (custom) → app-lemonadestand-web.azurewebsites.net (Azure default)
+- **Custom domains**: Bound via `az webapp config hostname add` with Azure-managed free SSL (SNI). CNAMEs point to the `.azurewebsites.net` defaults; `asuid.<subdomain>` TXT records verify ownership via the subscription's `customDomainVerificationId`.
 - **NOTE**: Resource group is in eastus but resources are in centralus. The deploy script uses centralus.
 
 ### Deploy Process
@@ -69,7 +69,7 @@ az webapp deploy --name api-lemonadestand --resource-group rg-lemonadestand --sr
 
 # Manual frontend deploy:
 cd frontend
-VITE_API_URL="https://api-lemonadestand.azurewebsites.net" npm run build
+VITE_API_URL="https://api.lemonadestand.alanmanderson.com" npm run build
 # Copy server.js and package.json into dist/, then zip and deploy to app-lemonadestand-web
 ```
 

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://app-lemonadestand-web.azurewebsites.net';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://lemonadestand.alanmanderson.com';
 
 test('create game and advance days with sales', async ({ page }) => {
   page.on('console', msg => {

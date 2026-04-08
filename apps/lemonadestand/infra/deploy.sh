@@ -62,7 +62,7 @@ az webapp config appsettings set \
 az webapp cors add \
   --name "$BACKEND_APP" \
   --resource-group "$RESOURCE_GROUP" \
-  --allowed-origins "https://${FRONTEND_APP}.azurestaticapps.net" "https://lemonadestand.alanmanderson.com" "http://localhost:5173" \
+  --allowed-origins "https://lemonadestand.alanmanderson.com" "https://app-lemonadestand-web.azurewebsites.net" "http://localhost:5173" \
   --output none
 
 # Create Static Web App for Frontend
@@ -97,7 +97,7 @@ az webapp deploy \
 echo ""
 echo "=== Building Frontend ==="
 cd /app/frontend
-VITE_API_URL="https://${BACKEND_APP}.azurewebsites.net" npm run build
+VITE_API_URL="https://api.lemonadestand.alanmanderson.com" npm run build
 
 echo ""
 echo "=== Deploying Frontend ==="
@@ -169,8 +169,8 @@ PKGEOF
     FRONTEND_URL="https://${FRONTEND_APP}-web.azurewebsites.net"
   }
 
-BACKEND_URL="https://${BACKEND_APP}.azurewebsites.net"
-FRONTEND_URL="${FRONTEND_URL:-https://${FRONTEND_APP}.azurestaticapps.net}"
+BACKEND_URL="https://api.lemonadestand.alanmanderson.com"
+FRONTEND_URL="${FRONTEND_URL:-https://lemonadestand.alanmanderson.com}"
 
 echo ""
 echo "=== Deployment Complete ==="
