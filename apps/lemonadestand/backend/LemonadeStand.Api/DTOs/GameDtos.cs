@@ -13,6 +13,8 @@ public record OpenStandRequest(string LocationName, string LocationType);
 
 public record HireEmployeeRequest(string Name, string Role);
 
+public record SimulateDaysRequest(int Days);
+
 // Response DTOs
 public class GameStateResponse
 {
@@ -58,6 +60,29 @@ public class DayResultResponse
     public bool InventoryRanOut { get; set; }
     public decimal CashAfter { get; set; }
     public string? NewStageReached { get; set; }
+}
+
+public class SimulationSummaryResponse
+{
+    public int DaysRequested { get; set; }
+    public int DaysSimulated { get; set; }
+    public int StartDay { get; set; }
+    public int EndDay { get; set; }
+    public decimal TotalRevenue { get; set; }
+    public decimal TotalExpenses { get; set; }
+    public decimal TotalProfit { get; set; }
+    public int TotalCupsSold { get; set; }
+    public int TotalCustomers { get; set; }
+    public decimal CashBefore { get; set; }
+    public decimal CashAfter { get; set; }
+    public bool StoppedEarly { get; set; }
+    public string? StopReason { get; set; }
+    public bool IsGameOver { get; set; }
+    public List<DayResultResponse> DayResults { get; set; } = new();
+    public List<string> KeyEvents { get; set; } = new();
+    public List<AchievementResponse> NewAchievements { get; set; } = new();
+    public string? NewStageReached { get; set; }
+    public GameStateResponse GameState { get; set; } = new();
 }
 
 public class GameSaveListItem

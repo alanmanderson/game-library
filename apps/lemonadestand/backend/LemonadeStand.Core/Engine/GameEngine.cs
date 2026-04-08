@@ -139,9 +139,7 @@ public static class GameEngine
 
             for (int i = 0; i < customersWanting; i++)
             {
-                if (state.Inventory.Cups < 1 || state.Inventory.Lemons < recipe.LemonRatio ||
-                    state.Inventory.Sugar < recipe.SugarRatio || state.Inventory.Ice < recipe.IceRatio ||
-                    state.Inventory.Water < recipe.WaterRatio)
+                if (!HasIngredientsForCup(state.Inventory, recipe))
                 { inventoryRanOut = true; break; }
 
                 double satisfaction = (qualityScore / 100.0) * 0.5 + priceFactor * 0.3 + (state.Reputation / 5.0) * 0.2;
@@ -219,6 +217,28 @@ public static class GameEngine
         state.Day++;
         state.UpdatedAt = DateTime.UtcNow;
         return result;
+    }
+
+    // Returns true if inventory has enough of every ingredient to serve one cup with this recipe.
+    private static bool HasIngredientsForCup(Inventory inv, Recipe recipe) =>
+        inv.Cups >= 1 &&
+        inv.Lemons >= recipe.LemonRatio &&
+        inv.Sugar >= recipe.SugarRatio &&
+        inv.Ice >= recipe.IceRatio &&
+        inv.Water >= recipe.WaterRatio;
+
+    // Returns true if there are enough supplies across any open stand's recipe to serve at least one cup.
+    public static bool HasSuppliesForAtLeastOneCup(GameState state)
+    {
+        if (state.Inventory.Cups < 1) return false;
+        foreach (var stand in state.Stands)
+        {
+            if (!stand.IsOpen) continue;
+            var recipe = state.Recipes.FirstOrDefault(r => r.Id == stand.RecipeId);
+            if (recipe == null) continue;
+            if (HasIngredientsForCup(state.Inventory, recipe)) return true;
+        }
+        return false;
     }
 
     public static bool BuySupplies(GameState state, int cupPacks, double lemons, double sugar, double ice, double water)

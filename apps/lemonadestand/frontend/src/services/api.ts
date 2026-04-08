@@ -8,6 +8,7 @@ import type {
   DayResult,
   SupplyPrices,
   LocationOption,
+  SimulationSummary,
 } from '@/types/game';
 import type { AuthResponse, RegisterRequest, LoginRequest } from '@/types/auth';
 
@@ -94,6 +95,13 @@ export const api = {
   // Gameplay
   advanceDay(id: string): Promise<DayResult> {
     return request(`${BASE}/game/${id}/advance-day`, { method: 'POST' });
+  },
+
+  simulateDays(id: string, days: number): Promise<SimulationSummary> {
+    return request(`${BASE}/game/${id}/simulate-days`, {
+      method: 'POST',
+      body: JSON.stringify({ days }),
+    });
   },
 
   buySupplies(

@@ -97,6 +97,28 @@ export interface DayResult {
   newStageReached?: string;
 }
 
+export interface SimulationSummary {
+  daysRequested: number;
+  daysSimulated: number;
+  startDay: number;
+  endDay: number;
+  totalRevenue: number;
+  totalExpenses: number;
+  totalProfit: number;
+  totalCupsSold: number;
+  totalCustomers: number;
+  cashBefore: number;
+  cashAfter: number;
+  stoppedEarly: boolean;
+  stopReason?: string;
+  isGameOver: boolean;
+  dayResults: DayResult[];
+  keyEvents: string[];
+  newAchievements: Achievement[];
+  newStageReached?: string;
+  gameState: GameState;
+}
+
 export interface GameEvent {
   type: string;
   title: string;

@@ -76,6 +76,74 @@ public class GameController : ControllerBase
         return Ok(MapDayResult(result));
     }
 
+    [HttpPost("{id:guid}/simulate-days")]
+    public async Task<ActionResult<SimulationSummaryResponse>> SimulateDays(Guid id, [FromBody] SimulateDaysRequest request)
+    {
+        var gameState = await _repo.LoadGameAsync(id, GetUserId());
+        if (gameState == null) return NotFound(new { error = "Game not found" });
+        if (gameState.IsGameOver) return BadRequest(new { error = "Game is over" });
+        if (request.Days < 1) return BadRequest(new { error = "Days must be at least 1" });
+        if (request.Days > 365) return BadRequest(new { error = "Cannot simulate more than 365 days at once" });
+
+        if (!GameEngine.HasSuppliesForAtLeastOneCup(gameState))
+            return BadRequest(new { error = "Not enough supplies to serve a single cup. Buy more supplies before simulating." });
+
+        var summary = new SimulationSummaryResponse
+        {
+            DaysRequested = request.Days,
+            StartDay = gameState.Day,
+            CashBefore = Math.Round(gameState.Cash, 2),
+        };
+
+        int daysRun = 0;
+        string? stopReason = null;
+        for (int i = 0; i < request.Days; i++)
+        {
+            // Before advancing, verify we have supplies to serve at least one cup (next day).
+            if (!GameEngine.HasSuppliesForAtLeastOneCup(gameState))
+            {
+                stopReason = "Ran out of supplies for the next day";
+                break;
+            }
+
+            var dayResult = GameEngine.AdvanceDay(gameState);
+            daysRun++;
+            var mappedDayResult = MapDayResult(dayResult);
+            summary.DayResults.Add(mappedDayResult);
+            summary.TotalRevenue += dayResult.Revenue;
+            summary.TotalExpenses += dayResult.Expenses;
+            summary.TotalCupsSold += dayResult.CupsSold;
+            summary.TotalCustomers += dayResult.CustomerCount;
+            foreach (var evt in dayResult.Events)
+                summary.KeyEvents.Add($"Day {dayResult.Day}: {evt}");
+            summary.NewAchievements.AddRange(mappedDayResult.NewAchievements);
+            if (dayResult.NewStageReached != null)
+                summary.NewStageReached = dayResult.NewStageReached.ToString();
+
+            if (gameState.IsGameOver)
+            {
+                stopReason = gameState.GameOverReason ?? "Game over";
+                break;
+            }
+        }
+
+        await _repo.SaveGameAsync(gameState, GetUserId());
+
+        summary.DaysSimulated = daysRun;
+        summary.EndDay = gameState.Day;
+        summary.CashAfter = Math.Round(gameState.Cash, 2);
+        summary.TotalRevenue = Math.Round(summary.TotalRevenue, 2);
+        summary.TotalExpenses = Math.Round(summary.TotalExpenses, 2);
+        // Compute profit from the already-rounded components so Revenue/Expenses/Profit reconcile in the UI.
+        summary.TotalProfit = summary.TotalRevenue - summary.TotalExpenses;
+        summary.StoppedEarly = daysRun < request.Days;
+        summary.StopReason = stopReason;
+        summary.IsGameOver = gameState.IsGameOver;
+        summary.GameState = MapToResponse(gameState);
+
+        return Ok(summary);
+    }
+
     [HttpPost("{id:guid}/buy-supplies")]
     public async Task<ActionResult<GameStateResponse>> BuySupplies(Guid id, [FromBody] BuySuppliesRequest request)
     {
@@ -195,6 +263,13 @@ public class GameController : ControllerBase
         });
     }
 
+    private static AchievementResponse MapAchievement(LemonadeStand.Core.Models.Achievement a) => new()
+    {
+        Id = a.Id, Name = a.Name, Description = a.Description,
+        Category = a.Category.ToString(), IsUnlocked = a.IsUnlocked,
+        Icon = a.Icon, UnlockedAt = a.UnlockedAt,
+    };
+
     private static GameStateResponse MapToResponse(LemonadeStand.Core.Models.GameState s) => new()
     {
         Id = s.Id, PlayerName = s.PlayerName, Cash = Math.Round(s.Cash, 2),
@@ -228,12 +303,7 @@ public class GameController : ControllerBase
             Id = e.Id, Name = e.Name, Role = e.Role.ToString(), Wage = e.Wage,
             Skill = e.Skill, Satisfaction = e.Satisfaction, DaysEmployed = e.DaysEmployed,
         }).ToList(),
-        Achievements = s.Achievements.Select(a => new AchievementResponse
-        {
-            Id = a.Id, Name = a.Name, Description = a.Description,
-            Category = a.Category.ToString(), IsUnlocked = a.IsUnlocked,
-            Icon = a.Icon, UnlockedAt = a.UnlockedAt,
-        }).ToList(),
+        Achievements = s.Achievements.Select(MapAchievement).ToList(),
         ActiveEvents = s.ActiveEvents.Where(e => e.IsActive).Select(e => new EventResponse
         {
             Type = e.Type.ToString(), Title = e.Title, Description = e.Description,
@@ -258,11 +328,7 @@ public class GameController : ControllerBase
         CustomerSatisfaction = Math.Round(r.CustomerSatisfaction, 1),
         Weather = r.Weather.ToString(), Temperature = r.Temperature, Season = r.Season.ToString(),
         Events = r.Events, Notifications = r.Notifications,
-        NewAchievements = r.NewAchievements.Select(a => new AchievementResponse
-        {
-            Id = a.Id, Name = a.Name, Description = a.Description,
-            Category = a.Category.ToString(), IsUnlocked = a.IsUnlocked, Icon = a.Icon, UnlockedAt = a.UnlockedAt,
-        }).ToList(),
+        NewAchievements = r.NewAchievements.Select(MapAchievement).ToList(),
         InventoryRanOut = r.InventoryRanOut, CashAfter = Math.Round(r.CashAfter, 2),
         NewStageReached = r.NewStageReached?.ToString(),
     };
