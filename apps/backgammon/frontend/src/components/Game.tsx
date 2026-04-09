@@ -453,6 +453,7 @@ function Game() {
           <div className="player-info-row">
             <div className={`player-pill opponent-pill ${!opponentConnected ? "disconnected" : ""}`}>
               <span className={`connection-dot ${opponentConnected ? "connected" : "disconnected"}`} />
+              {isBotGame && <img src="/images/bot.png" alt="Bot" className="bot-avatar" />}
               <span className="pill-name">{opponentName}</span>
             </div>
             <span className="pip-count">{opponentPips} pips</span>

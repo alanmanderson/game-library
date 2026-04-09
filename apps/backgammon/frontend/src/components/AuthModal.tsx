@@ -229,6 +229,7 @@ function AuthModal({ onAuthenticated }: AuthModalProps) {
   return (
     <div className="auth-overlay" role="dialog" aria-modal="true" ref={modalRef}>
       <div className="auth-modal">
+        <img src="/images/logo.png" alt="Backgammon" className="auth-logo" />
         <h2>Welcome to Backgammon</h2>
 
         {/* Tabs */}

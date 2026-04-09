@@ -12,9 +12,11 @@
   text-align: center;
 }
 
-.home-header h1 {
-  font-size: 2.5rem;
-  color: var(--accent);
+.home-hero {
+  max-width: 480px;
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
   margin-bottom: 0.5rem;
 }
 

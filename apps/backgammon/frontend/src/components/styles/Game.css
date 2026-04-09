@@ -322,6 +322,13 @@
   box-shadow: 0 0 4px var(--danger);
 }
 
+.bot-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
 .pill-name {
   font-weight: 500;
 }

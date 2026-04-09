@@ -70,7 +70,7 @@ function Home({ player }: HomeProps) {
   return (
     <div className="home">
       <div className="home-header">
-        <h1>Backgammon Online</h1>
+        <img src="/images/backsplash.png" alt="Backgammon Online" className="home-hero" />
         <p className="welcome-text">
           Welcome, <strong>{player.nickname}</strong>
           {player.is_guest && <span className="guest-badge"> (Guest)</span>}

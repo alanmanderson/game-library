@@ -18,6 +18,13 @@
   text-align: center;
 }
 
+.auth-logo {
+  display: block;
+  margin: 0 auto 1rem;
+  max-width: 120px;
+  border-radius: 16px;
+}
+
 .auth-modal h2 {
   margin-bottom: 1.5rem;
   color: var(--accent);
