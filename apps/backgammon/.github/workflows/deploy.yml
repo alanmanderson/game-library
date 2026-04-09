@@ -1,0 +1,88 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run backend tests
+        working-directory: backend
+        run: |
+          pip install -r requirements.txt -r requirements-dev.txt
+          pytest
+
+      - name: Build frontend
+        working-directory: frontend
+        env:
+          VITE_GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build backend Docker image
+        run: docker build --platform linux/amd64 -t backgammon-server:latest backend/
+
+      - name: Save Docker image
+        run: docker save backgammon-server:latest | gzip > /tmp/backgammon-server.tar.gz
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H ${{ secrets.VM_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Transfer artifacts to VM
+        env:
+          REMOTE: azureuser@${{ secrets.VM_HOST }}
+        run: |
+          SCP="scp -i ~/.ssh/id_deploy"
+          SSH="ssh -i ~/.ssh/id_deploy"
+
+          $SCP /tmp/backgammon-server.tar.gz "$REMOTE":/tmp/
+          $SCP docker-compose.prod.yml "$REMOTE":/opt/backgammon/docker-compose.yml
+          $SCP Caddyfile "$REMOTE":/opt/backgammon/
+          $SSH "$REMOTE" "rm -rf /opt/backgammon/web-dist"
+          $SCP -r frontend/dist "$REMOTE":/opt/backgammon/web-dist
+
+      - name: Deploy on VM
+        env:
+          REMOTE: azureuser@${{ secrets.VM_HOST }}
+        run: |
+          ssh -i ~/.ssh/id_deploy "$REMOTE" bash -s <<'EOF'
+          set -euo pipefail
+          cd /opt/backgammon
+
+          if [ ! -f .env ]; then
+            echo "Creating .env with default values..."
+            cat > .env <<'ENVFILE'
+          POSTGRES_PASSWORD=changeme-generate-a-secure-random-string
+          JWT_SECRET=changeme-generate-a-secure-random-string
+          GOOGLE_CLIENT_ID=
+          DOMAIN=
+          ENVFILE
+            echo "WARNING: Edit /opt/backgammon/.env with real secrets before production use!"
+          fi
+
+          docker load < /tmp/backgammon-server.tar.gz
+          rm /tmp/backgammon-server.tar.gz
+
+          docker compose up -d --wait db
+
+          echo "Running migrations..."
+          docker compose run --rm fastapi alembic upgrade head
+
+          docker compose up -d --force-recreate
+
+          echo "Deployment complete!"
+          EOF
