@@ -61,30 +61,9 @@ jobs:
         env:
           REMOTE: azureuser@${{ secrets.VM_HOST }}
         run: |
-          ssh -i ~/.ssh/id_deploy "$REMOTE" bash -s <<'EOF'
-          set -euo pipefail
-          cd /opt/backgammon
-
-          if [ ! -f .env ]; then
-            echo "Creating .env with default values..."
-            cat > .env <<'ENVFILE'
-          POSTGRES_PASSWORD=changeme-generate-a-secure-random-string
-          JWT_SECRET=changeme-generate-a-secure-random-string
-          GOOGLE_CLIENT_ID=
-          DOMAIN=
-          ENVFILE
-            echo "WARNING: Edit /opt/backgammon/.env with real secrets before production use!"
-          fi
-
-          docker load < /tmp/backgammon-server.tar.gz
-          rm /tmp/backgammon-server.tar.gz
-
-          docker compose up -d --wait db
-
-          echo "Running migrations..."
-          docker compose run --rm fastapi alembic upgrade head
-
-          docker compose up -d --force-recreate
-
+          SSH="ssh -i ~/.ssh/id_deploy $REMOTE"
+          $SSH "docker load < /tmp/backgammon-server.tar.gz && rm /tmp/backgammon-server.tar.gz"
+          $SSH "cd /opt/backgammon && docker compose up -d --wait db"
+          $SSH "cd /opt/backgammon && docker compose run --rm fastapi alembic upgrade head"
+          $SSH "cd /opt/backgammon && docker compose up -d --force-recreate"
           echo "Deployment complete!"
-          EOF
