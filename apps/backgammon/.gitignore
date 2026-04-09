@@ -28,8 +28,7 @@ Thumbs.db
 # Database files
 *.db
 
-# Claude Code
-.claude/
+# Claude Code (local config)
 .mcp.json
 
 # Screenshots
