@@ -5,6 +5,7 @@
 }
 
 .board-svg {
+  width: 800px;
   max-width: 100%;
   height: auto;
   filter: drop-shadow(0 4px 20px rgba(0, 0, 0, 0.4));

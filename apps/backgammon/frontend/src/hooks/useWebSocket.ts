@@ -1,6 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { WSMessage } from "../types/game";
 
+interface WSAction {
+  type?: string;
+  action?: string;
+  [key: string]: unknown;
+}
+
 // ---------------------------------------------------------------------------
 // Public option / return interfaces
 // ---------------------------------------------------------------------------
@@ -24,7 +30,7 @@ interface UseWebSocketOptions {
 
 interface UseWebSocketReturn {
   /** Send an arbitrary JSON-serialisable payload to the server. */
-  sendMessage: (message: any) => void;
+  sendMessage: (message: WSAction) => void;
   /** Whether the WebSocket is currently in the OPEN state. */
   isConnected: boolean;
   /** The most recently received message (useful for one-off reads). */
@@ -63,7 +69,7 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
   // -- Refs (stable across renders) ----------------------------------------
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const messageQueueRef = useRef<any[]>([]);
+  const messageQueueRef = useRef<WSAction[]>([]);
   /** Track whether the hook has been unmounted so we never reconnect after cleanup. */
   const unmountedRef = useRef(false);
 
@@ -87,7 +93,9 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
     if (unmountedRef.current) return;
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return;
 
-    const ws = new WebSocket(url);
+    const token = localStorage.getItem("backgammon_token");
+    const wsUrl = `${url}?token=${token}`;
+    const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -162,7 +170,7 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
 
   // -- Public send helper --------------------------------------------------
 
-  const sendMessage = useCallback((message: any) => {
+  const sendMessage = useCallback((message: WSAction) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(message));
     } else {

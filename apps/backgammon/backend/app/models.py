@@ -1,10 +1,11 @@
 """SQLAlchemy models for the backgammon application."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     ForeignKey,
@@ -13,6 +14,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
 )
+from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -23,7 +25,7 @@ class Player(Base):
 
     id: str = Column(String(36), primary_key=True, default=lambda: str(uuid4()))
     nickname: str = Column(String(50), nullable=False)
-    created_at: datetime = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: datetime = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     # Auth fields
     email: str | None = Column(String(255), nullable=True, unique=True)
@@ -50,9 +52,12 @@ class Player(Base):
 
 class Table(Base):
     __tablename__ = "tables"
+    __table_args__ = (
+        CheckConstraint("status IN ('waiting', 'playing', 'finished')", name="ck_tables_status"),
+    )
 
     id: str = Column(String(8), primary_key=True)
-    created_at: datetime = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: datetime = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     white_player_id: str | None = Column(
         String(36), ForeignKey("players.id", ondelete="SET NULL"), nullable=True
     )
@@ -65,8 +70,9 @@ class Table(Base):
     )
     win_type: str | None = Column(String(20), nullable=True)
     final_score: int | None = Column(Integer, nullable=True)
-    game_state: dict | None = Column(JSON, nullable=True)
-    finished_at: datetime | None = Column(DateTime, nullable=True)
+    game_state: dict | None = Column(MutableDict.as_mutable(JSON), nullable=True)
+    finished_at: datetime | None = Column(DateTime(timezone=True), nullable=True)
+    updated_at: datetime | None = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=True)
     # Match play
     match_points: int = Column(Integer, nullable=False, default=5)
     white_match_score: int = Column(Integer, nullable=False, default=0)
@@ -98,13 +104,13 @@ class MoveRecord(Base):
         String(8), ForeignKey("tables.id", ondelete="CASCADE"), nullable=False, index=True
     )
     player_id: str = Column(
-        String(36), ForeignKey("players.id", ondelete="CASCADE"), nullable=False, index=True
+        String(36), ForeignKey("players.id", ondelete="SET NULL"), nullable=True, index=True
     )
     move_number: int = Column(Integer, nullable=False)
     dice_roll: str = Column(String(10), nullable=False)
     moves_notation: str = Column(String(200), nullable=False)
-    game_state_after: dict | None = Column(JSON, nullable=True)
-    created_at: datetime = Column(DateTime, default=datetime.utcnow, nullable=False)
+    game_state_after: dict | None = Column(MutableDict.as_mutable(JSON), nullable=True)
+    created_at: datetime = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     # Relationships
     table = relationship("Table", back_populates="move_records")
@@ -125,10 +131,10 @@ class PlayerStats(Base):
 
     id: int = Column(Integer, primary_key=True, autoincrement=True)
     player_id: str = Column(
-        String(36), ForeignKey("players.id", ondelete="CASCADE"), nullable=False, index=True
+        String(36), ForeignKey("players.id", ondelete="SET NULL"), nullable=True, index=True
     )
     opponent_id: str = Column(
-        String(36), ForeignKey("players.id", ondelete="CASCADE"), nullable=False, index=True
+        String(36), ForeignKey("players.id", ondelete="SET NULL"), nullable=True, index=True
     )
     games_played: int = Column(Integer, nullable=False, default=0)
     games_won: int = Column(Integer, nullable=False, default=0)
@@ -139,6 +145,7 @@ class PlayerStats(Base):
     gammons_lost: int = Column(Integer, nullable=False, default=0)
     backgammons_won: int = Column(Integer, nullable=False, default=0)
     backgammons_lost: int = Column(Integer, nullable=False, default=0)
+    updated_at: datetime | None = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=True)
 
     # Relationships
     player = relationship("Player", foreign_keys=[player_id])

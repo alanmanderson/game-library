@@ -7,7 +7,7 @@ protected endpoint access, and guest stats restriction.
 import pytest
 from unittest.mock import AsyncMock, patch
 
-from tests.conftest import create_test_player
+from tests.conftest import auth_headers, create_test_player
 
 
 # -----------------------------------------------------------------------
@@ -270,9 +270,14 @@ class TestProtectedEndpoints:
             "/api/auth/register",
             json={"email": "table@example.com", "password": "secret123", "nickname": "TableMaker"},
         )
+        token = reg.json()["token"]
         player_id = reg.json()["player"]["id"]
 
-        resp = await client.post("/api/tables", json={"player_id": player_id})
+        resp = await client.post(
+            "/api/tables",
+            json={"player_id": player_id},
+            headers=auth_headers(token),
+        )
         assert resp.status_code == 200
         assert resp.json()["status"] == "waiting"
 
@@ -282,11 +287,21 @@ class TestProtectedEndpoints:
             "/api/auth/guest",
             json={"nickname": "GuestTableMaker"},
         )
+        token = guest.json()["token"]
         player_id = guest.json()["player"]["id"]
 
-        resp = await client.post("/api/tables", json={"player_id": player_id})
+        resp = await client.post(
+            "/api/tables",
+            json={"player_id": player_id},
+            headers=auth_headers(token),
+        )
         assert resp.status_code == 200
         assert resp.json()["status"] == "waiting"
+
+    async def test_unauthenticated_cannot_create_table(self, client):
+        """Creating a table without auth returns 401."""
+        resp = await client.post("/api/tables", json={"player_id": "some-id"})
+        assert resp.status_code == 401
 
 
 # -----------------------------------------------------------------------
@@ -301,9 +316,13 @@ class TestGuestStatsRestriction:
             "/api/auth/guest",
             json={"nickname": "GuestNoStats"},
         )
+        token = guest.json()["token"]
         player_id = guest.json()["player"]["id"]
 
-        resp = await client.get(f"/api/players/{player_id}/stats")
+        resp = await client.get(
+            f"/api/players/{player_id}/stats",
+            headers=auth_headers(token),
+        )
         assert resp.status_code == 403
         assert "guest" in resp.json()["detail"].lower()
 
@@ -313,31 +332,13 @@ class TestGuestStatsRestriction:
             "/api/auth/register",
             json={"email": "stats@example.com", "password": "secret123", "nickname": "StatsUser"},
         )
+        token = reg.json()["token"]
         player_id = reg.json()["player"]["id"]
 
-        resp = await client.get(f"/api/players/{player_id}/stats")
+        resp = await client.get(
+            f"/api/players/{player_id}/stats",
+            headers=auth_headers(token),
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["total_games"] == 0
-
-
-# -----------------------------------------------------------------------
-# Legacy /api/players endpoint
-# -----------------------------------------------------------------------
-
-
-class TestLegacyPlayerEndpoint:
-    async def test_legacy_create_player_is_guest(self, client):
-        """POST /api/players still works but creates a guest player."""
-        resp = await client.post("/api/players", json={"nickname": "Legacy"})
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["nickname"] == "Legacy"
-        assert data["is_guest"] is True
-        assert data["auth_provider"] == "guest"
-
-    async def test_legacy_player_stats_forbidden(self, client):
-        """Stats for a legacy (guest) player returns 403."""
-        player = await create_test_player(client, "LegacyStats")
-        resp = await client.get(f"/api/players/{player['id']}/stats")
-        assert resp.status_code == 403

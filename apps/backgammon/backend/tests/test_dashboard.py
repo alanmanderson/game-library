@@ -8,7 +8,7 @@ import pytest
 from datetime import datetime, timedelta
 
 from app.models import Player, Table
-from tests.conftest import create_test_player
+from tests.conftest import auth_headers, create_test_player
 
 
 # ---------------------------------------------------------------------------
@@ -17,13 +17,14 @@ from tests.conftest import create_test_player
 
 
 async def register_player(client, email, nickname):
-    """Register a non-guest player via the auth API and return the player dict."""
+    """Register a non-guest player via the auth API and return (player_dict, token)."""
     resp = await client.post(
         "/api/auth/register",
         json={"email": email, "password": "secret123", "nickname": nickname},
     )
     assert resp.status_code == 200, f"Failed to register player: {resp.text}"
-    return resp.json()["player"]
+    data = resp.json()
+    return data["player"], data["token"]
 
 
 async def insert_table(db_session, **kwargs):
@@ -43,22 +44,27 @@ class TestDashboardEndpoint:
     """Tests for GET /api/players/{player_id}/dashboard."""
 
     async def test_not_found_for_nonexistent_player(self, client):
-        """Dashboard returns 404 when the player does not exist."""
+        """Dashboard returns 401 when no auth is provided."""
         resp = await client.get("/api/players/nonexistent-id/dashboard")
-        assert resp.status_code == 404
-        assert "not found" in resp.json()["detail"].lower()
+        assert resp.status_code == 401
 
     async def test_forbidden_for_guest_player(self, client):
         """Dashboard returns 403 for guest players."""
-        guest = await create_test_player(client, "GuestDash")
-        resp = await client.get(f"/api/players/{guest['id']}/dashboard")
+        guest_auth = await create_test_player(client, "GuestDash")
+        resp = await client.get(
+            f"/api/players/{guest_auth['player']['id']}/dashboard",
+            headers=auth_headers(guest_auth["token"]),
+        )
         assert resp.status_code == 403
         assert "guest" in resp.json()["detail"].lower()
 
     async def test_empty_dashboard(self, client):
         """A registered player with no games gets an empty dashboard."""
-        player = await register_player(client, "empty@example.com", "EmptyPlayer")
-        resp = await client.get(f"/api/players/{player['id']}/dashboard")
+        player, token = await register_player(client, "empty@example.com", "EmptyPlayer")
+        resp = await client.get(
+            f"/api/players/{player['id']}/dashboard",
+            headers=auth_headers(token),
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["total_games"] == 0
@@ -70,8 +76,8 @@ class TestDashboardEndpoint:
 
     async def test_finished_game_win(self, client, db_session):
         """A finished game where the player won shows as a win."""
-        player = await register_player(client, "winner@example.com", "Winner")
-        opponent = await register_player(client, "loser@example.com", "Loser")
+        player, token = await register_player(client, "winner@example.com", "Winner")
+        opponent, _ = await register_player(client, "loser@example.com", "Loser")
 
         now = datetime.utcnow()
         await insert_table(
@@ -88,7 +94,10 @@ class TestDashboardEndpoint:
         )
         await db_session.commit()
 
-        resp = await client.get(f"/api/players/{player['id']}/dashboard")
+        resp = await client.get(
+            f"/api/players/{player['id']}/dashboard",
+            headers=auth_headers(token),
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["total_games"] == 1
@@ -108,8 +117,8 @@ class TestDashboardEndpoint:
 
     async def test_finished_game_loss(self, client, db_session):
         """A finished game where the player lost shows as a loss."""
-        player = await register_player(client, "plose@example.com", "PlayerLose")
-        opponent = await register_player(client, "pwin@example.com", "PlayerWin")
+        player, token = await register_player(client, "plose@example.com", "PlayerLose")
+        opponent, _ = await register_player(client, "pwin@example.com", "PlayerWin")
 
         now = datetime.utcnow()
         await insert_table(
@@ -126,7 +135,10 @@ class TestDashboardEndpoint:
         )
         await db_session.commit()
 
-        resp = await client.get(f"/api/players/{player['id']}/dashboard")
+        resp = await client.get(
+            f"/api/players/{player['id']}/dashboard",
+            headers=auth_headers(token),
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["total_games"] == 1
@@ -144,8 +156,8 @@ class TestDashboardEndpoint:
 
     async def test_abandoned_game(self, client, db_session):
         """A game with status 'playing' shows as abandoned."""
-        player = await register_player(client, "abandon@example.com", "Abandoner")
-        opponent = await register_player(client, "left@example.com", "LeftBehind")
+        player, token = await register_player(client, "abandon@example.com", "Abandoner")
+        opponent, _ = await register_player(client, "left@example.com", "LeftBehind")
 
         now = datetime.utcnow()
         await insert_table(
@@ -158,7 +170,10 @@ class TestDashboardEndpoint:
         )
         await db_session.commit()
 
-        resp = await client.get(f"/api/players/{player['id']}/dashboard")
+        resp = await client.get(
+            f"/api/players/{player['id']}/dashboard",
+            headers=auth_headers(token),
+        )
         assert resp.status_code == 200
         data = resp.json()
         # Abandoned games do NOT count toward total_games (finished only)
@@ -177,9 +192,9 @@ class TestDashboardEndpoint:
 
     async def test_summary_calculations(self, client, db_session):
         """Summary stats are calculated correctly across multiple games."""
-        player = await register_player(client, "summary@example.com", "SummaryPlayer")
-        opp1 = await register_player(client, "opp1@example.com", "Opponent1")
-        opp2 = await register_player(client, "opp2@example.com", "Opponent2")
+        player, token = await register_player(client, "summary@example.com", "SummaryPlayer")
+        opp1, _ = await register_player(client, "opp1@example.com", "Opponent1")
+        opp2, _ = await register_player(client, "opp2@example.com", "Opponent2")
 
         now = datetime.utcnow()
 
@@ -237,7 +252,10 @@ class TestDashboardEndpoint:
 
         await db_session.commit()
 
-        resp = await client.get(f"/api/players/{player['id']}/dashboard")
+        resp = await client.get(
+            f"/api/players/{player['id']}/dashboard",
+            headers=auth_headers(token),
+        )
         assert resp.status_code == 200
         data = resp.json()
 
@@ -252,8 +270,8 @@ class TestDashboardEndpoint:
 
     async def test_games_ordered_newest_first(self, client, db_session):
         """Games are returned with the newest first (descending created_at)."""
-        player = await register_player(client, "order@example.com", "OrderPlayer")
-        opp = await register_player(client, "orderopp@example.com", "OrderOpp")
+        player, token = await register_player(client, "order@example.com", "OrderPlayer")
+        opp, _ = await register_player(client, "orderopp@example.com", "OrderOpp")
 
         now = datetime.utcnow()
 
@@ -287,7 +305,10 @@ class TestDashboardEndpoint:
 
         await db_session.commit()
 
-        resp = await client.get(f"/api/players/{player['id']}/dashboard")
+        resp = await client.get(
+            f"/api/players/{player['id']}/dashboard",
+            headers=auth_headers(token),
+        )
         assert resp.status_code == 200
         data = resp.json()
 
@@ -298,7 +319,7 @@ class TestDashboardEndpoint:
 
     async def test_waiting_tables_excluded(self, client, db_session):
         """Tables with status 'waiting' are not included in the dashboard."""
-        player = await register_player(client, "waiting@example.com", "WaitPlayer")
+        player, token = await register_player(client, "waiting@example.com", "WaitPlayer")
 
         now = datetime.utcnow()
         await insert_table(
@@ -310,7 +331,10 @@ class TestDashboardEndpoint:
         )
         await db_session.commit()
 
-        resp = await client.get(f"/api/players/{player['id']}/dashboard")
+        resp = await client.get(
+            f"/api/players/{player['id']}/dashboard",
+            headers=auth_headers(token),
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["total_games"] == 0

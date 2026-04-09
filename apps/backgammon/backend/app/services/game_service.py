@@ -1,15 +1,21 @@
 """Game service managing in-memory game engines and database coordination."""
 
+import asyncio
+import logging
 import string
 import random
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from app.models import Table, MoveRecord, Player
-from app.game_engine import BackgammonEngine, Color, Move, GameStatus, WinType
+from app.game_engine import (
+    BackgammonEngine, Color, DiceRoll, Move, GameStatus, WinType,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class GameManager:
@@ -23,11 +29,18 @@ class GameManager:
     def __init__(self) -> None:
         self._engines: dict[str, BackgammonEngine] = {}
         self._player_colors: dict[str, dict[str, Color]] = {}  # table_id -> {player_id: color}
+        self._locks: dict[str, asyncio.Lock] = {}
 
     def generate_table_id(self) -> str:
         """Generate a short, unique, human-friendly table ID (6 uppercase alphanumeric chars)."""
         chars = string.ascii_uppercase + string.digits
         return "".join(random.choices(chars, k=6))
+
+    def _get_lock(self, table_id: str) -> asyncio.Lock:
+        """Return (creating if needed) the per-table asyncio lock."""
+        if table_id not in self._locks:
+            self._locks[table_id] = asyncio.Lock()
+        return self._locks[table_id]
 
     # ------------------------------------------------------------------
     # Table lifecycle
@@ -93,6 +106,140 @@ class GameManager:
         colors = self._player_colors.get(table_id, {})
         return colors.get(player_id)
 
+    async def restore_engine(self, table_id: str, db: AsyncSession) -> Optional[BackgammonEngine]:
+        """Restore an engine from the database game_state JSON snapshot.
+
+        Used when the in-memory engine is missing (e.g. after a server
+        restart) but the game is still in progress in the database.
+        Returns the restored engine, or None if restoration is not possible.
+        """
+        table = await db.get(Table, table_id)
+        if table is None or table.status != "playing" or table.game_state is None:
+            return None
+
+        snap = table.game_state
+
+        engine = BackgammonEngine()
+        s = engine.state
+
+        # Restore board position
+        s.points = list(snap["points"])
+        s.bar_white = snap["bar_white"]
+        s.bar_black = snap["bar_black"]
+        s.off_white = snap["off_white"]
+        s.off_black = snap["off_black"]
+
+        # Restore turn / status
+        s.current_turn = Color(snap["current_turn"])
+        s.status = GameStatus(snap["status"])
+
+        # Restore dice
+        if snap.get("dice"):
+            s.dice = DiceRoll(snap["dice"]["die1"], snap["dice"]["die2"])
+        else:
+            s.dice = None
+        s.remaining_dice = list(snap.get("remaining_dice", []))
+
+        # Restore winner / win_type
+        s.winner = Color(snap["winner"]) if snap.get("winner") else None
+        if snap.get("win_type"):
+            s.win_type = WinType[snap["win_type"].upper()]
+        else:
+            s.win_type = None
+
+        # Restore opening roll
+        s.opening_roll = snap.get("opening_roll")
+
+        # Restore doubling cube
+        s.cube_value = snap.get("cube_value", 1)
+        s.cube_owner = Color(snap["cube_owner"]) if snap.get("cube_owner") else None
+        s.double_offered = snap.get("double_offered", False)
+        s.double_offered_by = Color(snap["double_offered_by"]) if snap.get("double_offered_by") else None
+
+        # Moves history and turn_moves cannot be fully restored from the
+        # snapshot (it only stores turn_moves_count), so initialise them
+        # as empty.  This means undo will not work for the first turn
+        # after restoration, which is an acceptable trade-off.
+        s.moves_history = []
+        s.turn_moves = []
+
+        # Prepare the internal _turn_snapshot so undo works for future
+        # moves made after restoration (snapshot of current board).
+        if s.status == GameStatus.MOVING:
+            engine._turn_snapshot = engine._snapshot_internals()
+            engine._turn_snapshot["remaining_dice"] = list(s.remaining_dice)
+            engine._turn_snapshot["turn_moves"] = []
+
+        # Store the restored engine
+        self._engines[table_id] = engine
+
+        # Restore player color mappings
+        self._player_colors[table_id] = {}
+        if table.white_player_id:
+            self._player_colors[table_id][table.white_player_id] = Color.WHITE
+        if table.black_player_id:
+            self._player_colors[table_id][table.black_player_id] = Color.BLACK
+
+        logger.info("Restored engine for table %s from database", table_id)
+        return engine
+
+    async def get_or_restore_engine(
+        self, table_id: str, db: AsyncSession
+    ) -> Optional[BackgammonEngine]:
+        """Return the in-memory engine, restoring from DB if necessary."""
+        engine = self.get_engine(table_id)
+        if engine is not None:
+            return engine
+        return await self.restore_engine(table_id, db)
+
+    async def restore_engine_from_snapshot(
+        self, table_id: str, engine: BackgammonEngine, snap: dict
+    ) -> None:
+        """Restore an engine's state in-place from a snapshot dict.
+
+        Used to roll back in-memory engine state when a DB commit fails,
+        preventing divergence between engine and database state.
+        """
+        s = engine.state
+
+        s.points = list(snap["points"])
+        s.bar_white = snap["bar_white"]
+        s.bar_black = snap["bar_black"]
+        s.off_white = snap["off_white"]
+        s.off_black = snap["off_black"]
+
+        s.current_turn = Color(snap["current_turn"])
+        s.status = GameStatus(snap["status"])
+
+        if snap.get("dice"):
+            s.dice = DiceRoll(snap["dice"]["die1"], snap["dice"]["die2"])
+        else:
+            s.dice = None
+        s.remaining_dice = list(snap.get("remaining_dice", []))
+
+        s.winner = Color(snap["winner"]) if snap.get("winner") else None
+        if snap.get("win_type"):
+            s.win_type = WinType[snap["win_type"].upper()]
+        else:
+            s.win_type = None
+
+        s.opening_roll = snap.get("opening_roll")
+
+        s.cube_value = snap.get("cube_value", 1)
+        s.cube_owner = Color(snap["cube_owner"]) if snap.get("cube_owner") else None
+        s.double_offered = snap.get("double_offered", False)
+        s.double_offered_by = Color(snap["double_offered_by"]) if snap.get("double_offered_by") else None
+
+        s.moves_history = []
+        s.turn_moves = []
+
+        if s.status == GameStatus.MOVING:
+            engine._turn_snapshot = engine._snapshot_internals()
+            engine._turn_snapshot["remaining_dice"] = list(s.remaining_dice)
+            engine._turn_snapshot["turn_moves"] = []
+
+        logger.info("Restored engine state from snapshot for table %s", table_id)
+
     # ------------------------------------------------------------------
     # Game state
     # ------------------------------------------------------------------
@@ -124,6 +271,22 @@ class GameManager:
 
         snapshot["valid_moves"] = valid_moves
         snapshot["can_double"] = engine.can_double(color) if color else False
+
+        # Calculate pip counts
+        pip_white = 0
+        pip_black = 0
+        points = snapshot.get("points", [])
+        for i in range(1, 25):
+            val = points[i] if i < len(points) else 0
+            if val > 0:
+                pip_white += i * val
+            elif val < 0:
+                pip_black += (25 - i) * (-val)
+        pip_white += 25 * snapshot.get("bar_white", 0)
+        pip_black += 25 * snapshot.get("bar_black", 0)
+        snapshot["pip_white"] = pip_white
+        snapshot["pip_black"] = pip_black
+
         return snapshot
 
     # ------------------------------------------------------------------
@@ -326,9 +489,9 @@ class GameManager:
 
         # Count existing move records for this table to determine move_number
         result = await db.execute(
-            select(MoveRecord).where(MoveRecord.table_id == table_id)
+            select(func.count(MoveRecord.id)).where(MoveRecord.table_id == table_id)
         )
-        existing_count = len(result.scalars().all())
+        existing_count = result.scalar()
 
         notation = (
             " ".join(m.to_notation(color) for m in moves) if moves else "(no moves)"
@@ -368,7 +531,7 @@ class GameManager:
         cube_score = base_score * engine.state.cube_value
         table.final_score = cube_score
         table.status = "finished"
-        table.finished_at = datetime.utcnow()
+        table.finished_at = datetime.now(timezone.utc)
 
         # Update match scores
         if winner_color == Color.WHITE:
@@ -385,6 +548,7 @@ class GameManager:
             table.black_player_id,
             table.winner_id,
             win_type,
+            cube_value=engine.state.cube_value,
         )
 
         # NOTE: Engine cleanup is deferred to cleanup_finished_game() so that
@@ -398,6 +562,49 @@ class GameManager:
         """
         self._engines.pop(table_id, None)
         self._player_colors.pop(table_id, None)
+        self._locks.pop(table_id, None)
+
+    async def cleanup_stale_engines(self, db: AsyncSession) -> int:
+        """Remove in-memory engines for games that are finished or abandoned.
+
+        A game is considered stale if:
+        - The table no longer exists in the database.
+        - The table status is "finished".
+        - The table has been inactive for more than 1 hour (based on
+          updated_at, falling back to created_at).
+
+        Returns the number of engines cleaned up.
+        """
+        now = datetime.now(timezone.utc)
+        stale_timeout_seconds = 3600  # 1 hour
+        cleaned = 0
+
+        for table_id in list(self._engines.keys()):
+            table = await db.get(Table, table_id)
+
+            should_remove = False
+            if table is None:
+                should_remove = True
+            elif table.status == "finished":
+                should_remove = True
+            else:
+                last_activity = table.updated_at or table.created_at
+                if last_activity:
+                    # Ensure both datetimes are offset-aware for comparison
+                    if last_activity.tzinfo is None:
+                        last_activity = last_activity.replace(tzinfo=timezone.utc)
+                    elapsed = (now - last_activity).total_seconds()
+                    if elapsed > stale_timeout_seconds:
+                        should_remove = True
+
+            if should_remove:
+                self._engines.pop(table_id, None)
+                self._player_colors.pop(table_id, None)
+                self._locks.pop(table_id, None)
+                cleaned += 1
+                logger.info("Cleaned up stale engine for table %s", table_id)
+
+        return cleaned
 
 
 # Global singleton -- shared by all routes and WebSocket handlers

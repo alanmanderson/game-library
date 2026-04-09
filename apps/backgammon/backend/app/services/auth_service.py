@@ -5,7 +5,7 @@ from typing import Optional
 
 import bcrypt
 import httpx
-from jose import JWTError, jwt
+import jwt
 
 from app.config import settings
 
@@ -53,7 +53,7 @@ def verify_token(token: str) -> Optional[dict]:
             token, settings.jwt_secret, algorithms=[settings.jwt_algorithm]
         )
         return payload
-    except JWTError:
+    except jwt.InvalidTokenError:
         return None
 
 

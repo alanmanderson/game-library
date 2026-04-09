@@ -81,6 +81,8 @@ export interface GameState {
   double_offered: boolean;
   double_offered_by: Color | null;
   can_double: boolean;
+  pip_white?: number;
+  pip_black?: number;
 }
 
 /** A table (lobby / game room) that two players can join. */
@@ -160,12 +162,6 @@ export type WSMessageType =
   | "opponent_disconnected"
   | "opponent_reconnected";
 
-/** Generic WebSocket message (use the narrower types below when possible). */
-export interface WSMessage {
-  type: WSMessageType;
-  data: any;
-}
-
 /** Sent when the full game state needs to be (re)synchronised. */
 export interface WSGameStateMessage {
   type: "game_state";
@@ -183,3 +179,12 @@ export interface WSErrorMessage {
     message: string;
   };
 }
+
+/** Sent for simple signal messages with no meaningful payload. */
+export interface WSSignalMessage {
+  type: "player_joined" | "dice_rolled" | "move_made" | "turn_ended" | "game_over" | "waiting" | "opponent_disconnected" | "opponent_reconnected";
+  data: Record<string, unknown>;
+}
+
+/** Discriminated union of all WebSocket messages. */
+export type WSMessage = WSGameStateMessage | WSErrorMessage | WSSignalMessage;

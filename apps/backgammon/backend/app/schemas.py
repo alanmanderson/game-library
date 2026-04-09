@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class PlayerCreate(BaseModel):
-    nickname: str
+    nickname: str = Field(min_length=1, max_length=50)
 
 
 class PlayerResponse(BaseModel):
@@ -27,13 +27,13 @@ class PlayerResponse(BaseModel):
 
 
 class RegisterRequest(BaseModel):
-    email: str
+    email: EmailStr
     password: str = Field(min_length=6)
     nickname: str = Field(min_length=2, max_length=50)
 
 
 class LoginRequest(BaseModel):
-    email: str
+    email: EmailStr
     password: str
 
 
@@ -66,6 +66,9 @@ class TableResponse(BaseModel):
     white_player: Optional[PlayerResponse] = None
     black_player: Optional[PlayerResponse] = None
     created_at: datetime
+    match_points: int = 5
+    white_match_score: int = 0
+    black_match_score: int = 0
 
 
 class JoinTableRequest(BaseModel):
@@ -154,4 +157,5 @@ class DashboardResponse(BaseModel):
     losses: int
     win_rate: float
     abandoned_games: int
+    total_count: int = 0
     games: list[GameHistoryItem]

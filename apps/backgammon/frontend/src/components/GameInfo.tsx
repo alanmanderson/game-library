@@ -1,13 +1,14 @@
 import { useState, useEffect } from "react";
-import type { Table, MoveRecord } from "../types/game";
+import type { Table, MoveRecord, GameStatus } from "../types/game";
 import { getGameHistory } from "../services/api";
 import "./styles/GameInfo.css";
 
 interface GameInfoProps {
   table: Table;
+  gameStatus: GameStatus;
 }
 
-function GameInfo({ table }: GameInfoProps) {
+function GameInfo({ table, gameStatus }: GameInfoProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [moveHistory, setMoveHistory] = useState<MoveRecord[]>([]);
 
@@ -25,15 +26,20 @@ function GameInfo({ table }: GameInfoProps) {
       }
     }
 
+    // Always fetch once to get latest history
     fetchHistory();
 
-    const interval = setInterval(fetchHistory, 5000);
+    // Only poll while the game is still active
+    let interval: ReturnType<typeof setInterval> | undefined;
+    if (gameStatus !== "finished") {
+      interval = setInterval(fetchHistory, 5000);
+    }
 
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      if (interval) clearInterval(interval);
     };
-  }, [table.id]);
+  }, [table.id, gameStatus]);
 
   return (
     <div className="move-history-drawer">

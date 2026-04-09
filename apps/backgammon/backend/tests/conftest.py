@@ -10,6 +10,7 @@ from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
 from app.database import Base, get_db
+from app.limiter import limiter
 from app.main import app
 from app.services.game_service import game_manager
 
@@ -57,6 +58,8 @@ async def client(db_session: AsyncSession):
         yield db_session
 
     app.dependency_overrides[get_db] = _override_get_db
+    # Reset rate limiter storage so limits don't carry across tests
+    limiter.reset()
     transport = ASGITransport(app=app)
 
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
@@ -74,16 +77,32 @@ async def client(db_session: AsyncSession):
 # ---------------------------------------------------------------------------
 
 
+def auth_headers(token: str) -> dict:
+    """Return an Authorization header dict for JWT-authenticated requests."""
+    return {"Authorization": f"Bearer {token}"}
+
+
 async def create_test_player(client: AsyncClient, nickname: str = "TestPlayer") -> dict:
-    """Register a player via the API and return the response JSON."""
-    resp = await client.post("/api/players", json={"nickname": nickname})
+    """Create a guest player via the auth API and return the response JSON.
+
+    Returns ``{"player": {...}, "token": "..."}``.
+    """
+    resp = await client.post("/api/auth/guest", json={"nickname": nickname})
     assert resp.status_code == 200, f"Failed to create player: {resp.text}"
     return resp.json()
 
 
-async def create_test_table(client: AsyncClient, player_id: str) -> dict:
-    """Create a table via the API and return the response JSON."""
-    resp = await client.post("/api/tables", json={"player_id": player_id})
+async def create_test_table(client: AsyncClient, token: str, player_id: str = "unused") -> dict:
+    """Create a table via the API using a JWT token and return the response JSON.
+
+    The ``player_id`` body field is still required by the schema but the route
+    uses the JWT identity.  Pass the real player_id to keep the request valid.
+    """
+    resp = await client.post(
+        "/api/tables",
+        json={"player_id": player_id},
+        headers=auth_headers(token),
+    )
     assert resp.status_code == 200, f"Failed to create table: {resp.text}"
     return resp.json()
 
@@ -93,17 +112,21 @@ async def create_and_join_table(
 ) -> tuple[dict, dict, dict]:
     """Create two players, create a table, and have the second player join.
 
-    Returns a tuple of ``(table_data, creator_data, joiner_data)``.
+    Returns a tuple of ``(table_data, creator_auth, joiner_auth)`` where
+    ``creator_auth`` and ``joiner_auth`` are the full auth response dicts
+    containing ``{"player": {...}, "token": "..."}``.
     """
-    creator = await create_test_player(client, creator_nickname)
-    joiner = await create_test_player(client, joiner_nickname)
+    creator_auth = await create_test_player(client, creator_nickname)
+    joiner_auth = await create_test_player(client, joiner_nickname)
 
-    table = await create_test_table(client, creator["id"])
+    table = await create_test_table(client, creator_auth["token"], creator_auth["player"]["id"])
 
     resp = await client.post(
-        f"/api/tables/{table['id']}/join", json={"player_id": joiner["id"]}
+        f"/api/tables/{table['id']}/join",
+        json={"player_id": joiner_auth["player"]["id"]},
+        headers=auth_headers(joiner_auth["token"]),
     )
     assert resp.status_code == 200, f"Failed to join table: {resp.text}"
     joined_table = resp.json()
 
-    return joined_table, creator, joiner
+    return joined_table, creator_auth, joiner_auth

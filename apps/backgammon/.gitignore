@@ -25,6 +25,16 @@ Thumbs.db
 # Env
 .env
 
+# Database files
+*.db
+
+# Claude Code
+.claude/
+.mcp.json
+
+# Screenshots
+screenshots/
+
 # Vite
 tsconfig.tsbuildinfo
 infra/terraform.tfvars

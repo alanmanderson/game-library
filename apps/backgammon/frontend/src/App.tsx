@@ -10,11 +10,10 @@ import { useState, useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
 import type { Player } from "./types/game";
 import { getMe, getStoredToken, clearStoredToken } from "./services/api";
+import { STORAGE_KEY } from "./constants";
 import Home from "./components/Home";
 import Game from "./components/Game";
 import AuthModal from "./components/AuthModal";
-
-const STORAGE_KEY = "backgammon_player";
 
 function App() {
   const [player, setPlayer] = useState<Player | null>(null);

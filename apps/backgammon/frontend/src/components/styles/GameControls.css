@@ -6,39 +6,6 @@
   padding: 0.5rem;
 }
 
-.turn-indicator {
-  font-size: 1rem;
-  font-weight: 600;
-  padding: 0.25rem 1rem;
-  border-radius: 20px;
-  text-align: center;
-}
-
-.turn-indicator.your-turn {
-  color: var(--success);
-  background: rgba(46, 204, 113, 0.15);
-  border: 1px solid var(--success);
-}
-
-.turn-indicator.opponent-turn {
-  color: var(--text-secondary);
-  background: rgba(154, 154, 176, 0.1);
-  border: 1px solid var(--text-secondary);
-}
-
-.turn-indicator.waiting {
-  color: var(--accent);
-  background: rgba(212, 168, 67, 0.15);
-  border: 1px solid var(--accent);
-}
-
-.turn-indicator.finished {
-  color: var(--accent);
-  background: rgba(212, 168, 67, 0.15);
-  border: 1px solid var(--accent);
-  font-size: 1.1rem;
-}
-
 .controls-row {
   display: flex;
   align-items: center;
@@ -102,11 +69,6 @@
 .board-overlay .game-controls {
   padding: 0.15rem;
   gap: 0.25rem;
-}
-
-.board-overlay .turn-indicator {
-  font-size: 0.8rem;
-  padding: 0.15rem 0.6rem;
 }
 
 .board-overlay .controls-row {

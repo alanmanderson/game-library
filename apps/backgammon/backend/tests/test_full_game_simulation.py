@@ -6,16 +6,11 @@ after every single move.  Also exercises predetermined dice rolls for
 deterministic coverage.
 """
 
-import sys
-import os
 import copy
 import random
 import traceback
 
 import pytest
-
-# Ensure the backend package is importable.
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app.game_engine import (
     BackgammonEngine,

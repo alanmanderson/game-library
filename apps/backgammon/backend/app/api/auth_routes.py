@@ -1,6 +1,6 @@
 """Authentication routes: register, login, Google OAuth, guest, and me."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +21,7 @@ from app.services.auth_service import (
     verify_password,
 )
 from app.api.auth import get_current_player
+from app.limiter import limiter
 
 auth_router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -45,7 +46,8 @@ def _build_auth_response(player: Player, token: str) -> dict:
 
 
 @auth_router.post("/register", response_model=AuthResponse)
-async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("5/minute")
+async def register(request: Request, data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     """Create a new account with email, password, and nickname."""
     # Check for existing email
     result = await db.execute(select(Player).where(Player.email == data.email))
@@ -77,7 +79,8 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
 
 @auth_router.post("/login", response_model=AuthResponse)
-async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/minute")
+async def login(request: Request, data: LoginRequest, db: AsyncSession = Depends(get_db)):
     """Authenticate with email and password; returns a JWT."""
     result = await db.execute(select(Player).where(Player.email == data.email))
     player = result.scalar_one_or_none()
@@ -104,7 +107,8 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 
 @auth_router.post("/google", response_model=AuthResponse)
-async def google_auth(data: GoogleAuthRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/minute")
+async def google_auth(request: Request, data: GoogleAuthRequest, db: AsyncSession = Depends(get_db)):
     """Verify a Google ID token, create or find the user, and return a JWT."""
     google_data = await verify_google_token(data.id_token)
     if not google_data:
@@ -159,7 +163,8 @@ async def google_auth(data: GoogleAuthRequest, db: AsyncSession = Depends(get_db
 
 
 @auth_router.post("/guest", response_model=AuthResponse)
-async def create_guest(data: GuestRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/minute")
+async def create_guest(request: Request, data: GuestRequest, db: AsyncSession = Depends(get_db)):
     """Create a temporary guest player with a nickname. No account needed."""
     player = Player(
         nickname=data.nickname,

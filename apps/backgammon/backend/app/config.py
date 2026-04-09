@@ -1,5 +1,4 @@
 import os
-import secrets
 from pydantic import BaseModel
 
 
@@ -14,7 +13,7 @@ class Settings(BaseModel):
     )
 
     # JWT / Auth settings
-    jwt_secret: str = os.getenv("JWT_SECRET", secrets.token_urlsafe(32))
+    jwt_secret: str = os.getenv("JWT_SECRET", "")
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 1440  # 24 hours
 
@@ -26,3 +25,6 @@ class Settings(BaseModel):
 
 
 settings = Settings()
+
+if not settings.jwt_secret:
+    raise ValueError("JWT_SECRET environment variable is required")

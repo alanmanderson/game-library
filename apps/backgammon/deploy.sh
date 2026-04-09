@@ -45,30 +45,31 @@ ssh "$REMOTE" bash -s <<'EOF'
 set -euo pipefail
 cd /opt/backgammon
 
+# Ensure .env file exists with required variables
+if [ ! -f .env ]; then
+  echo "Creating .env with default values..."
+  cat > .env <<'ENVFILE'
+POSTGRES_PASSWORD=changeme-generate-a-secure-random-string
+JWT_SECRET=changeme-generate-a-secure-random-string
+GOOGLE_CLIENT_ID=
+DOMAIN=
+ENVFILE
+  echo "WARNING: Edit /opt/backgammon/.env with real secrets before production use!"
+fi
+
 # Load Docker image
 docker load < /tmp/backgammon-server.tar.gz
 rm /tmp/backgammon-server.tar.gz
 
-# Start/restart services
-docker compose up -d --force-recreate
-
-# Wait for FastAPI to be ready
-echo "Waiting for FastAPI..."
-for i in $(seq 1 30); do
-    if docker compose exec fastapi python -c "print('ok')" 2>/dev/null; then
-        echo "FastAPI is ready."
-        break
-    fi
-    if [ "$i" -eq 30 ]; then
-        echo "ERROR: FastAPI failed to start. Check logs: docker compose logs fastapi"
-        exit 1
-    fi
-    sleep 3
-done
+# Start database and wait for it to be healthy
+docker compose up -d --wait db
 
 # Run Alembic migrations
 echo "Running migrations..."
-docker compose exec fastapi bash -c 'alembic upgrade head'
+docker compose run --rm fastapi alembic upgrade head
+
+# Start/restart all services
+docker compose up -d --force-recreate
 
 echo "==> Deployment complete!"
 EOF

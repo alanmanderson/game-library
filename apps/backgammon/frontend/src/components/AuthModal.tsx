@@ -22,6 +22,21 @@ declare global {
   }
 }
 
+function loadGoogleGsi(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector('script[src*="accounts.google.com/gsi/client"]')) {
+      resolve();
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Failed to load Google GSI'));
+    document.head.appendChild(script);
+  });
+}
+
 type AuthTab = "signin" | "register";
 
 interface AuthModalProps {
@@ -45,6 +60,40 @@ function AuthModal({ onAuthenticated }: AuthModalProps) {
   // Guest fields
   const [guestNickname, setGuestNickname] = useState("");
 
+  // Focus trap
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const modal = modalRef.current;
+    if (!modal) return;
+
+    const focusableElements = modal.querySelectorAll<HTMLElement>(
+      'input, button, [tabindex]:not([tabindex="-1"])'
+    );
+    if (focusableElements.length > 0) {
+      focusableElements[0].focus();
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const first = focusableElements[0];
+      const last = focusableElements[focusableElements.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    modal.addEventListener('keydown', handleKeyDown);
+    return () => modal.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const handleSignIn = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
@@ -59,7 +108,6 @@ function AuthModal({ onAuthenticated }: AuthModalProps) {
       try {
         const result = await login(loginEmail.trim(), loginPassword);
         setStoredToken(result.token);
-        localStorage.setItem("backgammon_player", JSON.stringify(result.player));
         onAuthenticated(result.player);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Sign in failed.");
@@ -95,7 +143,6 @@ function AuthModal({ onAuthenticated }: AuthModalProps) {
       try {
         const result = await register(trimmedEmail, regPassword, trimmedNick);
         setStoredToken(result.token);
-        localStorage.setItem("backgammon_player", JSON.stringify(result.player));
         onAuthenticated(result.player);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Registration failed.");
@@ -116,7 +163,6 @@ function AuthModal({ onAuthenticated }: AuthModalProps) {
       try {
         const result = await googleAuth(response.credential);
         setStoredToken(result.token);
-        localStorage.setItem("backgammon_player", JSON.stringify(result.player));
         onAuthenticated(result.player);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Google sign-in failed.");
@@ -128,7 +174,10 @@ function AuthModal({ onAuthenticated }: AuthModalProps) {
   );
 
   useEffect(() => {
+    let cancelled = false;
+
     const tryInit = () => {
+      if (cancelled) return;
       if (window.google && googleBtnRef.current) {
         window.google.accounts.id.initialize({
           client_id: (window as unknown as Record<string, string>).__GOOGLE_CLIENT_ID__ || import.meta.env.VITE_GOOGLE_CLIENT_ID || "",
@@ -143,10 +192,13 @@ function AuthModal({ onAuthenticated }: AuthModalProps) {
       }
     };
 
-    tryInit();
-    // Retry in case the script hasn't loaded yet
-    const timer = setTimeout(tryInit, 1000);
-    return () => clearTimeout(timer);
+    loadGoogleGsi()
+      .then(() => tryInit())
+      .catch(() => {
+        // Google GSI failed to load; Google sign-in will be unavailable
+      });
+
+    return () => { cancelled = true; };
   }, [handleGoogleCredential]);
 
   const handleGuest = useCallback(
@@ -157,10 +209,6 @@ function AuthModal({ onAuthenticated }: AuthModalProps) {
         setError("Please enter a nickname.");
         return;
       }
-      if (trimmed.length < 1) {
-        setError("Nickname must not be empty.");
-        return;
-      }
 
       setLoading(true);
       setError(null);
@@ -168,7 +216,6 @@ function AuthModal({ onAuthenticated }: AuthModalProps) {
       try {
         const result = await createGuest(trimmed);
         setStoredToken(result.token);
-        localStorage.setItem("backgammon_player", JSON.stringify(result.player));
         onAuthenticated(result.player);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to create guest.");
@@ -180,7 +227,7 @@ function AuthModal({ onAuthenticated }: AuthModalProps) {
   );
 
   return (
-    <div className="auth-overlay">
+    <div className="auth-overlay" role="dialog" aria-modal="true" ref={modalRef}>
       <div className="auth-modal">
         <h2>Welcome to Backgammon</h2>
 
@@ -212,6 +259,7 @@ function AuthModal({ onAuthenticated }: AuthModalProps) {
             <input
               type="email"
               placeholder="Email"
+              aria-label="Email"
               value={loginEmail}
               onChange={(e) => setLoginEmail(e.target.value)}
               disabled={loading}
@@ -220,6 +268,7 @@ function AuthModal({ onAuthenticated }: AuthModalProps) {
             <input
               type="password"
               placeholder="Password"
+              aria-label="Password"
               value={loginPassword}
               onChange={(e) => setLoginPassword(e.target.value)}
               disabled={loading}
@@ -236,6 +285,7 @@ function AuthModal({ onAuthenticated }: AuthModalProps) {
             <input
               type="text"
               placeholder="Nickname"
+              aria-label="Nickname"
               value={regNickname}
               onChange={(e) => setRegNickname(e.target.value)}
               maxLength={50}
@@ -245,6 +295,7 @@ function AuthModal({ onAuthenticated }: AuthModalProps) {
             <input
               type="email"
               placeholder="Email"
+              aria-label="Email"
               value={regEmail}
               onChange={(e) => setRegEmail(e.target.value)}
               disabled={loading}
@@ -252,6 +303,7 @@ function AuthModal({ onAuthenticated }: AuthModalProps) {
             <input
               type="password"
               placeholder="Password (min 6 chars)"
+              aria-label="Password"
               value={regPassword}
               onChange={(e) => setRegPassword(e.target.value)}
               disabled={loading}
@@ -278,6 +330,7 @@ function AuthModal({ onAuthenticated }: AuthModalProps) {
           <input
             type="text"
             placeholder="Guest nickname"
+            aria-label="Nickname"
             value={guestNickname}
             onChange={(e) => setGuestNickname(e.target.value)}
             maxLength={50}

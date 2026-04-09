@@ -7,7 +7,12 @@ Each test is independent -- a fresh in-memory database is provisioned via the
 
 import pytest
 
-from tests.conftest import create_test_player, create_test_table, create_and_join_table
+from tests.conftest import (
+    auth_headers,
+    create_test_player,
+    create_test_table,
+    create_and_join_table,
+)
 
 
 # -----------------------------------------------------------------------
@@ -16,49 +21,62 @@ from tests.conftest import create_test_player, create_test_table, create_and_joi
 
 
 class TestPlayerEndpoints:
-    async def test_create_player(self, client):
-        """POST /api/players creates a player and returns its data."""
-        resp = await client.post("/api/players", json={"nickname": "Alice"})
+    async def test_create_guest_player(self, client):
+        """POST /api/auth/guest creates a guest player and returns JWT + player data."""
+        resp = await client.post("/api/auth/guest", json={"nickname": "Alice"})
         assert resp.status_code == 200
         data = resp.json()
-        assert data["nickname"] == "Alice"
-        assert "id" in data
-        assert "created_at" in data
+        assert "token" in data
+        assert data["player"]["nickname"] == "Alice"
+        assert "id" in data["player"]
+        assert "created_at" in data["player"]
+        assert data["player"]["is_guest"] is True
 
-    async def test_create_player_different_nicknames(self, client):
+    async def test_create_two_different_players(self, client):
         """Two players with different nicknames get different IDs."""
         p1 = await create_test_player(client, "Alice")
         p2 = await create_test_player(client, "Bob")
-        assert p1["id"] != p2["id"]
-        assert p1["nickname"] == "Alice"
-        assert p2["nickname"] == "Bob"
+        assert p1["player"]["id"] != p2["player"]["id"]
+        assert p1["player"]["nickname"] == "Alice"
+        assert p2["player"]["nickname"] == "Bob"
 
-    async def test_create_player_empty_nickname(self, client):
-        """An empty-string nickname is still accepted (no server-side min-length)."""
-        resp = await client.post("/api/players", json={"nickname": ""})
-        # The API does not enforce a minimum length -- it should succeed.
-        assert resp.status_code == 200
-        assert resp.json()["nickname"] == ""
+    async def test_create_guest_empty_nickname(self, client):
+        """An empty-string nickname is rejected by the guest endpoint (min_length=1)."""
+        resp = await client.post("/api/auth/guest", json={"nickname": ""})
+        assert resp.status_code == 422
 
-    async def test_create_player_missing_nickname(self, client):
+    async def test_create_guest_missing_nickname(self, client):
         """Omitting the nickname field should return a 422 validation error."""
-        resp = await client.post("/api/players", json={})
+        resp = await client.post("/api/auth/guest", json={})
         assert resp.status_code == 422
 
     async def test_get_player(self, client):
         """GET /api/players/{id} retrieves a previously created player."""
         created = await create_test_player(client, "Charlie")
-        resp = await client.get(f"/api/players/{created['id']}")
+        token = created["token"]
+        player = created["player"]
+        resp = await client.get(
+            f"/api/players/{player['id']}", headers=auth_headers(token)
+        )
         assert resp.status_code == 200
         data = resp.json()
-        assert data["id"] == created["id"]
+        assert data["id"] == player["id"]
         assert data["nickname"] == "Charlie"
 
     async def test_get_player_not_found(self, client):
         """GET /api/players/{id} with a nonexistent ID returns 404."""
-        resp = await client.get("/api/players/nonexistent-uuid")
+        # Need an authenticated user to hit this endpoint
+        auth = await create_test_player(client, "Auth")
+        resp = await client.get(
+            "/api/players/nonexistent-uuid", headers=auth_headers(auth["token"])
+        )
         assert resp.status_code == 404
         assert "not found" in resp.json()["detail"].lower()
+
+    async def test_get_player_unauthenticated(self, client):
+        """GET /api/players/{id} without auth returns 401."""
+        resp = await client.get("/api/players/some-id")
+        assert resp.status_code == 401
 
 
 # -----------------------------------------------------------------------
@@ -69,28 +87,29 @@ class TestPlayerEndpoints:
 class TestTableEndpoints:
     async def test_create_table(self, client):
         """POST /api/tables creates a table in 'waiting' status."""
-        player = await create_test_player(client, "Alice")
-        resp = await client.post("/api/tables", json={"player_id": player["id"]})
+        auth = await create_test_player(client, "Alice")
+        token = auth["token"]
+        player = auth["player"]
+        resp = await client.post(
+            "/api/tables",
+            json={"player_id": player["id"]},
+            headers=auth_headers(token),
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "waiting"
         assert data["white_player"]["id"] == player["id"]
         assert data["black_player"] is None
 
-    async def test_create_table_invalid_player(self, client):
-        """Creating a table with a nonexistent player_id returns 404."""
-        resp = await client.post("/api/tables", json={"player_id": "does-not-exist"})
-        assert resp.status_code == 404
-
-    async def test_create_table_missing_player_id(self, client):
-        """Omitting player_id should return a 422 validation error."""
-        resp = await client.post("/api/tables", json={})
-        assert resp.status_code == 422
+    async def test_create_table_unauthenticated(self, client):
+        """Creating a table without auth returns 401."""
+        resp = await client.post("/api/tables", json={"player_id": "some-id"})
+        assert resp.status_code == 401
 
     async def test_get_table(self, client):
         """GET /api/tables/{id} retrieves an existing table."""
-        player = await create_test_player(client)
-        table = await create_test_table(client, player["id"])
+        auth = await create_test_player(client)
+        table = await create_test_table(client, auth["token"], auth["player"]["id"])
         resp = await client.get(f"/api/tables/{table['id']}")
         assert resp.status_code == 200
         data = resp.json()
@@ -104,51 +123,55 @@ class TestTableEndpoints:
 
     async def test_join_table(self, client):
         """POST /api/tables/{id}/join adds a second player and starts the game."""
-        table, creator, joiner = await create_and_join_table(client)
+        table, creator_auth, joiner_auth = await create_and_join_table(client)
         assert table["status"] == "playing"
         # Both player slots should be filled (order depends on random color assignment)
         assert table["white_player"] is not None
         assert table["black_player"] is not None
         player_ids = {table["white_player"]["id"], table["black_player"]["id"]}
-        assert creator["id"] in player_ids
-        assert joiner["id"] in player_ids
+        assert creator_auth["player"]["id"] in player_ids
+        assert joiner_auth["player"]["id"] in player_ids
 
     async def test_join_table_own_table(self, client):
         """A player cannot join a table they created."""
-        player = await create_test_player(client, "SoloPlayer")
-        table = await create_test_table(client, player["id"])
+        auth = await create_test_player(client, "SoloPlayer")
+        table = await create_test_table(client, auth["token"], auth["player"]["id"])
         resp = await client.post(
-            f"/api/tables/{table['id']}/join", json={"player_id": player["id"]}
+            f"/api/tables/{table['id']}/join",
+            json={"player_id": auth["player"]["id"]},
+            headers=auth_headers(auth["token"]),
         )
         assert resp.status_code == 400
         assert "own table" in resp.json()["detail"].lower()
 
     async def test_join_table_already_playing(self, client):
         """A third player cannot join a table that is already playing."""
-        table, _creator, _joiner = await create_and_join_table(client)
-        intruder = await create_test_player(client, "Intruder")
+        table, _creator_auth, _joiner_auth = await create_and_join_table(client)
+        intruder_auth = await create_test_player(client, "Intruder")
         resp = await client.post(
-            f"/api/tables/{table['id']}/join", json={"player_id": intruder["id"]}
+            f"/api/tables/{table['id']}/join",
+            json={"player_id": intruder_auth["player"]["id"]},
+            headers=auth_headers(intruder_auth["token"]),
         )
         assert resp.status_code == 400
         assert "not waiting" in resp.json()["detail"].lower()
 
-    async def test_join_table_invalid_player(self, client):
-        """Joining with a nonexistent player_id returns 404."""
-        player = await create_test_player(client)
-        table = await create_test_table(client, player["id"])
-        resp = await client.post(
-            f"/api/tables/{table['id']}/join", json={"player_id": "no-such-player"}
-        )
-        assert resp.status_code == 404
-
     async def test_join_table_not_found(self, client):
         """Joining a nonexistent table returns 400 (ValueError from game_service)."""
-        player = await create_test_player(client)
+        auth = await create_test_player(client)
         resp = await client.post(
-            "/api/tables/XXXXXX/join", json={"player_id": player["id"]}
+            "/api/tables/XXXXXX/join",
+            json={"player_id": auth["player"]["id"]},
+            headers=auth_headers(auth["token"]),
         )
         assert resp.status_code == 400
+
+    async def test_join_table_unauthenticated(self, client):
+        """Joining a table without auth returns 401."""
+        resp = await client.post(
+            "/api/tables/XXXXXX/join", json={"player_id": "some-id"}
+        )
+        assert resp.status_code == 401
 
 
 # -----------------------------------------------------------------------
@@ -159,8 +182,8 @@ class TestTableEndpoints:
 class TestGameHistory:
     async def test_empty_history(self, client):
         """A freshly-created table has no move history."""
-        player = await create_test_player(client)
-        table = await create_test_table(client, player["id"])
+        auth = await create_test_player(client)
+        table = await create_test_table(client, auth["token"], auth["player"]["id"])
         resp = await client.get(f"/api/tables/{table['id']}/history")
         assert resp.status_code == 200
         assert resp.json() == []
@@ -186,8 +209,12 @@ class TestPlayerStats:
             "/api/auth/register",
             json={"email": "newbie@example.com", "password": "secret123", "nickname": "Newbie"},
         )
+        token = reg_resp.json()["token"]
         player = reg_resp.json()["player"]
-        resp = await client.get(f"/api/players/{player['id']}/stats")
+        resp = await client.get(
+            f"/api/players/{player['id']}/stats",
+            headers=auth_headers(token),
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["total_games"] == 0
@@ -198,11 +225,25 @@ class TestPlayerStats:
 
     async def test_stats_for_guest_player_forbidden(self, client):
         """Guest players get 403 when requesting stats."""
-        player = await create_test_player(client, "GuestNewbie")
-        resp = await client.get(f"/api/players/{player['id']}/stats")
+        auth = await create_test_player(client, "GuestNewbie")
+        resp = await client.get(
+            f"/api/players/{auth['player']['id']}/stats",
+            headers=auth_headers(auth["token"]),
+        )
         assert resp.status_code == 403
 
-    async def test_stats_not_found(self, client):
-        """Stats for a nonexistent player returns 404."""
+    async def test_stats_unauthenticated(self, client):
+        """Stats without auth returns 401."""
         resp = await client.get("/api/players/nonexistent-id/stats")
-        assert resp.status_code == 404
+        assert resp.status_code == 401
+
+    async def test_stats_wrong_player(self, client):
+        """Requesting stats for a different player returns 403."""
+        auth1 = await create_test_player(client, "Player1")
+        auth2 = await create_test_player(client, "Player2")
+        # Player1 tries to access Player2's stats
+        resp = await client.get(
+            f"/api/players/{auth2['player']['id']}/stats",
+            headers=auth_headers(auth1["token"]),
+        )
+        assert resp.status_code == 403

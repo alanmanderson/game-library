@@ -167,13 +167,15 @@ class TestBuildGameStateResponse:
         await gm.join_table(db_session, table.id, p2.id)
 
         engine = gm.get_engine(table.id)
-        # If the game started with a MOVING status (opening roll provided),
-        # the current player should see valid_moves.
-        if engine.state.status == GameStatus.MOVING:
-            current_player_id = table.white_player_id if engine.state.current_turn == Color.WHITE else table.black_player_id
-            response = gm.build_game_state_response(table.id, current_player_id)
-            assert "valid_moves" in response
-            assert isinstance(response["valid_moves"], list)
+        # Force into MOVING state for deterministic test
+        engine.state.status = GameStatus.MOVING
+        engine.state.remaining_dice = [3, 1]
+        engine.state.valid_moves = engine.get_valid_moves()
+
+        current_player_id = table.white_player_id if engine.state.current_turn == Color.WHITE else table.black_player_id
+        response = gm.build_game_state_response(table.id, current_player_id)
+        assert "valid_moves" in response
+        assert len(response["valid_moves"]) > 0
 
     async def test_opponent_sees_empty_valid_moves(self, db_session):
         gm = GameManager()
@@ -186,11 +188,14 @@ class TestBuildGameStateResponse:
         await gm.join_table(db_session, table.id, p2.id)
 
         engine = gm.get_engine(table.id)
-        if engine.state.status == GameStatus.MOVING:
-            # The player who is NOT the current turn should see no valid moves
-            opponent_id = table.black_player_id if engine.state.current_turn == Color.WHITE else table.white_player_id
-            response = gm.build_game_state_response(table.id, opponent_id)
-            assert response["valid_moves"] == []
+        # Force into MOVING state for deterministic test
+        engine.state.status = GameStatus.MOVING
+        engine.state.remaining_dice = [3, 1]
+
+        # The player who is NOT the current turn should see no valid moves
+        opponent_id = table.black_player_id if engine.state.current_turn == Color.WHITE else table.white_player_id
+        response = gm.build_game_state_response(table.id, opponent_id)
+        assert response["valid_moves"] == []
 
 
 class TestRollDice:
@@ -218,3 +223,203 @@ class TestRollDice:
         gm = GameManager()
         with pytest.raises(ValueError, match="Game not found"):
             await gm.roll_dice(db_session, "NOPE00", "some-player")
+
+
+class TestUndoTurn:
+    async def test_undo_after_move(self, db_session):
+        gm = GameManager()
+        p1 = Player(nickname="Alice")
+        p2 = Player(nickname="Bob")
+        db_session.add_all([p1, p2])
+        await db_session.flush()
+
+        table = await gm.create_table(db_session, p1.id)
+        await gm.join_table(db_session, table.id, p2.id)
+
+        engine = gm.get_engine(table.id)
+        # Force into ROLLING state so we can roll deterministic dice
+        engine.state.status = GameStatus.ROLLING
+
+        current_player_id = (
+            table.white_player_id
+            if engine.state.current_turn == Color.WHITE
+            else table.black_player_id
+        )
+
+        # Roll dice with known values
+        engine.roll_dice(die1=3, die2=1)
+        assert engine.state.status == GameStatus.MOVING
+
+        # Get valid moves and make one
+        valid_moves = engine.get_valid_moves()
+        assert len(valid_moves) > 0
+        move = valid_moves[0]
+
+        # Snapshot the board before the move
+        points_before = list(engine.state.points)
+        bar_white_before = engine.state.bar_white
+        bar_black_before = engine.state.bar_black
+        off_white_before = engine.state.off_white
+        off_black_before = engine.state.off_black
+
+        await gm.make_move(
+            db_session, table.id, current_player_id,
+            move.from_point, move.to_point,
+        )
+
+        # Board should have changed after the move
+        board_changed = (
+            engine.state.points != points_before
+            or engine.state.bar_white != bar_white_before
+            or engine.state.bar_black != bar_black_before
+            or engine.state.off_white != off_white_before
+            or engine.state.off_black != off_black_before
+        )
+        assert board_changed
+
+        # Undo the turn
+        result = await gm.undo_turn(db_session, table.id, current_player_id)
+        assert result is True
+
+        # Board should be restored to pre-move state
+        assert engine.state.points == points_before
+        assert engine.state.bar_white == bar_white_before
+        assert engine.state.bar_black == bar_black_before
+        assert engine.state.off_white == off_white_before
+        assert engine.state.off_black == off_black_before
+        assert engine.state.turn_moves == []
+
+    async def test_undo_with_no_moves(self, db_session):
+        gm = GameManager()
+        p1 = Player(nickname="Alice")
+        p2 = Player(nickname="Bob")
+        db_session.add_all([p1, p2])
+        await db_session.flush()
+
+        table = await gm.create_table(db_session, p1.id)
+        await gm.join_table(db_session, table.id, p2.id)
+
+        engine = gm.get_engine(table.id)
+        # Force into ROLLING, then roll so we get MOVING with no turn_moves yet
+        engine.state.status = GameStatus.ROLLING
+
+        current_player_id = (
+            table.white_player_id
+            if engine.state.current_turn == Color.WHITE
+            else table.black_player_id
+        )
+
+        engine.roll_dice(die1=5, die2=2)
+
+        # If auto-skip happened (no valid moves), the engine may have switched turns.
+        # In that case undo is not applicable. Only test undo if still MOVING.
+        if engine.state.status == GameStatus.MOVING:
+            # No moves made yet, undo should fail
+            with pytest.raises(ValueError, match="Nothing to undo"):
+                await gm.undo_turn(db_session, table.id, current_player_id)
+
+
+class TestDoubling:
+    async def test_offer_double(self, db_session):
+        gm = GameManager()
+        p1 = Player(nickname="Alice")
+        p2 = Player(nickname="Bob")
+        db_session.add_all([p1, p2])
+        await db_session.flush()
+
+        table = await gm.create_table(db_session, p1.id)
+        await gm.join_table(db_session, table.id, p2.id)
+
+        engine = gm.get_engine(table.id)
+        # Force into ROLLING so doubling is possible
+        engine.state.status = GameStatus.ROLLING
+        # Cube starts centered (cube_owner = None), so current player can double
+        engine.state.cube_owner = None
+        engine.state.double_offered = False
+
+        current_player_id = (
+            table.white_player_id
+            if engine.state.current_turn == Color.WHITE
+            else table.black_player_id
+        )
+
+        result = await gm.offer_double(db_session, table.id, current_player_id)
+        assert result is True
+        assert engine.state.double_offered is True
+        assert engine.state.double_offered_by == engine.state.current_turn
+
+    async def test_accept_double(self, db_session):
+        gm = GameManager()
+        p1 = Player(nickname="Alice")
+        p2 = Player(nickname="Bob")
+        db_session.add_all([p1, p2])
+        await db_session.flush()
+
+        table = await gm.create_table(db_session, p1.id)
+        await gm.join_table(db_session, table.id, p2.id)
+
+        engine = gm.get_engine(table.id)
+        # Force into ROLLING so doubling is possible
+        engine.state.status = GameStatus.ROLLING
+        engine.state.cube_owner = None
+        engine.state.cube_value = 1
+
+        current_player_id = (
+            table.white_player_id
+            if engine.state.current_turn == Color.WHITE
+            else table.black_player_id
+        )
+        opponent_id = (
+            table.black_player_id
+            if engine.state.current_turn == Color.WHITE
+            else table.white_player_id
+        )
+
+        # Offer the double
+        await gm.offer_double(db_session, table.id, current_player_id)
+        assert engine.state.cube_value == 1
+
+        # Accept the double
+        result = await gm.accept_double(db_session, table.id, opponent_id)
+        assert result is True
+        assert engine.state.cube_value == 2
+        assert engine.state.double_offered is False
+        # The accepting player now owns the cube
+        opponent_color = gm.get_player_color(table.id, opponent_id)
+        assert engine.state.cube_owner == opponent_color
+
+    async def test_decline_double(self, db_session):
+        gm = GameManager()
+        p1 = Player(nickname="Alice")
+        p2 = Player(nickname="Bob")
+        db_session.add_all([p1, p2])
+        await db_session.flush()
+
+        table = await gm.create_table(db_session, p1.id)
+        await gm.join_table(db_session, table.id, p2.id)
+
+        engine = gm.get_engine(table.id)
+        # Force into ROLLING so doubling is possible
+        engine.state.status = GameStatus.ROLLING
+        engine.state.cube_owner = None
+
+        current_color = engine.state.current_turn
+        current_player_id = (
+            table.white_player_id
+            if current_color == Color.WHITE
+            else table.black_player_id
+        )
+        opponent_id = (
+            table.black_player_id
+            if current_color == Color.WHITE
+            else table.white_player_id
+        )
+
+        # Offer the double
+        await gm.offer_double(db_session, table.id, current_player_id)
+
+        # Decline the double
+        result = await gm.decline_double(db_session, table.id, opponent_id)
+        assert result["winner"] == current_color.value
+        assert engine.state.status == GameStatus.FINISHED
+        assert engine.state.winner == current_color
