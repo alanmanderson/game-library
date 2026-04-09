@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  MapPin, Store, Plus, Loader2, DollarSign, Users, Shield,
+  MapPin, Plus, Loader2, DollarSign, Users, Shield,
   Home, Trees, GraduationCap, Building2, Waves, ShoppingBag,
   Trophy, Route, ShoppingCart, Zap, Calendar, X,
 } from 'lucide-react';
@@ -11,37 +11,57 @@ import { useGameStore } from '@/stores/gameStore';
 import { api } from '@/services/api';
 import { formatCurrency } from '@/utils/format';
 
-// Map zone definitions - each has a grid position, type, and visual
+// Per-type visual styling for markers
+const TYPE_STYLES = {
+  Residential: { bg: 'bg-green-500', icon: Home },
+  Park: { bg: 'bg-emerald-500', icon: Trees },
+  School: { bg: 'bg-amber-500', icon: GraduationCap },
+  Downtown: { bg: 'bg-blue-500', icon: Building2 },
+  Mall: { bg: 'bg-purple-500', icon: ShoppingBag },
+  Beach: { bg: 'bg-cyan-500', icon: Waves },
+  SportVenue: { bg: 'bg-red-500', icon: Trophy },
+  Highway: { bg: 'bg-slate-500', icon: Route },
+  SuburbanStrip: { bg: 'bg-orange-500', icon: ShoppingCart },
+} as const;
+
+type ZoneType = keyof typeof TYPE_STYLES;
+
+// Map zone definitions - each has a percentage position on the map
 interface MapZone {
   id: string;
-  label: string;
-  type: string;
-  gridRow: number;
-  gridCol: number;
-  width: number;
-  height: number;
-  color: string;
-  hoverColor: string;
-  icon: typeof Home;
-  locationNames: string[]; // backend location names that map to this zone
+  type: ZoneType;
+  x: number; // percentage
+  y: number; // percentage
+  locationName: string;
 }
 
+// Map geometry (all in percent):
+// - Major streets run at 20%, 40%, 60%, 80% along both axes.
+// - Markers sit at block centers (10/30/50/70/90) to avoid overlapping street lines.
 const MAP_ZONES: MapZone[] = [
-  { id: 'res1', label: 'Home Street', type: 'Residential', gridRow: 0, gridCol: 0, width: 2, height: 1, color: 'bg-green-100', hoverColor: 'hover:bg-green-200', icon: Home, locationNames: ['Home Street'] },
-  { id: 'res2', label: 'Maple Avenue', type: 'Residential', gridRow: 0, gridCol: 2, width: 2, height: 1, color: 'bg-green-100', hoverColor: 'hover:bg-green-200', icon: Home, locationNames: ['Maple Avenue'] },
-  { id: 'park1', label: 'Central Park', type: 'Park', gridRow: 0, gridCol: 4, width: 2, height: 2, color: 'bg-emerald-100', hoverColor: 'hover:bg-emerald-200', icon: Trees, locationNames: ['Central Park'] },
-  { id: 'school', label: 'Oak Elementary', type: 'School', gridRow: 1, gridCol: 0, width: 2, height: 1, color: 'bg-yellow-100', hoverColor: 'hover:bg-yellow-200', icon: GraduationCap, locationNames: ['Oak Elementary'] },
-  { id: 'park2', label: 'Riverside Park', type: 'Park', gridRow: 1, gridCol: 2, width: 2, height: 1, color: 'bg-emerald-100', hoverColor: 'hover:bg-emerald-200', icon: Trees, locationNames: ['Riverside Park'] },
-  { id: 'suburb', label: 'Suburban Plaza', type: 'SuburbanStrip', gridRow: 2, gridCol: 0, width: 2, height: 1, color: 'bg-orange-100', hoverColor: 'hover:bg-orange-200', icon: ShoppingCart, locationNames: ['Suburban Plaza'] },
-  { id: 'downtown1', label: 'Main Street', type: 'Downtown', gridRow: 2, gridCol: 2, width: 2, height: 1, color: 'bg-blue-100', hoverColor: 'hover:bg-blue-200', icon: Building2, locationNames: ['Main Street'] },
-  { id: 'downtown2', label: 'City Center', type: 'Downtown', gridRow: 2, gridCol: 4, width: 2, height: 1, color: 'bg-blue-100', hoverColor: 'hover:bg-blue-200', icon: Building2, locationNames: ['City Center'] },
-  { id: 'highway', label: 'Highway Rest Stop', type: 'Highway', gridRow: 3, gridCol: 0, width: 2, height: 1, color: 'bg-gray-200', hoverColor: 'hover:bg-gray-300', icon: Route, locationNames: ['Highway Rest Stop'] },
-  { id: 'mall1', label: 'Westfield Mall', type: 'Mall', gridRow: 3, gridCol: 2, width: 2, height: 1, color: 'bg-purple-100', hoverColor: 'hover:bg-purple-200', icon: ShoppingBag, locationNames: ['Westfield Mall'] },
-  { id: 'mall2', label: 'Gateway Mall', type: 'Mall', gridRow: 3, gridCol: 4, width: 2, height: 1, color: 'bg-purple-100', hoverColor: 'hover:bg-purple-200', icon: ShoppingBag, locationNames: ['Gateway Mall'] },
-  { id: 'beach1', label: 'Sunset Beach', type: 'Beach', gridRow: 4, gridCol: 0, width: 3, height: 1, color: 'bg-cyan-100', hoverColor: 'hover:bg-cyan-200', icon: Waves, locationNames: ['Sunset Beach'] },
-  { id: 'beach2', label: 'Lakeside Beach', type: 'Beach', gridRow: 4, gridCol: 3, width: 1, height: 1, color: 'bg-cyan-100', hoverColor: 'hover:bg-cyan-200', icon: Waves, locationNames: ['Lakeside Beach'] },
-  { id: 'stadium', label: 'City Stadium', type: 'SportVenue', gridRow: 4, gridCol: 4, width: 2, height: 1, color: 'bg-red-100', hoverColor: 'hover:bg-red-200', icon: Trophy, locationNames: ['City Stadium'] },
+  // Row 1 (y=10, top): neighborhoods + nearby park/strip
+  { id: 'res1', type: 'Residential', x: 10, y: 10, locationName: 'Home Street' },
+  { id: 'res2', type: 'Residential', x: 30, y: 10, locationName: 'Maple Avenue' },
+  { id: 'park1', type: 'Park', x: 70, y: 10, locationName: 'Central Park' },
+  { id: 'suburb', type: 'SuburbanStrip', x: 90, y: 10, locationName: 'Suburban Plaza' },
+  // Row 2 (y=30): school, park, mall
+  { id: 'school', type: 'School', x: 10, y: 30, locationName: 'Oak Elementary' },
+  { id: 'park2', type: 'Park', x: 50, y: 30, locationName: 'Riverside Park' },
+  { id: 'mall1', type: 'Mall', x: 90, y: 30, locationName: 'Westfield Mall' },
+  // Row 3 (y=50): downtown + mall
+  { id: 'downtown1', type: 'Downtown', x: 30, y: 50, locationName: 'Main Street' },
+  { id: 'downtown2', type: 'Downtown', x: 70, y: 50, locationName: 'City Center' },
+  { id: 'mall2', type: 'Mall', x: 90, y: 50, locationName: 'Gateway Mall' },
+  // Row 4 (y=70): highway + stadium
+  { id: 'highway', type: 'Highway', x: 10, y: 70, locationName: 'Highway Rest Stop' },
+  { id: 'stadium', type: 'SportVenue', x: 50, y: 70, locationName: 'City Stadium' },
+  // Row 5 (y=90, bottom): beaches
+  { id: 'beach1', type: 'Beach', x: 30, y: 90, locationName: 'Sunset Beach' },
+  { id: 'beach2', type: 'Beach', x: 70, y: 90, locationName: 'Lakeside Beach' },
 ];
+
+// Shared street line positions so the SVG grid stays aligned with marker coordinates.
+const STREET_PCTS = [20, 40, 60, 80];
 
 interface CityMapProps {
   stands: Stand[];
@@ -58,6 +78,7 @@ export default function CityMap({ stands, cityEvents, gameId, selectedStandId, o
   const [locations, setLocations] = useState<LocationOption[]>([]);
   const [loadingLocations, setLoadingLocations] = useState(false);
   const [selectedZone, setSelectedZone] = useState<MapZone | null>(null);
+  const [hoveredZoneId, setHoveredZoneId] = useState<string | null>(null);
   const [opening, setOpening] = useState(false);
 
   const fetchLocations = useCallback(async () => {
@@ -76,17 +97,14 @@ export default function CityMap({ stands, cityEvents, gameId, selectedStandId, o
     fetchLocations();
   }, [fetchLocations, stands.length]);
 
-  const getStandAtZone = (zone: MapZone): Stand | undefined => {
-    return stands.find((s) => zone.locationNames.includes(s.locationName));
-  };
+  const getStandAtZone = (zone: MapZone): Stand | undefined =>
+    stands.find((s) => s.locationName === zone.locationName);
 
-  const getLocationForZone = (zone: MapZone): LocationOption | undefined => {
-    return locations.find((l) => zone.locationNames.includes(l.name));
-  };
+  const getLocationForZone = (zone: MapZone): LocationOption | undefined =>
+    locations.find((l) => l.name === zone.locationName);
 
-  const getCityEventForZone = (zone: MapZone): CityEvent | undefined => {
-    return cityEvents.find((e) => e.isActive && e.affectedLocationType === zone.type);
-  };
+  const getCityEventForZone = (zone: MapZone): CityEvent | undefined =>
+    cityEvents.find((e) => e.isActive && e.affectedLocationType === zone.type);
 
   const handleZoneClick = (zone: MapZone) => {
     const stand = getStandAtZone(zone);
@@ -157,9 +175,32 @@ export default function CityMap({ stands, cityEvents, gameId, selectedStandId, o
         </div>
       )}
 
-      {/* Map Grid */}
+      {/* Map */}
       <div className="game-card p-2">
-        <div className="grid grid-cols-6 gap-1" style={{ gridAutoRows: 'minmax(0, 1fr)' }}>
+        <div className="relative w-full" style={{ aspectRatio: '4 / 3' }}>
+          {/* Road grid background */}
+          <div className="absolute inset-0 rounded-lg overflow-hidden bg-[#f1f5fa]">
+            <svg
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+              className="absolute inset-0 w-full h-full"
+            >
+              {/* Park splashes behind the park zones (decorative) */}
+              <rect x="60" y="0" width="20" height="18" rx="2" fill="#dcfce7" />
+              <rect x="42" y="22" width="16" height="16" rx="2" fill="#dcfce7" />
+              {/* Beach/water strip along the bottom */}
+              <rect x="0" y="85" width="100" height="15" fill="#cffafe" />
+              {/* Major streets — horizontal then vertical */}
+              {STREET_PCTS.map((p) => (
+                <line key={`h${p}`} x1="0" y1={p} x2="100" y2={p} stroke="#d7e0ec" strokeWidth="3" strokeLinecap="round" />
+              ))}
+              {STREET_PCTS.map((p) => (
+                <line key={`v${p}`} x1={p} y1="0" x2={p} y2="100" stroke="#d7e0ec" strokeWidth="3" strokeLinecap="round" />
+              ))}
+            </svg>
+          </div>
+
+          {/* Location markers */}
           {MAP_ZONES.map((zone) => {
             const stand = getStandAtZone(zone);
             const loc = getLocationForZone(zone);
@@ -167,72 +208,114 @@ export default function CityMap({ stands, cityEvents, gameId, selectedStandId, o
             const isOccupied = !!stand;
             const isAvailable = !!loc;
             const isSelected = stand && stand.id === selectedStandId;
-            const isZoneSelected = selectedZone?.id === zone.id;
-            const ZoneIcon = zone.icon;
+            const isHovered = hoveredZoneId === zone.id;
+            const style = TYPE_STYLES[zone.type];
+            const Icon = style.icon;
+            const isLocked = !isOccupied && !isAvailable;
+            const tooltipBelow = zone.y < 40;
+            // Anchor tooltip horizontally based on marker x position to avoid edge clipping
+            const tooltipPosClass =
+              zone.x < 25 ? 'left-0'
+                : zone.x > 75 ? 'right-0'
+                  : 'left-1/2 -translate-x-1/2';
 
             return (
-              <motion.button
+              <div
                 key={zone.id}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => handleZoneClick(zone)}
-                className={`
-                  relative rounded-lg p-2 border-2 transition-all text-left cursor-pointer min-h-[70px]
-                  ${zone.color} ${zone.hoverColor}
-                  ${isSelected ? 'border-amber-400 ring-2 ring-amber-300 shadow-lg' : ''}
-                  ${isZoneSelected ? 'border-blue-400 ring-2 ring-blue-300' : ''}
-                  ${!isSelected && !isZoneSelected && isOccupied ? 'border-green-300' : ''}
-                  ${!isSelected && !isZoneSelected && isAvailable && !isOccupied ? 'border-dashed border-gray-300' : ''}
-                  ${!isSelected && !isZoneSelected && !isAvailable && !isOccupied ? 'border-transparent opacity-50' : ''}
-                `}
-                style={{
-                  gridRow: `${zone.gridRow + 1} / span ${zone.height}`,
-                  gridColumn: `${zone.gridCol + 1} / span ${zone.width}`,
-                }}
+                className="absolute z-10 -translate-x-1/2 -translate-y-1/2"
+                style={{ left: `${zone.x}%`, top: `${zone.y}%` }}
+                onMouseEnter={() => setHoveredZoneId(zone.id)}
+                onMouseLeave={() => setHoveredZoneId(null)}
               >
-                {/* Zone icon and label */}
-                <div className="flex items-center gap-1 mb-1">
-                  <ZoneIcon size={12} className="text-ink-light shrink-0" />
-                  <span className="text-[10px] font-medium text-ink-light truncate">
-                    {LocationTypeNames[zone.type] ?? zone.type}
-                  </span>
-                </div>
-
-                <div className="text-xs font-bold text-ink truncate leading-tight">{zone.label}</div>
-
-                {/* Stand marker */}
-                {isOccupied && (
-                  <div className="flex items-center gap-1 mt-1">
-                    <div className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center shrink-0">
-                      <Store size={8} className="text-white" />
-                    </div>
-                    <span className="text-[10px] text-green-700 font-medium truncate">
-                      {formatCurrency(stand.pricePerCup)}/cup
-                    </span>
+                <motion.button
+                  whileHover={!isLocked ? { scale: 1.15 } : undefined}
+                  whileTap={!isLocked ? { scale: 0.95 } : undefined}
+                  onClick={() => handleZoneClick(zone)}
+                  onFocus={() => setHoveredZoneId(zone.id)}
+                  onBlur={() => setHoveredZoneId(null)}
+                  disabled={isLocked}
+                  aria-label={zone.locationName}
+                  className="relative block focus:outline-none"
+                >
+                  <div
+                    className={`
+                      w-9 h-9 rounded-full shadow-md ring-2 ring-white flex items-center justify-center transition-shadow
+                      ${style.bg}
+                      ${isSelected ? 'ring-4 !ring-amber-400 shadow-lg shadow-amber-400/40' : ''}
+                      ${isLocked ? 'opacity-40 grayscale' : ''}
+                    `}
+                  >
+                    <Icon size={16} className="text-white" strokeWidth={2.5} />
                   </div>
-                )}
-
-                {/* Available marker */}
-                {!isOccupied && isAvailable && (
-                  <div className="flex items-center gap-1 mt-1">
-                    <div className="w-4 h-4 rounded-full bg-gray-300 flex items-center justify-center shrink-0 border border-dashed border-gray-400">
-                      <Plus size={8} className="text-gray-500" />
+                  {/* Own-stand indicator dot */}
+                  {isOccupied && (
+                    <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-white flex items-center justify-center shadow">
+                      <div className="w-2 h-2 rounded-full bg-green-500" />
                     </div>
-                    <span className="text-[10px] text-ink-lighter truncate">Available</span>
-                  </div>
-                )}
-
-                {/* City event badge */}
-                {cityEvent && (
-                  <div className="absolute top-1 right-1">
-                    <div className={`w-4 h-4 rounded-full flex items-center justify-center ${
-                      cityEvent.trafficMultiplier > 1 ? 'bg-blue-500' : 'bg-red-500'
-                    }`}>
-                      <Zap size={8} className="text-white" />
+                  )}
+                  {/* City event badge */}
+                  {cityEvent && (
+                    <div
+                      className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center ring-2 ring-white ${
+                        cityEvent.trafficMultiplier > 1 ? 'bg-blue-500' : 'bg-red-500'
+                      }`}
+                    >
+                      <Zap size={8} className="text-white" strokeWidth={3} />
                     </div>
-                  </div>
-                )}
-              </motion.button>
+                  )}
+                </motion.button>
+
+                {/* Hover tooltip */}
+                <AnimatePresence>
+                  {isHovered && (
+                    <motion.div
+                      initial={{ opacity: 0, y: tooltipBelow ? -4 : 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: tooltipBelow ? -4 : 4 }}
+                      transition={{ duration: 0.12 }}
+                      className={`absolute z-30 w-44 bg-white rounded-lg shadow-xl border border-gray-200 p-2.5 text-left pointer-events-none ${tooltipPosClass} ${
+                        tooltipBelow ? 'top-full mt-5' : 'bottom-full mb-5'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <div className={`w-5 h-5 rounded-full flex items-center justify-center ${style.bg}`}>
+                          <Icon size={11} className="text-white" strokeWidth={2.5} />
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-ink leading-tight">{zone.locationName}</div>
+                          <div className="text-[9px] text-ink-light leading-tight">
+                            {LocationTypeNames[zone.type] ?? zone.type}
+                          </div>
+                        </div>
+                      </div>
+                      {isOccupied && stand ? (
+                        <div className="space-y-0.5 text-[10px] mt-1.5 border-t border-gray-100 pt-1.5">
+                          <div className="flex justify-between"><span className="text-ink-light">Price:</span><span className="font-semibold">{formatCurrency(stand.pricePerCup)}/cup</span></div>
+                          <div className="flex justify-between"><span className="text-ink-light">Traffic:</span><span className="font-semibold">{stand.footTraffic}/day</span></div>
+                          <div className="flex justify-between"><span className="text-ink-light">Rent:</span><span className="font-semibold">{formatCurrency(stand.rent)}/day</span></div>
+                          <div className="text-[9px] font-semibold text-green-700 mt-1">Your stand</div>
+                        </div>
+                      ) : loc ? (
+                        <div className="space-y-0.5 text-[10px] mt-1.5 border-t border-gray-100 pt-1.5">
+                          <div className="text-ink-light italic leading-snug mb-1">{loc.description}</div>
+                          <div className="flex justify-between"><span className="text-ink-light">Traffic:</span><span className="font-semibold">{loc.footTraffic}/day</span></div>
+                          <div className="flex justify-between"><span className="text-ink-light">Rent:</span><span className="font-semibold">{formatCurrency(loc.dailyRent)}/day</span></div>
+                          <div className="flex justify-between"><span className="text-ink-light">Build:</span><span className="font-semibold">{formatCurrency(loc.buildCost)}</span></div>
+                          {loc.requiresPermit && (
+                            <div className="flex items-center gap-1 text-amber-700 font-semibold mt-1">
+                              <Shield size={10} /> Permit required
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-[10px] text-ink-light italic mt-1.5 border-t border-gray-100 pt-1.5">
+                          Unlock this location in a later stage
+                        </div>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             );
           })}
         </div>
@@ -316,10 +399,10 @@ export default function CityMap({ stands, cityEvents, gameId, selectedStandId, o
       {/* Legend */}
       <div className="flex flex-wrap gap-2 text-[10px] text-ink-lighter px-1">
         <span className="flex items-center gap-1">
-          <div className="w-3 h-3 rounded-full bg-green-500" /> Your Stand
+          <div className="w-3 h-3 rounded-full bg-green-500 ring-1 ring-white" /> Your Stand
         </span>
         <span className="flex items-center gap-1">
-          <div className="w-3 h-3 rounded-full bg-gray-300 border border-dashed border-gray-400" /> Available
+          <div className="w-3 h-3 rounded-full bg-slate-300 ring-1 ring-white" /> Available
         </span>
         <span className="flex items-center gap-1">
           <div className="w-3 h-3 rounded-full bg-blue-500" /> Event Boost
