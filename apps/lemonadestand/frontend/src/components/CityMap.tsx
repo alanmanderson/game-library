@@ -222,7 +222,7 @@ export default function CityMap({ stands, cityEvents, gameId, selectedStandId, o
             return (
               <div
                 key={zone.id}
-                className="absolute z-10 -translate-x-1/2 -translate-y-1/2"
+                className={`absolute -translate-x-1/2 -translate-y-1/2 ${isHovered ? 'z-40' : 'z-10'}`}
                 style={{ left: `${zone.x}%`, top: `${zone.y}%` }}
                 onMouseEnter={() => setHoveredZoneId(zone.id)}
                 onMouseLeave={() => setHoveredZoneId(null)}
