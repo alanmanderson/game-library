@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   MapPin, Plus, Loader2, DollarSign, Users, Shield,
@@ -80,6 +80,9 @@ export default function CityMap({ stands, cityEvents, gameId, selectedStandId, o
   const [selectedZone, setSelectedZone] = useState<MapZone | null>(null);
   const [hoveredZoneId, setHoveredZoneId] = useState<string | null>(null);
   const [opening, setOpening] = useState(false);
+  const [priceInput, setPriceInput] = useState<number>(0);
+  const [savingPrice, setSavingPrice] = useState(false);
+  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchLocations = useCallback(async () => {
     setLoadingLocations(true);
@@ -97,6 +100,11 @@ export default function CityMap({ stands, cityEvents, gameId, selectedStandId, o
     fetchLocations();
   }, [fetchLocations, stands.length]);
 
+  // Cleanup the close timer on unmount.
+  useEffect(() => () => {
+    if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
+  }, []);
+
   const getStandAtZone = (zone: MapZone): Stand | undefined =>
     stands.find((s) => s.locationName === zone.locationName);
 
@@ -105,6 +113,33 @@ export default function CityMap({ stands, cityEvents, gameId, selectedStandId, o
 
   const getCityEventForZone = (zone: MapZone): CityEvent | undefined =>
     cityEvents.find((e) => e.isActive && e.affectedLocationType === zone.type);
+
+  // Sync the local price slider with the backend whenever the hovered stand changes.
+  useEffect(() => {
+    if (!hoveredZoneId) return;
+    const zone = MAP_ZONES.find((z) => z.id === hoveredZoneId);
+    if (!zone) return;
+    const stand = stands.find((s) => s.locationName === zone.locationName);
+    if (stand) setPriceInput(stand.pricePerCup);
+  }, [hoveredZoneId, stands]);
+
+  // Hover helpers: open immediately, close after a short delay so the pointer
+  // can travel from marker → bridge gap → tooltip without dismissing.
+  const openZone = (id: string) => {
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+    setHoveredZoneId(id);
+  };
+
+  const scheduleCloseZone = () => {
+    if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
+    closeTimeoutRef.current = setTimeout(() => {
+      setHoveredZoneId(null);
+      closeTimeoutRef.current = null;
+    }, 150);
+  };
 
   const handleZoneClick = (zone: MapZone) => {
     const stand = getStandAtZone(zone);
@@ -116,6 +151,19 @@ export default function CityMap({ stands, cityEvents, gameId, selectedStandId, o
       if (loc) {
         setSelectedZone(zone);
       }
+    }
+  };
+
+  const handleSavePrice = async (standId: string) => {
+    setSavingPrice(true);
+    try {
+      const newState = await api.setPrice(gameId, { standId, price: priceInput });
+      setGame(newState);
+      addToast({ type: 'success', title: 'Price Updated!', message: `New price: ${formatCurrency(priceInput)}`, duration: 3000 });
+    } catch {
+      addToast({ type: 'error', title: 'Error', message: 'Could not update price.', duration: 4000 });
+    } finally {
+      setSavingPrice(false);
     }
   };
 
@@ -224,15 +272,15 @@ export default function CityMap({ stands, cityEvents, gameId, selectedStandId, o
                 key={zone.id}
                 className={`absolute -translate-x-1/2 -translate-y-1/2 ${isHovered ? 'z-40' : 'z-10'}`}
                 style={{ left: `${zone.x}%`, top: `${zone.y}%` }}
-                onMouseEnter={() => setHoveredZoneId(zone.id)}
-                onMouseLeave={() => setHoveredZoneId(null)}
+                onMouseEnter={() => openZone(zone.id)}
+                onMouseLeave={scheduleCloseZone}
               >
                 <motion.button
                   whileHover={!isLocked ? { scale: 1.15 } : undefined}
                   whileTap={!isLocked ? { scale: 0.95 } : undefined}
                   onClick={() => handleZoneClick(zone)}
-                  onFocus={() => setHoveredZoneId(zone.id)}
-                  onBlur={() => setHoveredZoneId(null)}
+                  onFocus={() => openZone(zone.id)}
+                  onBlur={scheduleCloseZone}
                   disabled={isLocked}
                   aria-label={zone.locationName}
                   className="relative block focus:outline-none"
@@ -265,7 +313,8 @@ export default function CityMap({ stands, cityEvents, gameId, selectedStandId, o
                   )}
                 </motion.button>
 
-                {/* Hover tooltip */}
+                {/* Hover tooltip. The outer wrapper spans the gap between the marker and the
+                    tooltip so the pointer can cross into it without mouseleave firing. */}
                 <AnimatePresence>
                   {isHovered && (
                     <motion.div
@@ -273,45 +322,74 @@ export default function CityMap({ stands, cityEvents, gameId, selectedStandId, o
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: tooltipBelow ? -4 : 4 }}
                       transition={{ duration: 0.12 }}
-                      className={`absolute z-30 w-44 bg-white rounded-lg shadow-xl border border-gray-200 p-2.5 text-left pointer-events-none ${tooltipPosClass} ${
-                        tooltipBelow ? 'top-full mt-5' : 'bottom-full mb-5'
-                      }`}
+                      className={`absolute z-30 ${tooltipPosClass} ${tooltipBelow ? 'top-full pt-4' : 'bottom-full pb-4'}`}
+                      onMouseEnter={() => openZone(zone.id)}
+                      onMouseLeave={scheduleCloseZone}
                     >
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <div className={`w-5 h-5 rounded-full flex items-center justify-center ${style.bg}`}>
-                          <Icon size={11} className="text-white" strokeWidth={2.5} />
-                        </div>
-                        <div>
-                          <div className="text-xs font-bold text-ink leading-tight">{zone.locationName}</div>
-                          <div className="text-[9px] text-ink-light leading-tight">
-                            {LocationTypeNames[zone.type] ?? zone.type}
+                      <div className="w-48 bg-white rounded-lg shadow-xl border border-gray-200 p-2.5 text-left">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <div className={`w-5 h-5 rounded-full flex items-center justify-center ${style.bg}`}>
+                            <Icon size={11} className="text-white" strokeWidth={2.5} />
+                          </div>
+                          <div>
+                            <div className="text-xs font-bold text-ink leading-tight">{zone.locationName}</div>
+                            <div className="text-[9px] text-ink-light leading-tight">
+                              {LocationTypeNames[zone.type] ?? zone.type}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      {isOccupied && stand ? (
-                        <div className="space-y-0.5 text-[10px] mt-1.5 border-t border-gray-100 pt-1.5">
-                          <div className="flex justify-between"><span className="text-ink-light">Price:</span><span className="font-semibold">{formatCurrency(stand.pricePerCup)}/cup</span></div>
-                          <div className="flex justify-between"><span className="text-ink-light">Traffic:</span><span className="font-semibold">{stand.footTraffic}/day</span></div>
-                          <div className="flex justify-between"><span className="text-ink-light">Rent:</span><span className="font-semibold">{formatCurrency(stand.rent)}/day</span></div>
-                          <div className="text-[9px] font-semibold text-green-700 mt-1">Your stand</div>
-                        </div>
-                      ) : loc ? (
-                        <div className="space-y-0.5 text-[10px] mt-1.5 border-t border-gray-100 pt-1.5">
-                          <div className="text-ink-light italic leading-snug mb-1">{loc.description}</div>
-                          <div className="flex justify-between"><span className="text-ink-light">Traffic:</span><span className="font-semibold">{loc.footTraffic}/day</span></div>
-                          <div className="flex justify-between"><span className="text-ink-light">Rent:</span><span className="font-semibold">{formatCurrency(loc.dailyRent)}/day</span></div>
-                          <div className="flex justify-between"><span className="text-ink-light">Build:</span><span className="font-semibold">{formatCurrency(loc.buildCost)}</span></div>
-                          {loc.requiresPermit && (
-                            <div className="flex items-center gap-1 text-amber-700 font-semibold mt-1">
-                              <Shield size={10} /> Permit required
+                        {isOccupied && stand ? (
+                          <div className="text-[10px] mt-1.5 border-t border-gray-100 pt-1.5">
+                            <div className="flex justify-between"><span className="text-ink-light">Traffic:</span><span className="font-semibold">{stand.footTraffic}/day</span></div>
+                            <div className="flex justify-between"><span className="text-ink-light">Rent:</span><span className="font-semibold">{formatCurrency(stand.rent)}/day</span></div>
+                            <div className="mt-2">
+                              <div className="flex items-center justify-between mb-0.5">
+                                <span className="text-ink-light">Price/cup:</span>
+                                <span className="font-bold text-green-700 text-xs">{formatCurrency(priceInput)}</span>
+                              </div>
+                              <input
+                                type="range"
+                                min={25}
+                                max={1000}
+                                step={25}
+                                value={Math.round(priceInput * 100)}
+                                onChange={(e) => setPriceInput(parseInt(e.target.value) / 100)}
+                                className="w-full h-1 accent-green-600"
+                              />
+                              {Math.abs(priceInput - stand.pricePerCup) > 0.001 && (
+                                <button
+                                  onClick={() => handleSavePrice(stand.id)}
+                                  disabled={savingPrice}
+                                  className="btn-primary w-full text-[10px] py-1 mt-1.5"
+                                >
+                                  {savingPrice ? (
+                                    <><Loader2 className="animate-spin" size={10} /> Saving...</>
+                                  ) : (
+                                    <>Set Price</>
+                                  )}
+                                </button>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="text-[10px] text-ink-light italic mt-1.5 border-t border-gray-100 pt-1.5">
-                          Unlock this location in a later stage
-                        </div>
-                      )}
+                            <div className="text-[9px] font-semibold text-green-700 mt-1.5">Your stand</div>
+                          </div>
+                        ) : loc ? (
+                          <div className="space-y-0.5 text-[10px] mt-1.5 border-t border-gray-100 pt-1.5">
+                            <div className="text-ink-light italic leading-snug mb-1">{loc.description}</div>
+                            <div className="flex justify-between"><span className="text-ink-light">Traffic:</span><span className="font-semibold">{loc.footTraffic}/day</span></div>
+                            <div className="flex justify-between"><span className="text-ink-light">Rent:</span><span className="font-semibold">{formatCurrency(loc.dailyRent)}/day</span></div>
+                            <div className="flex justify-between"><span className="text-ink-light">Build:</span><span className="font-semibold">{formatCurrency(loc.buildCost)}</span></div>
+                            {loc.requiresPermit && (
+                              <div className="flex items-center gap-1 text-amber-700 font-semibold mt-1">
+                                <Shield size={10} /> Permit required
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-[10px] text-ink-light italic mt-1.5 border-t border-gray-100 pt-1.5">
+                            Unlock this location in a later stage
+                          </div>
+                        )}
+                      </div>
                     </motion.div>
                   )}
                 </AnimatePresence>

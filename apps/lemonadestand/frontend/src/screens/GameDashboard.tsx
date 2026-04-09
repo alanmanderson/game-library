@@ -5,7 +5,7 @@ import { Loader2, Sun, ArrowLeft, FastForward, AlertTriangle } from 'lucide-reac
 import { api } from '@/services/api';
 import { useGameStore } from '@/stores/gameStore';
 import Header from '@/components/Header';
-import StandPanel from '@/components/StandPanel';
+import RecipeEditor from '@/components/RecipeEditor';
 import InventoryPanel from '@/components/InventoryPanel';
 import FinancialChart from '@/components/FinancialChart';
 import AchievementPanel from '@/components/AchievementPanel';
@@ -284,17 +284,18 @@ export default function GameDashboard() {
 
         {/* Main layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left column: Inventory + City Map */}
+          {/* Left column: Inventory */}
           <div className="lg:col-span-1 space-y-4">
-            {/* Inventory */}
             <InventoryPanel
               inventory={game.inventory}
               gameId={game.id}
               cash={game.cash}
               recipe={selectedStand ? game.recipes.find((r) => r.id === selectedStand.recipeId) ?? null : null}
             />
+          </div>
 
-            {/* City Map */}
+          {/* Center column: City Map + Recipe editor for the selected stand */}
+          <div className="lg:col-span-1 space-y-4">
             <CityMap
               stands={game.stands}
               cityEvents={game.cityEvents ?? []}
@@ -303,15 +304,11 @@ export default function GameDashboard() {
               onSelectStand={setSelectedStandId}
               cash={game.cash}
             />
-          </div>
-
-          {/* Center column: Selected Stand Details */}
-          <div className="lg:col-span-1">
             {selectedStand ? (
-              <StandPanel stand={selectedStand} gameId={game.id} />
+              <RecipeEditor stand={selectedStand} gameId={game.id} />
             ) : (
               <div className="game-card text-center py-8 text-ink-light">
-                Select a stand on the map to manage it
+                Select a stand on the map to edit its recipe
               </div>
             )}
           </div>
