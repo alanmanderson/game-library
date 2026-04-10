@@ -37,4 +37,6 @@ async def get_optional_user(
     async with async_session_factory() as session:
         result = await session.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
+        if user is None or not user.is_active:
+            return None
         return user

@@ -1,10 +1,12 @@
 """Auth API routes: register, login, Google OAuth, profile."""
 
+import secrets
+import time
 from datetime import datetime, timezone
 from typing import Optional
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from passlib.context import CryptContext
 from sqlalchemy import select
@@ -22,6 +24,19 @@ from models import RegisterRequest, LoginRequest, AuthResponse, UserInfo, Update
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 router = APIRouter()
+
+# Module-level store for OAuth CSRF state tokens: {state_string: timestamp}
+_oauth_states: dict[str, float] = {}
+
+_OAUTH_STATE_MAX_AGE_SECONDS = 600  # 10 minutes
+
+
+def _cleanup_stale_states() -> None:
+    """Remove OAuth state tokens older than 10 minutes."""
+    now = time.time()
+    stale = [s for s, ts in _oauth_states.items() if now - ts > _OAUTH_STATE_MAX_AGE_SECONDS]
+    for s in stale:
+        _oauth_states.pop(s, None)
 
 
 @router.post("/register", response_model=AuthResponse)
@@ -86,6 +101,11 @@ async def google_login():
     if not auth_settings.google_client_id:
         raise HTTPException(status_code=501, detail="Google OAuth not configured.")
 
+    _cleanup_stale_states()
+
+    state = secrets.token_urlsafe(32)
+    _oauth_states[state] = time.time()
+
     params = urlencode({
         "client_id": auth_settings.google_client_id,
         "redirect_uri": auth_settings.google_redirect_uri,
@@ -93,15 +113,26 @@ async def google_login():
         "scope": "openid email profile",
         "access_type": "offline",
         "prompt": "select_account",
+        "state": state,
     })
     return RedirectResponse(f"https://accounts.google.com/o/oauth2/v2/auth?{params}")
 
 
 @router.get("/google/callback")
-async def google_callback(code: str, db: AsyncSession = Depends(get_db)):
+async def google_callback(
+    code: str,
+    state: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
     """Handle Google OAuth callback."""
     if not auth_settings.google_client_id:
         raise HTTPException(status_code=501, detail="Google OAuth not configured.")
+
+    # Validate CSRF state parameter
+    _cleanup_stale_states()
+    stored_ts = _oauth_states.pop(state, None)
+    if stored_ts is None:
+        raise HTTPException(status_code=400, detail="Invalid or expired OAuth state.")
 
     # Exchange code for tokens
     async with httpx.AsyncClient() as client:
@@ -133,18 +164,16 @@ async def google_callback(code: str, db: AsyncSession = Depends(get_db)):
     name = userinfo.get("name", email.split("@")[0])[:30]
     avatar = userinfo.get("picture")
 
-    # Upsert user
+    # Look up by google_id first
     result = await db.execute(select(User).where(User.google_id == google_id))
     user = result.scalar_one_or_none()
 
     if user is None:
-        # Check if email exists (link accounts)
+        # Check if email already exists — issue JWT but do NOT auto-link google_id
         result = await db.execute(select(User).where(User.email == email))
         user = result.scalar_one_or_none()
-        if user:
-            user.google_id = google_id
-            user.avatar_url = avatar
-        else:
+        if user is None:
+            # Brand-new user: create account with Google identity
             user = User(
                 email=email,
                 display_name=name,
@@ -159,8 +188,8 @@ async def google_callback(code: str, db: AsyncSession = Depends(get_db)):
 
     jwt_token = create_access_token(user.id, user.display_name)
 
-    # Redirect to frontend with token in fragment
-    return RedirectResponse(f"/#/auth/callback?token={jwt_token}")
+    # Redirect to frontend with token in URL fragment (kept client-side only)
+    return RedirectResponse(f"/#/auth/callback#token={jwt_token}")
 
 
 @router.get("/me", response_model=UserInfo)

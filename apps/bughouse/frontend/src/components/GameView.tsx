@@ -16,6 +16,13 @@ import {
 
 const EMPTY_POCKET: PocketPieces = { p: 0, n: 0, b: 0, r: 0, q: 0 };
 
+const seatNameMap: Record<number, string> = {
+  0: 'board_a_white',
+  1: 'board_a_black',
+  2: 'board_b_white',
+  3: 'board_b_black',
+};
+
 const GameView: React.FC = () => {
   const { gameId } = useParams<{ gameId: string }>();
   const navigate = useNavigate();
@@ -29,6 +36,7 @@ const GameView: React.FC = () => {
   const [gameOverMsg, setGameOverMsg] = useState<{ winner: string | null; reason: string } | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [selectedPocketPiece, setSelectedPocketPiece] = useState<PieceType | null>(null);
+  const [addingBots, setAddingBots] = useState(false);
 
   const onMessage = useCallback((msg: ServerMessage) => {
     switch (msg.type) {
@@ -60,15 +68,25 @@ const GameView: React.FC = () => {
   const myBoardIndex = mySeat !== null && !isNaN(mySeat) ? seatBoard(mySeat) : -1;
   const myColor = mySeat !== null && !isNaN(mySeat) ? seatColor(mySeat) : 'white';
 
-  // Handle a move on a board
-  const handleMove = useCallback((boardIdx: number) => (from: string, to: string, promotion: string | null) => {
-    sendMessage({ type: 'move', board: boardIdx, from, to, promotion });
+  // Pre-computed per-board move handlers
+  const handleMoveA = useMemo(() => (from: string, to: string, promotion: string | null) => {
+    sendMessage({ type: 'move', board: 0, from, to, promotion });
     setSelectedPocketPiece(null);
   }, [sendMessage]);
 
-  // Handle a drop on a board
-  const handleDrop = useCallback((boardIdx: number) => (piece: string, square: string) => {
-    sendMessage({ type: 'drop', board: boardIdx, piece, square });
+  const handleMoveB = useMemo(() => (from: string, to: string, promotion: string | null) => {
+    sendMessage({ type: 'move', board: 1, from, to, promotion });
+    setSelectedPocketPiece(null);
+  }, [sendMessage]);
+
+  // Pre-computed per-board drop handlers
+  const handleDropA = useMemo(() => (piece: string, square: string) => {
+    sendMessage({ type: 'drop', board: 0, piece, square });
+    setSelectedPocketPiece(null);
+  }, [sendMessage]);
+
+  const handleDropB = useMemo(() => (piece: string, square: string) => {
+    sendMessage({ type: 'drop', board: 1, piece, square });
     setSelectedPocketPiece(null);
   }, [sendMessage]);
 
@@ -82,37 +100,55 @@ const GameView: React.FC = () => {
     navigate('/');
   }, [navigate]);
 
-  const seatNameMap: Record<number, string> = {
-    0: 'board_a_white',
-    1: 'board_a_black',
-    2: 'board_b_white',
-    3: 'board_b_black',
-  };
-
   const handleAddBot = useCallback(async (seat: number) => {
     if (!gameId) return;
+    setAddingBots(true);
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       const authToken = localStorage.getItem('bughouse_auth_token');
       if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
-      await fetch(`${API_URL}/api/games/${gameId}/add-bot`, {
+      const res = await fetch(`${API_URL}/api/games/${gameId}/add-bot`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ seat: seatNameMap[seat] }),
       });
+      if (!res.ok) {
+        console.error('Failed to add bot: server returned', res.status);
+      }
     } catch (err) {
       console.error('Failed to add bot:', err);
+    } finally {
+      setAddingBots(false);
     }
   }, [gameId]);
 
   const handleFillBots = useCallback(async () => {
     if (!gameState) return;
-    for (let seat = 0; seat < 4; seat++) {
-      if (!gameState.players[String(seat)]) {
-        await handleAddBot(seat);
+    setAddingBots(true);
+    try {
+      for (let seat = 0; seat < 4; seat++) {
+        if (!gameState.players[String(seat)]) {
+          try {
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            const authToken = localStorage.getItem('bughouse_auth_token');
+            if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+            const res = await fetch(`${API_URL}/api/games/${gameId}/add-bot`, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({ seat: seatNameMap[seat] }),
+            });
+            if (!res.ok) {
+              console.error('Failed to add bot to seat', seat, ': server returned', res.status);
+            }
+          } catch (err) {
+            console.error('Failed to add bot to seat', seat, ':', err);
+          }
+        }
       }
+    } finally {
+      setAddingBots(false);
     }
-  }, [gameState, handleAddBot]);
+  }, [gameState, gameId]);
 
   // Get pockets for display
   const getPocket = useCallback((key: string): PocketPieces => {
@@ -237,13 +273,13 @@ const GameView: React.FC = () => {
                   <span className="slot-name">{gameState.players[String(seat)] || 'Empty'}</span>
                   <span className="slot-team">Team {seatTeam(seat).toUpperCase()}</span>
                   {!gameState.players[String(seat)] && !isSpectator && (
-                    <button className="btn add-bot-btn" onClick={() => handleAddBot(seat)}>Add Bot</button>
+                    <button className="btn add-bot-btn" onClick={() => handleAddBot(seat)} disabled={addingBots}>Add Bot</button>
                   )}
                 </div>
               ))}
             </div>
             {!isSpectator && Object.values(gameState.players).some(p => !p) && (
-              <button className="btn fill-bots-btn" onClick={handleFillBots}>Fill with Bots</button>
+              <button className="btn fill-bots-btn" onClick={handleFillBots} disabled={addingBots}>Fill with Bots</button>
             )}
           </div>
         </div>
@@ -287,7 +323,7 @@ const GameView: React.FC = () => {
             <Pocket
               pieces={getPocket(boardAPocketKeyTop)}
               color={boardAOrientation === 'white' ? 'black' : 'white'}
-              isActive={!isSpectator && myBoardIndex === 0 && boardATopPlayer === mySeat && (boardAOrientation === 'white' ? isMyTurnOnBoardA : isMyTurnOnBoardA)}
+              isActive={!isSpectator && myBoardIndex === 0 && boardATopPlayer === mySeat && isMyTurnOnBoardA}
               onSelect={setSelectedPocketPiece}
               selectedPiece={myBoardIndex === 0 && boardATopPlayer === mySeat ? selectedPocketPiece : null}
             />
@@ -300,8 +336,8 @@ const GameView: React.FC = () => {
             legalMoves={myBoardIndex === 0 ? legalMoves : []}
             legalDrops={myBoardIndex === 0 ? legalDrops : []}
             lastMove={gameState?.boards[0]?.last_move || null}
-            onMove={handleMove(0)}
-            onDrop={handleDrop(0)}
+            onMove={handleMoveA}
+            onDrop={handleDropA}
             selectedPocketPiece={myBoardIndex === 0 ? selectedPocketPiece : null}
             boardIndex={0}
           />
@@ -341,8 +377,8 @@ const GameView: React.FC = () => {
             legalMoves={myBoardIndex === 1 ? legalMoves : []}
             legalDrops={myBoardIndex === 1 ? legalDrops : []}
             lastMove={gameState?.boards[1]?.last_move || null}
-            onMove={handleMove(1)}
-            onDrop={handleDrop(1)}
+            onMove={handleMoveB}
+            onDrop={handleDropB}
             selectedPocketPiece={myBoardIndex === 1 ? selectedPocketPiece : null}
             boardIndex={1}
           />

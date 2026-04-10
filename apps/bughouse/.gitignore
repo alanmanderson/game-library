@@ -8,3 +8,26 @@ __pycache__/
 node_modules/
 build/
 .pytest_cache/
+
+# Terraform
+*.tfstate
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+
+# OS files
+.DS_Store
+
+# Logs
+*.log
+
+# Environment files
+.env.*
+!.env.example
+
+# Test coverage
+coverage/
+
+# Build artifacts
+dist/
+*.egg-info/

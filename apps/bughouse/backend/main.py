@@ -6,8 +6,10 @@ REST endpoints for game lifecycle and WebSocket endpoint for real-time gameplay.
 
 import asyncio
 import json
+import logging
 import os
 import random
+import time
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -21,6 +23,7 @@ from engine import SEAT_BOARD_COLOR, BOARD_COLOR_SEAT, SEAT_TEAM, Seat
 from manager import GameManager, GameRoom, PlayerSession, SpectatorSession, SEAT_INT_TO_NAME
 from models import (
     AddBotRequest,
+    AddBotResponse,
     CreateGameRequest,
     CreateGameResponse,
     JoinGameRequest,
@@ -35,15 +38,31 @@ from auth import auth_router, get_optional_user
 from auth.database import init_db
 from auth.models import User
 
+logger = logging.getLogger(__name__)
+
+# CORS origins from environment variable (comma-separated), default to "*" for dev
+ALLOWED_ORIGINS = os.environ.get("CORS_ALLOWED_ORIGINS", "*").split(",")
+
+# Per-room locks to prevent concurrent bot move execution
+_bot_locks: dict[str, asyncio.Lock] = {}
+
 
 # --- Application lifespan ---
+
+async def _periodic_cleanup():
+    """Background task that cleans up stale games every 10 minutes."""
+    while True:
+        await asyncio.sleep(600)
+        manager.cleanup_old_games(max_age_seconds=3600)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup/shutdown lifecycle."""
     await init_db()
+    cleanup_task = asyncio.create_task(_periodic_cleanup())
     yield
-    # Cleanup on shutdown
+    cleanup_task.cancel()
 
 
 app = FastAPI(
@@ -53,11 +72,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS - allow all origins for development
+# CORS - origins controlled via CORS_ALLOWED_ORIGINS env var
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=ALLOWED_ORIGINS != ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -159,80 +178,109 @@ async def broadcast_game_state(room: GameRoom):
             pass
 
 
+async def check_and_broadcast_game_over(room: GameRoom) -> bool:
+    """Check if the game is over and broadcast the result if so.
+
+    Sets room status to FINISHED and broadcasts the game_over message.
+    Returns True if the game is over, False otherwise.
+    """
+    if room.engine.is_game_over():
+        room.status = GameStatus.FINISHED
+        room.finished_at = time.time()
+        await broadcast(room, {
+            "type": "game_over",
+            "winner": room.engine.winner.value if room.engine.winner else None,
+            "reason": room.engine.result_reason.value if room.engine.result_reason else None,
+        })
+        return True
+    return False
+
+
 async def execute_bot_moves(room: GameRoom):
     """Execute bot moves in a loop until no bot has the current turn or game is over."""
-    while room.status == GameStatus.IN_PROGRESS and not room.engine.is_game_over():
-        bot_moved = False
-        for board_index in range(2):
-            board = room.engine.boards[board_index]
-            seat = BOARD_COLOR_SEAT[(board_index, board.turn)]
-            if seat not in room.players:
-                continue
-            player = room.players[seat]
-            if not player.is_bot:
-                continue
+    # Acquire per-room lock to prevent concurrent bot move execution
+    if room.game_id not in _bot_locks:
+        _bot_locks[room.game_id] = asyncio.Lock()
+    lock = _bot_locks[room.game_id]
 
-            # Collect legal moves and drops
-            legal_moves = room.engine.get_legal_moves(board_index)
-            legal_drops = room.engine.get_legal_drops(board_index)
-            all_options = legal_moves + legal_drops
-            if not all_options:
-                continue
-
-            await asyncio.sleep(0.5)
-
-            chosen = random.choice(all_options)
-
-            try:
-                if "@" in chosen:
-                    # Drop move: e.g. "N@e4"
-                    piece = chosen[0].lower()
-                    square = chosen[2:]
-                    room.engine.drop_piece(board_index, piece, square)
-                    await broadcast(room, {
-                        "type": "piece_dropped",
-                        "board": board_index,
-                        "piece": piece,
-                        "square": square,
-                        "seat": player.seat.value,
-                        "player": player.name,
-                    })
-                else:
-                    # Standard move: e.g. "e2e4" or "e7e8q"
-                    from_sq = chosen[:2]
-                    to_sq = chosen[2:4]
-                    promotion = chosen[4] if len(chosen) > 4 else None
-                    move_result = room.engine.make_move(board_index, from_sq, to_sq, promotion)
-                    await broadcast(room, {
-                        "type": "move_made",
-                        "board": board_index,
-                        "from": from_sq,
-                        "to": to_sq,
-                        "promotion": promotion,
-                        "capture": move_result.get("capture", False),
-                        "seat": player.seat.value,
-                        "player": player.name,
-                    })
-            except ValueError:
-                # Move was invalid (race condition, game over, etc.) — skip
+    async with lock:
+        max_iterations = 200
+        iterations = 0
+        while room.status == GameStatus.IN_PROGRESS and not room.engine.is_game_over():
+            iterations += 1
+            if iterations > max_iterations:
+                logger.warning(
+                    "Bot move loop hit max iterations (%d) in game %s",
+                    max_iterations, room.game_id,
+                )
                 break
 
-            await broadcast_game_state(room)
+            bot_moved = False
+            for board_index in range(2):
+                board = room.engine.boards[board_index]
+                seat = BOARD_COLOR_SEAT[(board_index, board.turn)]
+                if seat not in room.players:
+                    continue
+                player = room.players[seat]
+                if not player.is_bot:
+                    continue
 
-            if room.engine.is_game_over():
-                room.status = GameStatus.FINISHED
-                await broadcast(room, {
-                    "type": "game_over",
-                    "winner": room.engine.winner.value if room.engine.winner else None,
-                    "reason": room.engine.result_reason.value if room.engine.result_reason else None,
-                })
-                return
+                # Collect legal moves and drops
+                legal_moves = room.engine.get_legal_moves(board_index)
+                legal_drops = room.engine.get_legal_drops(board_index)
+                all_options = legal_moves + legal_drops
+                if not all_options:
+                    continue
 
-            bot_moved = True
-            break  # Re-check both boards from the top after each move
+                await asyncio.sleep(0.5)
 
-        if not bot_moved:
-            break
+                chosen = random.choice(all_options)
+
+                try:
+                    if "@" in chosen:
+                        # Drop move: e.g. "N@e4"
+                        piece = chosen[0].lower()
+                        square = chosen[2:]
+                        room.engine.drop_piece(board_index, piece, square)
+                        await broadcast(room, {
+                            "type": "piece_dropped",
+                            "board": board_index,
+                            "piece": piece,
+                            "square": square,
+                            "seat": player.seat.value,
+                            "player": player.name,
+                        })
+                    else:
+                        # Standard move: e.g. "e2e4" or "e7e8q"
+                        from_sq = chosen[:2]
+                        to_sq = chosen[2:4]
+                        promotion = chosen[4] if len(chosen) > 4 else None
+                        move_result = room.engine.make_move(board_index, from_sq, to_sq, promotion)
+                        await broadcast(room, {
+                            "type": "move_made",
+                            "board": board_index,
+                            "from": from_sq,
+                            "to": to_sq,
+                            "promotion": promotion,
+                            "capture": move_result.get("capture", False),
+                            "seat": player.seat.value,
+                            "player": player.name,
+                        })
+                except ValueError:
+                    # Move was invalid (race condition, game over, etc.) — try next board
+                    bot_moved = True  # Flag so outer loop retries
+                    continue
+
+                await broadcast_game_state(room)
+
+                if await check_and_broadcast_game_over(room):
+                    return
+
+                bot_moved = True
+                break  # Re-check both boards from the top after each move
+
+            if not bot_moved:
+                break
 
 
 def validate_player_turn(room: GameRoom, session: PlayerSession, board_index: int):
@@ -241,6 +289,12 @@ def validate_player_turn(room: GameRoom, session: PlayerSession, board_index: in
 
     Raises ValueError with a descriptive message if validation fails.
     """
+    # Check game status first — no point validating board/turn for a non-active game
+    if room.status != GameStatus.IN_PROGRESS:
+        raise ValueError(
+            f"Game is not in progress (status: {room.status.value})."
+        )
+
     seat = session.seat
     player_board, player_color = SEAT_BOARD_COLOR[seat]
 
@@ -253,11 +307,6 @@ def validate_player_turn(room: GameRoom, session: PlayerSession, board_index: in
     board = room.engine.boards[board_index]
     if board.turn != player_color:
         raise ValueError("It is not your turn.")
-
-    if room.status != GameStatus.IN_PROGRESS:
-        raise ValueError(
-            f"Game is not in progress (status: {room.status.value})."
-        )
 
 
 # --- REST Endpoints ---
@@ -321,6 +370,11 @@ async def join_game(
     user: Optional[User] = Depends(get_optional_user),
 ):
     """Join an existing game as a player."""
+    # Check room existence first for a proper 404
+    room = manager.get_game(game_id)
+    if room is None:
+        raise HTTPException(status_code=404, detail=f"Game {game_id} not found.")
+
     try:
         player_name = user.display_name if user else request.player_name
         room, session = manager.join_game(
@@ -377,9 +431,15 @@ async def watch_game(game_id: str, request: WatchGameRequest):
     )
 
 
-@app.post("/api/games/{game_id}/add-bot")
+@app.post("/api/games/{game_id}/add-bot", response_model=AddBotResponse)
 async def add_bot(game_id: str, request: AddBotRequest):
-    """Add a bot player to an empty seat."""
+    """Add a bot player to an empty seat.
+
+    Design note: No auth check is required here. The room.add_bot() call
+    already enforces that the game must be in WAITING status and not full,
+    which prevents griefing of in-progress games. Requiring a player token
+    would break backwards compatibility with the UI.
+    """
     room = manager.get_game(game_id)
     if room is None:
         raise HTTPException(status_code=404, detail="Game not found.")
@@ -404,10 +464,10 @@ async def add_bot(game_id: str, request: AddBotRequest):
     else:
         await broadcast_game_state(room)
 
-    return {
-        "seat": session.seat.value,
-        "player_name": session.name,
-    }
+    return AddBotResponse(
+        seat=session.seat.value,
+        player_name=session.name,
+    )
 
 
 # --- WebSocket Endpoint ---
@@ -441,9 +501,21 @@ async def websocket_endpoint(
     # Register the WebSocket connection
     is_player = player_session is not None
     if is_player:
+        # Close old WebSocket if player is already connected (duplicate connection)
+        if player_session.connected and player_session.websocket is not None:
+            try:
+                await player_session.websocket.close(code=4008, reason="Replaced by new connection.")
+            except Exception:
+                pass  # Old socket may already be dead
         player_session.connected = True
         player_session.websocket = websocket
     else:
+        # Close old WebSocket if spectator is already connected
+        if spectator_session.connected and spectator_session.websocket is not None:
+            try:
+                await spectator_session.websocket.close(code=4008, reason="Replaced by new connection.")
+            except Exception:
+                pass
         spectator_session.connected = True
         spectator_session.websocket = websocket
 
@@ -489,7 +561,7 @@ async def websocket_endpoint(
     except WebSocketDisconnect:
         pass
     except Exception:
-        pass
+        logger.exception("WebSocket error in game %s", game_id)
     finally:
         # Clean up connection state
         if is_player:
@@ -556,13 +628,7 @@ async def handle_move(
     await broadcast_game_state(room)
 
     # Check for game over
-    if room.engine.is_game_over():
-        room.status = GameStatus.FINISHED
-        await broadcast(room, {
-            "type": "game_over",
-            "winner": room.engine.winner.value if room.engine.winner else None,
-            "reason": room.engine.result_reason.value if room.engine.result_reason else None,
-        })
+    if await check_and_broadcast_game_over(room):
         return
 
     # Trigger bot moves if next turn is a bot
@@ -612,13 +678,7 @@ async def handle_drop(
     await broadcast_game_state(room)
 
     # Check for game over
-    if room.engine.is_game_over():
-        room.status = GameStatus.FINISHED
-        await broadcast(room, {
-            "type": "game_over",
-            "winner": room.engine.winner.value if room.engine.winner else None,
-            "reason": room.engine.result_reason.value if room.engine.result_reason else None,
-        })
+    if await check_and_broadcast_game_over(room):
         return
 
     # Trigger bot moves if next turn is a bot
@@ -641,6 +701,7 @@ async def handle_resign(
         return
 
     room.status = GameStatus.FINISHED
+    room.finished_at = time.time()
 
     await broadcast(room, {
         "type": "game_over",

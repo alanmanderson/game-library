@@ -11,7 +11,7 @@ FROM python:3.12-slim AS production
 WORKDIR /app
 
 # Install uv for fast dependency management
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.7 /uv /usr/local/bin/uv
 
 # Install Python dependencies
 COPY backend/requirements.txt ./backend/requirements.txt
@@ -22,6 +22,10 @@ COPY backend/ ./backend/
 
 # Copy built frontend
 COPY --from=frontend-build /build/build ./frontend/build
+
+RUN adduser --disabled-password --gecos "" appuser
+RUN chown -R appuser:appuser /app
+USER appuser
 
 EXPOSE 8000
 

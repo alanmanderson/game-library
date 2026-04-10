@@ -363,10 +363,9 @@ class BughouseGame:
             board = self.boards[bi]
             outcome = board.outcome()
             if outcome is not None:
-                self.game_over = True
-                self.ended_at = time.time()
-
                 if outcome.termination == chess.Termination.CHECKMATE:
+                    self.game_over = True
+                    self.ended_at = time.time()
                     self.result_reason = GameResult.CHECKMATE
                     # The side that just moved delivered checkmate
                     # board.turn is now the LOSING side (the one in checkmate)
@@ -377,8 +376,20 @@ class BughouseGame:
                         Team.A if losing_team == Team.B else Team.B
                     )
                 elif outcome.termination == chess.Termination.STALEMATE:
+                    # NOTE: Stalemate in bughouse is debatable — a partner
+                    # could send a piece to break the stalemate. Treating it
+                    # as a draw for now; revisit if house rules differ.
+                    self.game_over = True
+                    self.ended_at = time.time()
                     self.result_reason = GameResult.STALEMATE
                     self.winner = None  # Draw
+                else:
+                    # Other terminations (INSUFFICIENT_MATERIAL,
+                    # FIVEFOLD_REPETITION, SEVENTYFIVE_MOVES, etc.) do not
+                    # apply in bughouse — partner can send pieces, and
+                    # repetition / move-count rules are not used.
+                    continue
+
                 break
 
     def get_legal_moves(self, board_index: int) -> list[str]:

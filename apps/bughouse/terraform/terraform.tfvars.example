@@ -1,0 +1,18 @@
+# Copy this to terraform.tfvars and fill in real values
+# DO NOT commit terraform.tfvars to version control
+
+project_name     = "bughouse"
+environment      = "production"
+location         = "eastus"
+db_admin_password = "CHANGE_ME_strong_password_here"
+jwt_secret_key    = "CHANGE_ME_random_secret_here"
+
+# Optional: Docker image tag (defaults to "latest")
+# container_image_tag = "v1.0.0"
+
+# Optional: Custom domain (leave empty to skip DNS configuration)
+# custom_domain = "bughouse.example.com"
+
+# Optional: Google OAuth (leave empty to disable)
+google_client_id     = ""
+google_client_secret = ""

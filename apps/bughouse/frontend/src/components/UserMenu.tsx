@@ -1,9 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
 const UserMenu: React.FC<{ onSignInClick: () => void }> = ({ onSignInClick }) => {
   const { user, isGuest, logout } = useAuth();
   const [showDropdown, setShowDropdown] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   if (isGuest) {
     const guestName = localStorage.getItem('bughouse_name') || 'Guest';
@@ -15,29 +27,34 @@ const UserMenu: React.FC<{ onSignInClick: () => void }> = ({ onSignInClick }) =>
     );
   }
 
-  const initials = user!.display_name
+  // Safety guard for TypeScript narrowing — isGuest being false implies user is set,
+  // but this explicit check satisfies the type checker without non-null assertions.
+  if (!user) return null;
+
+  const initials = user.display_name
     .split(' ')
+    .filter(Boolean)
     .map((w) => w[0])
     .join('')
     .toUpperCase()
     .slice(0, 2);
 
   return (
-    <div className="user-menu">
+    <div className="user-menu" ref={menuRef}>
       <button
         className="user-menu-button"
         onClick={() => setShowDropdown(!showDropdown)}
       >
-        {user!.avatar_url ? (
-          <img src={user!.avatar_url} alt="" className="user-avatar" />
+        {user.avatar_url ? (
+          <img src={user.avatar_url} alt="" className="user-avatar" />
         ) : (
           <span className="user-initials">{initials}</span>
         )}
-        <span className="user-menu-name">{user!.display_name}</span>
+        <span className="user-menu-name">{user.display_name}</span>
       </button>
       {showDropdown && (
         <div className="user-dropdown">
-          <div className="user-dropdown-email">{user!.email}</div>
+          <div className="user-dropdown-email">{user.email}</div>
           <button
             className="user-dropdown-item"
             onClick={() => {

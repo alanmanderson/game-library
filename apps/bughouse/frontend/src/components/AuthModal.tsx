@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
 interface AuthModalProps {
@@ -18,6 +18,17 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onGuestContinue 
   const [guestName, setGuestName] = useState(() => localStorage.getItem('bughouse_name') || '');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Reset form state each time the modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setTab('signin');
+      setEmail('');
+      setDisplayName('');
+      setPassword('');
+      setError(null);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

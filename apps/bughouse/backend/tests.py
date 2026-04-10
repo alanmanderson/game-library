@@ -9,7 +9,11 @@ Covers:
   - API (main.py): REST endpoints for game lifecycle.
 """
 
+import os
+os.environ.setdefault("BUGHOUSE_ENV", "development")
+
 import json
+import time
 import pytest
 import chess
 import chess.variant
@@ -995,6 +999,9 @@ class TestAuthGoogleOAuth:
     @pytest.mark.anyio
     async def test_google_callback_mock(self, transport, base_url, auth_db):
         """Test Google OAuth callback with mocked external calls."""
+        from auth.routes import _oauth_states
+        import time
+
         mock_token_response = MagicMock()
         mock_token_response.status_code = 200
         mock_token_response.json.return_value = {"access_token": "mock_google_token"}
@@ -1008,6 +1015,10 @@ class TestAuthGoogleOAuth:
             "picture": "https://example.com/photo.jpg",
         }
 
+        # Pre-populate a valid CSRF state token
+        test_state = "test-csrf-state-token"
+        _oauth_states[test_state] = time.time()
+
         with patch("auth.config.auth_settings.google_client_id", "fake-client-id"), \
              patch("auth.config.auth_settings.google_client_secret", "fake-secret"):
             with patch("auth.routes.httpx.AsyncClient") as mock_client_cls:
@@ -1020,9 +1031,350 @@ class TestAuthGoogleOAuth:
 
                 async with AsyncClient(transport=transport, base_url=base_url) as client:
                     resp = await client.get(
-                        "/api/auth/google/callback?code=mock_code",
+                        f"/api/auth/google/callback?code=mock_code&state={test_state}",
                         follow_redirects=False,
                     )
 
         assert resp.status_code == 307
-        assert "token=" in resp.headers.get("location", "")
+        location = resp.headers.get("location", "")
+        assert "#token=" in location
+        # State should be consumed (removed from store)
+        assert test_state not in _oauth_states
+
+
+# ============================================================
+# BOT ADDITION TESTS
+# ============================================================
+
+
+class TestBotAddition:
+    """Test the add_bot() method on GameRoom and the REST endpoint."""
+
+    def test_add_bot_assigns_seat(self):
+        """Create a game, add a bot, verify bot is in players dict with is_bot=True."""
+        mgr = GameManager()
+        room, _ = mgr.create_game("Alice")
+        bot_session = room.add_bot()
+        assert bot_session.is_bot is True
+        assert bot_session.seat in room.players
+        assert room.players[bot_session.seat] is bot_session
+
+    def test_add_bot_auto_assigns_seat(self):
+        """Create a game with 1 player, add a bot without preferred seat, verify it gets an available seat."""
+        mgr = GameManager()
+        room, player_session = mgr.create_game("Alice")
+        bot_session = room.add_bot()
+        # Bot should get a different seat from the human player
+        assert bot_session.seat != player_session.seat
+        assert bot_session.seat in room.players
+        assert room.player_count == 2
+
+    def test_add_bot_preferred_seat(self):
+        """Add a bot to a specific seat, verify it lands there."""
+        mgr = GameManager()
+        room, _ = mgr.create_game("Alice")
+        bot_session = room.add_bot(preferred_seat=SeatName.BOARD_B_BLACK)
+        assert bot_session.seat == Seat.BOARD_B_BLACK
+
+    def test_add_bot_full_game_rejected(self):
+        """Fill all 4 seats, try to add a bot, expect ValueError."""
+        mgr = GameManager()
+        room, _ = mgr.create_game("P1")
+        mgr.join_game(room.game_id, "P2")
+        mgr.join_game(room.game_id, "P3")
+        mgr.join_game(room.game_id, "P4")
+        with pytest.raises(ValueError, match="[Ff]ull"):
+            room.add_bot()
+
+    def test_add_bot_starts_game(self):
+        """Create a game with 1 player, add 3 bots, verify game status is IN_PROGRESS."""
+        mgr = GameManager()
+        room, _ = mgr.create_game("Alice")
+        room.add_bot()
+        room.add_bot()
+        room.add_bot()
+        assert room.status == GameStatus.IN_PROGRESS
+
+    @pytest.mark.anyio
+    async def test_add_bot_api_endpoint(self, transport, base_url):
+        """Use AsyncClient to POST to /api/games/{id}/add-bot, verify 200 response."""
+        async with AsyncClient(transport=transport, base_url=base_url) as client:
+            create_resp = await client.post(
+                "/api/games", json={"player_name": "Alice"}
+            )
+            game_id = create_resp.json()["game_id"]
+
+            resp = await client.post(
+                f"/api/games/{game_id}/add-bot",
+                json={},
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "seat" in data
+        assert isinstance(data["seat"], int)
+        assert "player_name" in data
+        assert "Bot" in data["player_name"]
+
+
+# ============================================================
+# BOT MOVES TESTS
+# ============================================================
+
+
+class TestBotMoves:
+    """Test bot session flags."""
+
+    def test_bot_session_has_is_bot_flag(self):
+        """Create a bot, verify session.is_bot is True."""
+        mgr = GameManager()
+        room, _ = mgr.create_game("Alice")
+        bot_session = room.add_bot()
+        assert bot_session.is_bot is True
+
+    def test_regular_player_is_not_bot(self):
+        """Create a regular player, verify session.is_bot is False."""
+        mgr = GameManager()
+        room, player_session = mgr.create_game("Alice")
+        assert player_session.is_bot is False
+
+
+# ============================================================
+# VALIDATE PLAYER TURN TESTS
+# ============================================================
+
+from main import validate_player_turn, build_full_game_state
+
+
+class TestValidatePlayerTurn:
+    """Test the validate_player_turn function."""
+
+    def test_validates_correct_board(self):
+        """Player on board 0 can act on board 0."""
+        mgr = GameManager()
+        room, _ = mgr.create_game("Alice")
+        mgr.join_game(room.game_id, "Bob")
+        mgr.join_game(room.game_id, "Charlie")
+        mgr.join_game(room.game_id, "Diana")
+        # Seat 0 = Board A White, it is white's turn on board 0 at start
+        session = room.players[Seat.BOARD_A_WHITE]
+        # Should not raise
+        validate_player_turn(room, session, 0)
+
+    def test_rejects_wrong_board(self):
+        """Player on board 0 cannot act on board 1."""
+        mgr = GameManager()
+        room, _ = mgr.create_game("Alice")
+        mgr.join_game(room.game_id, "Bob")
+        mgr.join_game(room.game_id, "Charlie")
+        mgr.join_game(room.game_id, "Diana")
+        # Seat 0 = Board A (board 0)
+        session = room.players[Seat.BOARD_A_WHITE]
+        with pytest.raises(ValueError, match="not board 1"):
+            validate_player_turn(room, session, 1)
+
+    def test_rejects_wrong_turn(self):
+        """Player whose turn it isn't gets an error."""
+        mgr = GameManager()
+        room, _ = mgr.create_game("Alice")
+        mgr.join_game(room.game_id, "Bob")
+        mgr.join_game(room.game_id, "Charlie")
+        mgr.join_game(room.game_id, "Diana")
+        # It's white's turn at start on board 0; black (Seat 1) should be rejected
+        session = room.players[Seat.BOARD_A_BLACK]
+        with pytest.raises(ValueError, match="not your turn"):
+            validate_player_turn(room, session, 0)
+
+    def test_rejects_when_game_not_in_progress(self):
+        """Game in WAITING status rejects moves."""
+        mgr = GameManager()
+        room, player_session = mgr.create_game("Alice")
+        # Only 1 player, game is WAITING
+        assert room.status == GameStatus.WAITING
+        with pytest.raises(ValueError, match="not in progress"):
+            validate_player_turn(room, player_session, 0)
+
+
+# ============================================================
+# BUILD FULL GAME STATE TESTS
+# ============================================================
+
+
+class TestBuildFullGameState:
+    """Test the build_full_game_state function."""
+
+    def test_state_has_required_keys(self):
+        """Create a game with players, build state, check all expected keys."""
+        mgr = GameManager()
+        room, _ = mgr.create_game("Alice")
+        mgr.join_game(room.game_id, "Bob")
+        mgr.join_game(room.game_id, "Charlie")
+        mgr.join_game(room.game_id, "Diana")
+
+        state = build_full_game_state(room)
+        expected_keys = {
+            "type", "game_id", "boards", "pockets", "players",
+            "status", "turn", "game_over", "legal_moves", "legal_drops",
+        }
+        assert expected_keys.issubset(set(state.keys()))
+
+    def test_status_mapping(self):
+        """Verify 'in_progress' maps to 'playing'."""
+        mgr = GameManager()
+        room, _ = mgr.create_game("Alice")
+        mgr.join_game(room.game_id, "Bob")
+        mgr.join_game(room.game_id, "Charlie")
+        mgr.join_game(room.game_id, "Diana")
+        assert room.status == GameStatus.IN_PROGRESS
+
+        state = build_full_game_state(room)
+        assert state["status"] == "playing"
+
+    def test_players_format(self):
+        """Verify players is a dict with string keys and name/null values."""
+        mgr = GameManager()
+        room, _ = mgr.create_game("Alice")
+        mgr.join_game(room.game_id, "Bob")
+
+        state = build_full_game_state(room)
+        players = state["players"]
+        assert isinstance(players, dict)
+        # Should have 4 keys: "0", "1", "2", "3"
+        assert set(players.keys()) == {"0", "1", "2", "3"}
+        # Two players filled, two are None
+        filled = [v for v in players.values() if v is not None]
+        nulls = [v for v in players.values() if v is None]
+        assert len(filled) == 2
+        assert len(nulls) == 2
+
+
+# ============================================================
+# CLEANUP OLD GAMES TESTS
+# ============================================================
+
+
+class TestCleanupOldGames:
+    """Test the cleanup logic."""
+
+    def test_cleanup_finished_games(self):
+        """Create a finished game with finished_at in the past, run cleanup, verify it's removed."""
+        mgr = GameManager()
+        room, _ = mgr.create_game("Alice")
+        room.status = GameStatus.FINISHED
+        room.finished_at = time.time() - 7200  # 2 hours ago
+        game_id = room.game_id
+
+        mgr.cleanup_old_games(max_age_seconds=3600)
+        assert mgr.get_game(game_id) is None
+
+    def test_cleanup_stale_waiting_games(self):
+        """Create a waiting game with old created_at, run cleanup, verify removed."""
+        mgr = GameManager()
+        room, _ = mgr.create_game("Alice")
+        room.created_at = time.time() - 7200  # 2 hours ago
+        game_id = room.game_id
+
+        mgr.cleanup_old_games(max_age_seconds=3600)
+        assert mgr.get_game(game_id) is None
+
+    def test_cleanup_keeps_recent_games(self):
+        """Create a recently finished game, run cleanup, verify it's NOT removed."""
+        mgr = GameManager()
+        room, _ = mgr.create_game("Alice")
+        room.status = GameStatus.FINISHED
+        room.finished_at = time.time() - 60  # 1 minute ago
+        game_id = room.game_id
+
+        mgr.cleanup_old_games(max_age_seconds=3600)
+        assert mgr.get_game(game_id) is not None
+
+    def test_cleanup_keeps_in_progress_games(self):
+        """Create an in-progress game with old created_at, run cleanup, verify it's NOT removed."""
+        mgr = GameManager()
+        room, _ = mgr.create_game("Alice")
+        mgr.join_game(room.game_id, "Bob")
+        mgr.join_game(room.game_id, "Charlie")
+        mgr.join_game(room.game_id, "Diana")
+        assert room.status == GameStatus.IN_PROGRESS
+        room.created_at = time.time() - 7200  # 2 hours ago
+        game_id = room.game_id
+
+        mgr.cleanup_old_games(max_age_seconds=3600)
+        assert mgr.get_game(game_id) is not None
+
+
+# ============================================================
+# PROMOTION TESTS
+# ============================================================
+
+
+class TestPromotion:
+    """Test pawn promotion."""
+
+    def test_pawn_promotion_to_queen(self):
+        """Set up a board where a pawn can promote, make the promotion move, verify piece changed."""
+        game = BughouseGame()
+        board = game.boards[0]
+
+        # Set up position: White pawn on e7, kings away from promotion square
+        board.clear()
+        board.set_piece_at(chess.A1, chess.Piece(chess.KING, chess.WHITE))
+        board.set_piece_at(chess.H8, chess.Piece(chess.KING, chess.BLACK))
+        board.set_piece_at(chess.E7, chess.Piece(chess.PAWN, chess.WHITE))
+        board.turn = chess.WHITE
+
+        # Make promotion move
+        result = game.make_move(0, "e7", "e8", "q")
+        assert result["promotion"] == "q"
+
+        # Verify the piece on e8 is a queen
+        piece = board.piece_at(chess.E8)
+        assert piece is not None
+        assert piece.piece_type == chess.QUEEN
+        assert piece.color == chess.WHITE
+
+
+# ============================================================
+# STALEMATE TESTS
+# ============================================================
+
+
+class TestStalemate:
+    """Test stalemate detection."""
+
+    def test_stalemate_is_draw(self):
+        """Set up a stalemate position on one board, verify game_over is True and winner is None."""
+        game = BughouseGame()
+        board = game.boards[0]
+
+        # Set up stalemate position:
+        # White king on a1, White queen on b6, Black king on a8
+        # Black to move: no legal moves, not in check
+        board.clear()
+        board.set_piece_at(chess.A1, chess.Piece(chess.KING, chess.WHITE))
+        board.set_piece_at(chess.A8, chess.Piece(chess.KING, chess.BLACK))
+        board.set_piece_at(chess.B6, chess.Piece(chess.QUEEN, chess.WHITE))
+        board.turn = chess.WHITE
+
+        # White needs to make a move that causes stalemate.
+        # Move queen from b6 to b7: after this, black king on a8 has no legal moves
+        # but is not in check (queen on b7 doesn't check a8... actually b7 does
+        # attack a8). Let's use a known working approach instead.
+        #
+        # Direct setup: set board to stalemate position with black to move,
+        # then trigger _check_game_over.
+        board.clear()
+        board.set_piece_at(chess.A1, chess.Piece(chess.KING, chess.WHITE))
+        board.set_piece_at(chess.A8, chess.Piece(chess.KING, chess.BLACK))
+        board.set_piece_at(chess.B6, chess.Piece(chess.QUEEN, chess.WHITE))
+        board.turn = chess.BLACK
+
+        # Black is stalemated: king on a8 can't go anywhere
+        # (b6 queen controls a7, b7, b8; white king controls a2, b1, b2)
+        assert board.is_stalemate() is True
+
+        # Trigger game-over check
+        game._check_game_over()
+
+        assert game.game_over is True
+        assert game.winner is None  # Stalemate is a draw
+        assert game.result_reason == GameResult.STALEMATE

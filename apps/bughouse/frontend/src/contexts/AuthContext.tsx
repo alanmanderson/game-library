@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { UserInfo, fetchCurrentUser, login as apiLogin, register as apiRegister } from '../api/auth';
+import { UserInfo, fetchCurrentUser, login as apiLogin, register as apiRegister, getGoogleAuthUrl } from '../api/auth';
 
 const AUTH_TOKEN_KEY = 'bughouse_auth_token';
 
@@ -60,7 +60,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const loginWithGoogle = useCallback(() => {
-    const { getGoogleAuthUrl } = require('../api/auth');
     window.location.href = getGoogleAuthUrl();
   }, []);
 
@@ -71,9 +70,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const setAuthFromCallback = useCallback(async (token: string) => {
+    // Validate the token before storing it — only persist on success
+    const u = await fetchCurrentUser(token);
     localStorage.setItem(AUTH_TOKEN_KEY, token);
     setAccessToken(token);
-    const u = await fetchCurrentUser(token);
     setUser(u);
   }, []);
 

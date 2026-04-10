@@ -66,8 +66,22 @@ const Lobby: React.FC = () => {
 
   useEffect(() => {
     fetchGames();
-    const interval = setInterval(fetchGames, 3000);
-    return () => clearInterval(interval);
+    let interval = setInterval(fetchGames, 3000);
+
+    const handleVisibility = () => {
+      if (document.hidden) {
+        clearInterval(interval);
+      } else {
+        fetchGames();
+        interval = setInterval(fetchGames, 3000);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [fetchGames]);
 
   const handleCreate = async () => {

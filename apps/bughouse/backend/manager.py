@@ -8,7 +8,7 @@ and WebSocket connections.
 import secrets
 import string
 import time
-from typing import Optional
+from typing import Optional, Union
 
 from fastapi import WebSocket
 
@@ -31,6 +31,8 @@ SEAT_NAME_TO_INT = {
 }
 
 SEAT_INT_TO_NAME = {v: k for k, v in SEAT_NAME_TO_INT.items()}
+
+MAX_SPECTATORS = 50
 
 
 def _generate_game_id() -> str:
@@ -86,6 +88,9 @@ class GameRoom:
         self.status = GameStatus.WAITING
         self.created_at = time.time()
         self.started_at: Optional[float] = None
+        # Set when status changes to FINISHED (must be set externally or via
+        # a helper, since status transitions happen in main.py).
+        self.finished_at: Optional[float] = None
 
         # Seat -> PlayerSession (up to 4)
         self.players: dict[Seat, PlayerSession] = {}
@@ -118,13 +123,18 @@ class GameRoom:
         ]
         return [s for s in all_seats if s not in self.players]
 
-    def add_player(
-        self, name: str, preferred_seat: Optional[SeatName] = None, user_id: Optional[str] = None
+    def _add_player_session(
+        self,
+        name: str,
+        preferred_seat: Optional[SeatName] = None,
+        user_id: Optional[str] = None,
+        is_bot: bool = False,
     ) -> PlayerSession:
         """
-        Add a player to the game. Assigns a seat (preferred or first available).
+        Internal method that handles seat assignment, token generation,
+        session creation, and auto-start. Used by both add_player and add_bot.
 
-        Raises ValueError if the game is full or preferred seat is taken.
+        Raises ValueError if the game is full, finished, or preferred seat is taken.
         """
         if self.is_full:
             raise ValueError("Game is full.")
@@ -144,7 +154,7 @@ class GameRoom:
             seat = available[0]
 
         token = _generate_token()
-        session = PlayerSession(token=token, name=name, seat=seat, user_id=user_id)
+        session = PlayerSession(token=token, name=name, seat=seat, user_id=user_id, is_bot=is_bot)
         self.players[seat] = session
         self.player_tokens[token] = session
 
@@ -156,35 +166,44 @@ class GameRoom:
 
         return session
 
+    def add_player(
+        self, name: str, preferred_seat: Optional[SeatName] = None, user_id: Optional[str] = None
+    ) -> PlayerSession:
+        """
+        Add a player to the game. Assigns a seat (preferred or first available).
+
+        Raises ValueError if the game is full or preferred seat is taken.
+        """
+        return self._add_player_session(
+            name=name, preferred_seat=preferred_seat, user_id=user_id, is_bot=False
+        )
+
     def add_bot(self, preferred_seat: Optional[SeatName] = None) -> PlayerSession:
         """Add a bot player to the game. Returns the bot's PlayerSession."""
-        if self.is_full:
-            raise ValueError("Game is full.")
-        if self.status == GameStatus.FINISHED:
-            raise ValueError("Game is finished.")
-
+        # Determine seat to generate the bot name, then delegate to shared method.
         available = self.get_available_seats()
         if preferred_seat is not None:
             seat = SEAT_NAME_TO_INT[preferred_seat]
-            if seat not in available:
-                raise ValueError(f"Seat {preferred_seat.value} is already taken.")
+            # Validation (full/finished/taken) is handled by _add_player_session,
+            # but we need the seat int here to build the name.
+            if seat not in available and not self.is_full:
+                # Let _add_player_session raise the proper error
+                pass
+            target_seat = seat
         else:
-            seat = available[0]
+            if not available:
+                # Let _add_player_session raise "Game is full."
+                return self._add_player_session(
+                    name="Bot", preferred_seat=preferred_seat, is_bot=True
+                )
+            target_seat = available[0]
 
-        seat_label = SEAT_INT_TO_NAME[seat].value.replace("board_", "").replace("_", "-").upper()
+        seat_label = SEAT_INT_TO_NAME[target_seat].value.replace("board_", "").replace("_", "-").upper()
         bot_name = f"Bot ({seat_label})"
 
-        token = _generate_token()
-        session = PlayerSession(token=token, name=bot_name, seat=seat, is_bot=True)
-        self.players[seat] = session
-        self.player_tokens[token] = session
-
-        if self.is_full and self.status == GameStatus.WAITING:
-            self.status = GameStatus.IN_PROGRESS
-            self.started_at = time.time()
-            self.engine.started_at = self.started_at
-
-        return session
+        return self._add_player_session(
+            name=bot_name, preferred_seat=preferred_seat, is_bot=True
+        )
 
     def remove_player(self, token: str) -> Optional[PlayerSession]:
         """Remove a player by token. Returns the session or None."""
@@ -194,7 +213,14 @@ class GameRoom:
         return session
 
     def add_spectator(self, name: Optional[str] = None) -> SpectatorSession:
-        """Add a spectator. Returns the spectator session."""
+        """Add a spectator. Returns the spectator session.
+
+        Raises ValueError if the spectator limit (MAX_SPECTATORS) is reached.
+        """
+        if self.spectator_count >= MAX_SPECTATORS:
+            raise ValueError(
+                f"Spectator limit reached ({MAX_SPECTATORS})."
+            )
         token = _generate_token()
         session = SpectatorSession(token=token, name=name)
         self.spectators.append(session)
@@ -214,7 +240,7 @@ class GameRoom:
     def get_spectator_by_token(self, token: str) -> Optional[SpectatorSession]:
         return self.spectator_tokens.get(token)
 
-    def get_session_by_token(self, token: str):
+    def get_session_by_token(self, token: str) -> Optional[Union[PlayerSession, SpectatorSession]]:
         """Look up any session (player or spectator) by token."""
         player = self.get_player_by_token(token)
         if player:
@@ -333,13 +359,25 @@ class GameManager:
         ]
 
     def cleanup_old_games(self, max_age_seconds: float = 3600):
-        """Remove finished games older than max_age_seconds."""
+        """Remove stale games older than max_age_seconds.
+
+        - FINISHED games: cleaned up based on ``finished_at`` timestamp.
+        - WAITING games: cleaned up based on ``created_at`` timestamp.
+        - IN_PROGRESS games: left alone.
+        """
         now = time.time()
-        to_remove = [
-            gid
-            for gid, room in self.games.items()
-            if room.status == GameStatus.FINISHED
-            and (now - room.created_at) > max_age_seconds
-        ]
+        to_remove = []
+        for gid, room in self.games.items():
+            if (
+                room.status == GameStatus.FINISHED
+                and room.finished_at is not None
+                and (now - room.finished_at) > max_age_seconds
+            ):
+                to_remove.append(gid)
+            elif (
+                room.status == GameStatus.WAITING
+                and (now - room.created_at) > max_age_seconds
+            ):
+                to_remove.append(gid)
         for gid in to_remove:
             del self.games[gid]

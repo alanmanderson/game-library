@@ -1,16 +1,19 @@
-version: "3.9"
-
 services:
   app:
     build: .
     ports:
       - "8000:8000"
     environment:
-      - BUGHOUSE_DATABASE_URL=postgresql+asyncpg://bughouse:bughouse@db:5432/bughouse
+      - BUGHOUSE_DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-bughouse}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-bughouse}
       - BUGHOUSE_JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-me-in-production}
       - BUGHOUSE_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - BUGHOUSE_GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       - BUGHOUSE_GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-http://localhost:8000/api/auth/google/callback}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/games')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     depends_on:
       db:
         condition: service_healthy
@@ -19,13 +22,13 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: bughouse
-      POSTGRES_PASSWORD: bughouse
-      POSTGRES_DB: bughouse
+      POSTGRES_USER: ${POSTGRES_USER:-bughouse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-bughouse}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U bughouse"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bughouse}"]
       interval: 5s
       timeout: 5s
       retries: 5

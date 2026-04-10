@@ -12,6 +12,13 @@ resource "azurerm_postgresql_flexible_server" "main" {
   public_network_access_enabled = false
   zone                          = "1"
 
+  backup_retention_days         = 14
+  geo_redundant_backup_enabled  = false
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
   depends_on = [
     azurerm_private_dns_zone_virtual_network_link.postgres
   ]

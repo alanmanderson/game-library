@@ -70,7 +70,7 @@ class AddBotRequest(BaseModel):
 
 class WatchGameRequest(BaseModel):
     spectator_name: Optional[str] = Field(
-        None, max_length=30, description="Optional display name for spectator"
+        None, min_length=1, max_length=30, description="Optional display name for spectator"
     )
 
 
@@ -86,6 +86,11 @@ class CreateGameResponse(BaseModel):
 class JoinGameResponse(BaseModel):
     game_id: str
     player_token: str
+    seat: int = Field(..., description="Assigned seat (0-3)")
+    player_name: str
+
+
+class AddBotResponse(BaseModel):
     seat: int = Field(..., description="Assigned seat (0-3)")
     player_name: str
 
@@ -177,13 +182,13 @@ class WSResignMessage(BaseModel):
 # --- Auth Models ---
 
 class RegisterRequest(BaseModel):
-    email: str = Field(..., description="User email")
+    email: str = Field(..., min_length=3, description="User email")
     display_name: str = Field(..., min_length=1, max_length=30, description="Display name")
     password: str = Field(..., min_length=6, description="Password (min 6 chars)")
 
 
 class LoginRequest(BaseModel):
-    email: str = Field(..., description="User email")
+    email: str = Field(..., min_length=3, description="User email")
     password: str = Field(..., description="Password")
 
 

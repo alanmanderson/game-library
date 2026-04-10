@@ -148,7 +148,10 @@ const Board: React.FC<BoardProps> = ({
             (piece.color === 'w' && targetRank === PROMOTION_RANK_WHITE) ||
             (piece.color === 'b' && targetRank === PROMOTION_RANK_BLACK)
           ) {
-            promotion = 'q'; // Auto-promote to queen
+            // TODO: Replace auto-queen with a promotion picker UI that lets the
+            // player choose between queen, rook, bishop, and knight. For now,
+            // auto-promote to queen as a reasonable default.
+            promotion = 'q';
           }
         }
         onMove(selectedSquare, sq, promotion);
