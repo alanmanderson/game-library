@@ -63,7 +63,6 @@ jobs:
         run: |
           SSH="ssh -i ~/.ssh/id_deploy $REMOTE"
           $SSH "docker load < /tmp/backgammon-server.tar.gz && rm /tmp/backgammon-server.tar.gz"
-          $SSH "cd /opt/backgammon && docker compose up -d --wait db"
           $SSH "cd /opt/backgammon && docker compose run --rm fastapi alembic upgrade head"
           $SSH "cd /opt/backgammon && docker compose up -d --force-recreate"
           echo "Deployment complete!"
