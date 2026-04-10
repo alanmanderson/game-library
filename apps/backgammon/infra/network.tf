@@ -13,24 +13,6 @@ resource "azurerm_subnet" "vm" {
   address_prefixes     = ["10.0.1.0/24"]
 }
 
-# Delegated subnet for PostgreSQL Flexible Server
-resource "azurerm_subnet" "postgres" {
-  name                 = "snet-postgres"
-  resource_group_name  = azurerm_resource_group.backgammon.name
-  virtual_network_name = azurerm_virtual_network.backgammon.name
-  address_prefixes     = ["10.0.2.0/24"]
-
-  delegation {
-    name = "postgres-delegation"
-    service_delegation {
-      name = "Microsoft.DBforPostgreSQL/flexibleServers"
-      actions = [
-        "Microsoft.Network/virtualNetworks/subnets/join/action",
-      ]
-    }
-  }
-}
-
 # Network Security Group — allow SSH, HTTP, HTTPS
 resource "azurerm_network_security_group" "backgammon" {
   name                = "nsg-backgammon"

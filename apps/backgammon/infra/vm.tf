@@ -29,7 +29,9 @@ resource "azurerm_linux_virtual_machine" "backgammon" {
 
   custom_data = base64encode(templatefile("${path.module}/cloud-init.yaml.tpl", {
     domain_name       = var.domain_name
-    db_host           = azurerm_postgresql_flexible_server.backgammon.fqdn
+    db_host           = azurerm_postgresql_flexible_server.shared.fqdn
+    db_admin_login    = var.db_admin_login
+    db_name           = azurerm_postgresql_flexible_server_database.backgammon.name
     db_admin_password = var.db_admin_password
     app_secret_key    = var.app_secret_key
     google_client_id  = var.google_client_id

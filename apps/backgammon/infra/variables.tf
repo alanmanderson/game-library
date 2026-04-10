@@ -14,8 +14,14 @@ variable "domain_name" {
   type        = string
 }
 
+variable "db_admin_login" {
+  description = "Login for the shared PostgreSQL admin user"
+  type        = string
+  default     = "pgadmin"
+}
+
 variable "db_admin_password" {
-  description = "Password for the PostgreSQL admin user"
+  description = "Password for the shared PostgreSQL admin user"
   type        = string
   sensitive   = true
 }

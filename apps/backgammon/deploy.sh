@@ -61,9 +61,6 @@ fi
 docker load < /tmp/backgammon-server.tar.gz
 rm /tmp/backgammon-server.tar.gz
 
-# Start database and wait for it to be healthy
-docker compose up -d --wait db
-
 # Run Alembic migrations
 echo "Running migrations..."
 docker compose run --rm fastapi alembic upgrade head

@@ -28,8 +28,8 @@ runcmd:
   # Write .env file
   - |
     cat > /opt/backgammon/.env << 'ENVEOF'
-    DATABASE_URL=postgresql+asyncpg://backgammonadmin:${db_admin_password}@${db_host}:5432/backgammon?ssl=require
-    DATABASE_URL_SYNC=postgresql://backgammonadmin:${db_admin_password}@${db_host}:5432/backgammon?sslmode=require
+    DATABASE_URL=postgresql+asyncpg://${db_admin_login}:${db_admin_password}@${db_host}:5432/${db_name}?ssl=require
+    DATABASE_URL_SYNC=postgresql://${db_admin_login}:${db_admin_password}@${db_host}:5432/${db_name}?sslmode=require
     JWT_SECRET=${app_secret_key}
     ALLOWED_ORIGINS=https://${domain_name}
     GOOGLE_CLIENT_ID=${google_client_id}
