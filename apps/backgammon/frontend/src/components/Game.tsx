@@ -459,6 +459,11 @@ function Game() {
               <span className={`connection-dot ${opponentConnected ? "connected" : "disconnected"}`} />
               {isBotGame && <img src="/images/bot.png" alt="Bot" className="bot-avatar" />}
               <span className="pill-name">{opponentName}</span>
+              {isBotGame && table.bot_difficulty && (
+                <span className={`bot-difficulty-badge difficulty-${table.bot_difficulty}`}>
+                  {table.bot_difficulty}
+                </span>
+              )}
             </div>
             <span className="pip-count">{opponentPips} pips</span>
             {table.match_points > 0 && (

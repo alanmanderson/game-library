@@ -1,7 +1,7 @@
 """Pydantic schemas for the backgammon API request/response models."""
 
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -71,6 +71,11 @@ class TableResponse(BaseModel):
     match_points: int = 5
     white_match_score: int = 0
     black_match_score: int = 0
+    bot_difficulty: Optional[str] = None
+
+
+class InviteBotRequest(BaseModel):
+    difficulty: Literal["easy", "medium", "hard", "expert"] = "hard"
 
 
 class JoinTableRequest(BaseModel):

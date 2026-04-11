@@ -1,7 +1,10 @@
-"""Bot service for playing against an ML-powered AI opponent.
+"""Bot service for playing against an AI opponent with configurable difficulty.
 
-Uses a trained neural network (TD-Gammon style) for move selection,
-with fallback to random moves if the model is unavailable.
+Difficulty levels:
+  - easy: Random valid moves
+  - medium: Heuristic-based move scoring
+  - hard: ML neural network (backgammon_model_final.pt)
+  - expert: Improved ML neural network (backgammon_model_expert.pt)
 """
 
 import asyncio
@@ -25,49 +28,157 @@ BOT_NICKNAME = "Bot"
 BOT_MOVE_DELAY = 0.6
 BOT_ROLL_DELAY = 0.8
 
+# --- Difficulty tracking (in-memory, per table) ---
+_table_difficulties: dict[str, str] = {}
+
+
+def set_bot_difficulty(table_id: str, difficulty: str) -> None:
+    """Store the bot difficulty for a table."""
+    _table_difficulties[table_id] = difficulty
+
+
+def get_bot_difficulty(table_id: str) -> str:
+    """Get the bot difficulty for a table (defaults to 'hard')."""
+    return _table_difficulties.get(table_id, "hard")
+
+
+async def restore_bot_difficulty(table_id: str, db: AsyncSession) -> None:
+    """Restore bot difficulty from the database (after server restart)."""
+    if table_id in _table_difficulties:
+        return
+    from app.models import Table
+    table = await db.get(Table, table_id)
+    if table and table.bot_difficulty:
+        _table_difficulties[table_id] = table.bot_difficulty
+
+
 # --- ML Model Integration ---
 _ml_bot = None
+_ml_expert_bot = None
+
+
+def _find_ml_dir():
+    """Find the ml/ directory. Returns the path or None."""
+    candidates = [
+        os.path.join('/app', 'ml'),
+        os.path.join(os.path.dirname(__file__), '..', '..', '..', 'ml'),
+    ]
+    for candidate in candidates:
+        if os.path.isdir(candidate):
+            return candidate
+    return None
+
 
 def _load_ml_bot():
-    """Lazily load the ML bot player. Returns None if unavailable."""
+    """Lazily load the standard ML bot player. Returns None if unavailable."""
     global _ml_bot
     if _ml_bot is not None:
         return _ml_bot
 
     try:
-        # Search multiple possible locations for the ml/ directory:
-        # 1. /app/ml/ (inside Docker container)
-        # 2. Relative to this file: backend/app/services/ -> ../../.. -> ml/
-        candidates = [
-            os.path.join('/app', 'ml'),
-            os.path.join(os.path.dirname(__file__), '..', '..', '..', 'ml'),
-        ]
-
-        ml_dir = None
-        model_path = None
-        for candidate in candidates:
-            path = os.path.join(candidate, 'models', 'backgammon_model_final.pt')
-            if os.path.exists(path):
-                ml_dir = candidate
-                model_path = path
-                break
-
-        if model_path is None:
-            logger.info("ML model not found in any search path, using random moves")
+        ml_dir = _find_ml_dir()
+        if ml_dir is None:
             return None
 
-        sys.path.insert(0, ml_dir)
+        model_path = os.path.join(ml_dir, 'models', 'backgammon_model_final.pt')
+        if not os.path.exists(model_path):
+            logger.info("ML model not found at %s, using random moves", model_path)
+            return None
+
+        if ml_dir not in sys.path:
+            sys.path.insert(0, ml_dir)
         from bot_integration import MLBotPlayer
         _ml_bot = MLBotPlayer(model_path)
-        logger.info("ML bot loaded successfully from %s", model_path)
+        logger.info("ML bot (hard) loaded from %s", model_path)
         return _ml_bot
     except Exception as e:
-        logger.warning("Failed to load ML bot: %s. Falling back to random.", e)
+        logger.warning("Failed to load ML bot: %s", e)
         return None
 
 
-def _select_bot_move(engine, valid_moves):
-    """Select the best move using ML model, with random fallback."""
+def _load_expert_bot():
+    """Lazily load the expert ML bot player. Returns None if unavailable."""
+    global _ml_expert_bot
+    if _ml_expert_bot is not None:
+        return _ml_expert_bot
+
+    try:
+        ml_dir = _find_ml_dir()
+        if ml_dir is None:
+            return None
+
+        model_path = os.path.join(ml_dir, 'models', 'backgammon_model_expert.pt')
+        if not os.path.exists(model_path):
+            logger.info("Expert model not found at %s", model_path)
+            return None
+
+        if ml_dir not in sys.path:
+            sys.path.insert(0, ml_dir)
+        from bot_integration import MLBotPlayer
+        _ml_expert_bot = MLBotPlayer(model_path)
+        logger.info("ML bot (expert) loaded from %s", model_path)
+        return _ml_expert_bot
+    except Exception as e:
+        logger.warning("Failed to load expert ML bot: %s", e)
+        return None
+
+
+def _heuristic_score_move(engine, move):
+    """Score a move using heuristic rules. Higher is better."""
+    score = 0.0
+    # Prefer hitting opponent checkers
+    if move.is_hit:
+        score += 3.0
+    # Prefer bearing off
+    if move.to_point == 0 or move.to_point == 25:
+        score += 4.0
+    # Prefer escaping from the bar
+    from_bar = move.from_point == 0 or move.from_point == 25
+    if from_bar:
+        score += 2.0
+    # Prefer making points (landing where we already have one checker)
+    board = engine.state.board
+    bot_color = engine.state.current_turn
+    if 1 <= move.to_point <= 24:
+        val = board[move.to_point]
+        if bot_color.value == "white" and val == 1:
+            score += 2.5  # Making a point
+        elif bot_color.value == "black" and val == -1:
+            score += 2.5
+    # Avoid leaving blots (single checkers)
+    if 1 <= move.from_point <= 24:
+        val = board[move.from_point]
+        if bot_color.value == "white" and val == 1:
+            score -= 1.0  # Leaving a blot behind
+        elif bot_color.value == "black" and val == -1:
+            score -= 1.0
+    # Small random jitter to break ties
+    score += random.random() * 0.1
+    return score
+
+
+def _select_bot_move(engine, valid_moves, table_id: str = ""):
+    """Select a move based on the table's difficulty setting."""
+    difficulty = get_bot_difficulty(table_id)
+
+    if difficulty == "easy":
+        return random.choice(valid_moves)
+
+    if difficulty == "medium":
+        return max(valid_moves, key=lambda m: _heuristic_score_move(engine, m))
+
+    if difficulty == "expert":
+        expert_bot = _load_expert_bot()
+        if expert_bot is not None:
+            try:
+                move = expert_bot.select_move(engine)
+                if move is not None:
+                    return move
+            except Exception as e:
+                logger.warning("Expert ML move selection failed: %s", e)
+        # Fall through to hard if expert unavailable
+
+    # Default: hard (ML model)
     ml_bot = _load_ml_bot()
     if ml_bot is not None:
         try:
@@ -125,7 +236,7 @@ def is_bot_turn(table_id: str) -> bool:
 
 
 async def execute_bot_turn(table_id: str) -> None:
-    """Execute the bot's full turn: roll, make random moves, end turn.
+    """Execute the bot's full turn: roll, make moves, end turn.
 
     This runs as an independent asyncio task and acquires the per-table lock
     for each action to avoid deadlocks with the WebSocket handler.
@@ -214,8 +325,8 @@ async def execute_bot_turn(table_id: str) -> None:
                         await _send_game_state_to_all(table_id, db=db)
                     return
 
-                # Pick the best move using ML model (falls back to random)
-                move = _select_bot_move(engine, valid_moves)
+                # Pick the best move based on difficulty
+                move = _select_bot_move(engine, valid_moves, table_id)
                 async with async_session() as db:
                     state_snapshot = engine.get_state_snapshot()
                     try:

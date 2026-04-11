@@ -14,6 +14,9 @@ export type GameStatus = "waiting" | "rolling" | "moving" | "finished" | "game_o
 /** How a game was won – affects point scoring in match play. */
 export type WinType = "normal" | "gammon" | "backgammon";
 
+/** Bot difficulty levels. */
+export type BotDifficulty = "easy" | "medium" | "hard" | "expert";
+
 // ---------------------------------------------------------------------------
 // Domain models
 // ---------------------------------------------------------------------------
@@ -95,6 +98,7 @@ export interface Table {
   match_points: number;
   white_match_score: number;
   black_match_score: number;
+  bot_difficulty?: string;
 }
 
 /** A single row in the move-history log for a completed turn. */

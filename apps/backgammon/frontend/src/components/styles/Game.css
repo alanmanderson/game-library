@@ -387,6 +387,37 @@
   opacity: 0.85;
 }
 
+/* Bot difficulty badge */
+
+.bot-difficulty-badge {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.bot-difficulty-badge.difficulty-easy {
+  background: rgba(76, 175, 80, 0.2);
+  color: #81c784;
+}
+
+.bot-difficulty-badge.difficulty-medium {
+  background: rgba(255, 193, 7, 0.2);
+  color: #ffd54f;
+}
+
+.bot-difficulty-badge.difficulty-hard {
+  background: rgba(244, 67, 54, 0.2);
+  color: #e57373;
+}
+
+.bot-difficulty-badge.difficulty-expert {
+  background: rgba(156, 39, 176, 0.2);
+  color: #ce93d8;
+}
+
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }

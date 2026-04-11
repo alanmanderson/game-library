@@ -77,6 +77,8 @@ class Table(Base):
     match_points: int = Column(Integer, nullable=False, default=5)
     white_match_score: int = Column(Integer, nullable=False, default=0)
     black_match_score: int = Column(Integer, nullable=False, default=0)
+    # Bot difficulty
+    bot_difficulty: str | None = Column(String(10), nullable=True)
 
     # Relationships
     white_player = relationship(

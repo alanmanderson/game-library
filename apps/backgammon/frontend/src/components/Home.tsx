@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import type { Player } from "../types/game";
+import type { Player, BotDifficulty } from "../types/game";
 import { createTable, joinTable, inviteBot } from "../services/api";
 import Dashboard from "./Dashboard";
 import "./styles/Home.css";
@@ -18,6 +18,7 @@ function Home({ player }: HomeProps) {
   const [creatingBotGame, setCreatingBotGame] = useState(false);
   const [preferredColor, setPreferredColor] = useState<string | undefined>(undefined);
   const [matchPoints, setMatchPoints] = useState(5);
+  const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>("hard");
 
   const handleCreateTable = useCallback(async () => {
     setCreatingTable(true);
@@ -37,14 +38,14 @@ function Home({ player }: HomeProps) {
     setError(null);
     try {
       const table = await createTable(player.id, preferredColor, matchPoints);
-      await inviteBot(table.id);
+      await inviteBot(table.id, botDifficulty);
       navigate(`/game/${table.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start bot game.");
     } finally {
       setCreatingBotGame(false);
     }
-  }, [player.id, navigate, preferredColor, matchPoints]);
+  }, [player.id, navigate, preferredColor, matchPoints, botDifficulty]);
 
   const handleJoinTable = useCallback(
     async (e: React.FormEvent) => {
@@ -121,10 +122,26 @@ function Home({ player }: HomeProps) {
           </div>
         </div>
 
+        {/* Bot difficulty selector */}
+        <div className="difficulty-selector">
+          <span className="difficulty-label">Bot difficulty:</span>
+          <div className="difficulty-options">
+            {(["easy", "medium", "hard", "expert"] as BotDifficulty[]).map((d) => (
+              <button
+                key={d}
+                className={`difficulty-option ${botDifficulty === d ? "selected" : ""}`}
+                onClick={() => setBotDifficulty(d)}
+              >
+                {d.charAt(0).toUpperCase() + d.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Play vs Bot */}
         <div className="action-card">
           <h3>Play vs Bot</h3>
-          <p>Start a game against a random-move bot.</p>
+          <p>Start a game against the AI bot.</p>
           <button onClick={handlePlayBot} disabled={creatingBotGame}>
             {creatingBotGame ? "Starting..." : "Play vs Bot"}
           </button>

@@ -173,10 +173,10 @@ export function joinTable(tableId: string, playerId: string): Promise<Table> {
 }
 
 /** Invite a bot to join the table as the opponent. */
-export function inviteBot(tableId: string): Promise<Table> {
+export function inviteBot(tableId: string, difficulty: string = "hard"): Promise<Table> {
   return request<Table>(`/api/tables/${tableId}/invite-bot`, {
     method: "POST",
-    body: JSON.stringify({}),
+    body: JSON.stringify({ difficulty }),
   });
 }
 

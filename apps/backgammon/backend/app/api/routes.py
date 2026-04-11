@@ -11,6 +11,7 @@ from app.schemas import (
     TableCreate,
     TableResponse,
     JoinTableRequest,
+    InviteBotRequest,
     MoveRecordResponse,
     StatsOverview,
     DashboardResponse,
@@ -20,6 +21,7 @@ from app.services.game_service import game_manager
 from app.services.stats_service import get_player_stats
 from app.services.bot_service import (
     BOT_PLAYER_ID, ensure_bot_player, schedule_bot_turn_if_needed,
+    set_bot_difficulty,
 )
 from app.api.websocket import notify_game_started
 from app.api.auth import get_current_player
@@ -267,6 +269,7 @@ async def join_table(
 @router.post("/tables/{table_id}/invite-bot", response_model=TableResponse)
 async def invite_bot(
     table_id: str,
+    data: InviteBotRequest = InviteBotRequest(),
     current_player: Player = Depends(get_current_player),
     db: AsyncSession = Depends(get_db),
 ) -> Table:
@@ -276,6 +279,11 @@ async def invite_bot(
         table = await game_manager.join_table(db, table_id, BOT_PLAYER_ID)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    # Store difficulty on the table and in memory
+    table.bot_difficulty = data.difficulty
+    set_bot_difficulty(table_id, data.difficulty)
+
     # Load relationships for the response
     if table.white_player_id:
         table.white_player = await db.get(Player, table.white_player_id)

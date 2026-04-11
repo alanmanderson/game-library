@@ -176,6 +176,52 @@
   color: var(--text-primary);
 }
 
+/* Bot difficulty selector */
+
+.difficulty-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+.difficulty-label {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.difficulty-options {
+  display: flex;
+  gap: 0.25rem;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  padding: 0.2rem;
+}
+
+.difficulty-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 0.75rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.difficulty-option.selected {
+  background: var(--accent);
+  color: var(--bg-primary);
+  font-weight: 600;
+}
+
+.difficulty-option:hover:not(.selected) {
+  color: var(--text-primary);
+}
+
 .stats-section {
   width: 100%;
   max-width: 600px;

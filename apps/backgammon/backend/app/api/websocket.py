@@ -14,7 +14,7 @@ from app.game_engine import GameStatus
 from app.services.game_service import game_manager
 from app.services.bot_service import (
     is_bot_game, is_bot_player, schedule_bot_turn_if_needed,
-    schedule_bot_double_response_if_needed,
+    schedule_bot_double_response_if_needed, restore_bot_difficulty,
 )
 
 logger = logging.getLogger(__name__)
@@ -143,6 +143,7 @@ async def _build_full_message(table_id: str, player_id: str, msg_type: str = "ga
             "match_points": table.match_points,
             "white_match_score": table.white_match_score,
             "black_match_score": table.black_match_score,
+            "bot_difficulty": table.bot_difficulty,
         }
 
     if db is not None:
@@ -243,6 +244,8 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, player_id: str
         # Send initial game state if engine is active (or can be restored)
         async with async_session() as db:
             engine = await game_manager.get_or_restore_engine(table_id, db)
+            if engine:
+                await restore_bot_difficulty(table_id, db)
         if engine:
             message = await _build_full_message(table_id, player_id)
             await websocket.send_json(message)
