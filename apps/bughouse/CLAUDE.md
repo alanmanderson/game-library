@@ -7,7 +7,7 @@
 - **Backend**: Python 3.12, FastAPI, python-chess (CrazyhouseBoard), SQLAlchemy (async), JWT auth
 - **Frontend**: React 19, TypeScript, react-router-dom, Create React App
 - **Database**: SQLite (dev), PostgreSQL 16 (prod/docker)
-- **Infra**: Docker multi-stage build, docker-compose, Terraform (Azure)
+- **Infra**: Docker multi-stage build, docker-compose, GitHub Actions (Azure)
 
 ## Project Structure
 
@@ -24,7 +24,6 @@ frontend/src/
   contexts/        # AuthContext
   hooks/           # useWebSocket
   types.ts         # Shared TypeScript types
-terraform/         # Azure infrastructure
 ```
 
 ## Common Commands

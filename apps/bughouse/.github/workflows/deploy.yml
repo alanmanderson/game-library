@@ -8,11 +8,6 @@ concurrency:
   group: deploy-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  ACR_NAME: ${{ vars.ACR_NAME }}
-  CONTAINER_APP_NAME: ${{ vars.CONTAINER_APP_NAME }}
-  RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
-
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -58,22 +53,38 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Set Azure subscription
-        run: az account set --subscription "1a020407-3f63-418b-91be-af42a0a2cfef"
+        run: az account set --subscription "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
 
       - name: Log in to ACR
-        run: az acr login --name ${{ env.ACR_NAME }}
+        run: az acr login --name "${{ secrets.ACR_NAME }}"
 
       - name: Build and push Docker image
         run: |
-          IMAGE="${{ env.ACR_NAME }}.azurecr.io/bughouse:${{ github.sha }}"
-          IMAGE_LATEST="${{ env.ACR_NAME }}.azurecr.io/bughouse:latest"
+          IMAGE="${{ secrets.ACR_NAME }}.azurecr.io/bughouse:${{ github.sha }}"
+          IMAGE_LATEST="${{ secrets.ACR_NAME }}.azurecr.io/bughouse:latest"
           docker build -t "$IMAGE" -t "$IMAGE_LATEST" .
           docker push "$IMAGE"
           docker push "$IMAGE_LATEST"
 
+      - name: Set container app secrets
+        run: |
+          az containerapp secret set \
+            --name "${{ secrets.CONTAINER_APP_NAME }}" \
+            --resource-group "${{ secrets.RESOURCE_GROUP }}" \
+            --secrets \
+              database-url="${{ secrets.DATABASE_URL }}" \
+              jwt-secret-key="${{ secrets.JWT_SECRET_KEY }}" \
+              google-client-id="${{ secrets.GOOGLE_CLIENT_ID }}" \
+              google-client-secret="${{ secrets.GOOGLE_CLIENT_SECRET }}"
+
       - name: Deploy to Container App
         run: |
           az containerapp update \
-            --name ${{ env.CONTAINER_APP_NAME }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --image "${{ env.ACR_NAME }}.azurecr.io/bughouse:${{ github.sha }}"
+            --name "${{ secrets.CONTAINER_APP_NAME }}" \
+            --resource-group "${{ secrets.RESOURCE_GROUP }}" \
+            --image "${{ secrets.ACR_NAME }}.azurecr.io/bughouse:${{ github.sha }}" \
+            --set-env-vars \
+              BUGHOUSE_DATABASE_URL=secretref:database-url \
+              BUGHOUSE_JWT_SECRET_KEY=secretref:jwt-secret-key \
+              BUGHOUSE_GOOGLE_CLIENT_ID=secretref:google-client-id \
+              BUGHOUSE_GOOGLE_CLIENT_SECRET=secretref:google-client-secret

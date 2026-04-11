@@ -9,12 +9,6 @@ node_modules/
 build/
 .pytest_cache/
 
-# Terraform
-*.tfstate
-*.tfstate.backup
-.terraform/
-.terraform.lock.hcl
-
 # OS files
 .DS_Store
 
