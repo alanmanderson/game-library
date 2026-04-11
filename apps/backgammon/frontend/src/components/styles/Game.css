@@ -129,6 +129,10 @@
   pointer-events: none;
 }
 
+.board-overlay-right > * {
+  pointer-events: auto;
+}
+
 .perspective-white .board-overlay-right {
   left: 46.5%;
   width: 39%;
