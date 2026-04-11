@@ -53,7 +53,7 @@ class Player(Base):
 class Table(Base):
     __tablename__ = "tables"
     __table_args__ = (
-        CheckConstraint("status IN ('waiting', 'playing', 'finished')", name="ck_tables_status"),
+        CheckConstraint("status IN ('waiting', 'playing', 'game_over', 'finished')", name="ck_tables_status"),
     )
 
     id: str = Column(String(8), primary_key=True)

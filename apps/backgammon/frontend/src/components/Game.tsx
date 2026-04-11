@@ -146,6 +146,10 @@ function Game() {
     sendMessage({ action: "decline_double" });
   }, [sendMessage]);
 
+  const nextGame = useCallback(() => {
+    sendMessage({ action: "next_game" });
+  }, [sendMessage]);
+
   const makeMove = useCallback(
     (fromPoint: number, toPoint: number) => {
       sendMessage({ action: "make_move", from_point: fromPoint, to_point: toPoint });
@@ -307,7 +311,7 @@ function Game() {
     if (gameState.status === "waiting") {
       return "Share the table ID with a friend so they can join.";
     }
-    if (gameState.status === "finished") {
+    if (gameState.status === "finished" || table?.status === "game_over") {
       const winType = gameState.win_type;
       if (winType && winType !== "normal") {
         return `Won by ${winType}!`;
@@ -493,11 +497,38 @@ function Game() {
                 onDeclineDouble={declineDouble}
               />
             </div>
-            {gameState.status === "finished" && (
+            {(gameState.status === "finished" || table.status === "game_over") && (
               <div className="board-overlay-right">
-                <div className="win-banner">
-                  {gameState.winner === myColor ? "You won!" : `${opponentName} wins!`}
-                </div>
+                {table.status === "game_over" ? (
+                  <div className="win-banner game-over-banner">
+                    <div className="game-over-result">
+                      {gameState.winner === myColor ? "You won this game!" : `${opponentName} wins this game!`}
+                    </div>
+                    <div className="game-over-score">
+                      {myName}: {myScore} — {opponentName}: {opponentScore}
+                    </div>
+                    <button className="next-game-btn" onClick={nextGame}>
+                      Next Game
+                    </button>
+                  </div>
+                ) : table.status === "finished" ? (
+                  <div className="win-banner match-over-banner">
+                    <div className="match-over-title">Match Over!</div>
+                    <div className="game-over-score">
+                      {myName}: {myScore} — {opponentName}: {opponentScore}
+                    </div>
+                    <div className="match-over-result">
+                      {(myColor === "white" ? table.white_match_score : table.black_match_score) >=
+                      table.match_points
+                        ? "You won the match!"
+                        : `${opponentName} wins the match!`}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="win-banner">
+                    {gameState.winner === myColor ? "You won!" : `${opponentName} wins!`}
+                  </div>
+                )}
               </div>
             )}
           </div>

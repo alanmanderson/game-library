@@ -321,6 +321,9 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, player_id: str
                         elif action == "decline_double":
                             await _handle_decline_double(db, websocket, table_id, player_id)
 
+                        elif action == "next_game":
+                            await _handle_next_game(db, websocket, table_id, player_id)
+
                         else:
                             await _send_error(websocket, f"Unknown action: {action}")
 
@@ -385,22 +388,27 @@ async def _handle_make_move(
     # Broadcast updated game state (including the final state) to all players
     await _send_game_state_to_all(table_id, db=db)
 
-    # If the game is finished, send a game_over message and clean up
+    # If the game is finished, send a game_over message and conditionally clean up
     engine = game_manager.get_engine(table_id)
     if engine and engine.state.status == GameStatus.FINISHED:
         table = await db.get(Table, table_id)
         if table:
+            match_over = table.status == "finished"
             game_over_data = {
                 "winner_id": table.winner_id,
                 "win_type": table.win_type,
                 "final_score": table.final_score,
+                "match_over": match_over,
+                "white_match_score": table.white_match_score,
+                "black_match_score": table.black_match_score,
             }
             for pid in manager.get_player_ids(table_id):
                 await manager.send_to_player(
                     table_id, pid, {"type": "game_over", "data": game_over_data}
                 )
-        # Now safe to clean up the engine
-        game_manager.cleanup_finished_game(table_id)
+        # Only clean up engine when match is truly over
+        if table and table.status == "finished":
+            game_manager.cleanup_finished_game(table_id)
 
 
 async def _handle_end_turn(
@@ -452,13 +460,26 @@ async def _handle_decline_double(
     if engine and engine.state.status == GameStatus.FINISHED:
         table = await db.get(Table, table_id)
         if table:
+            match_over = table.status == "finished"
             game_over_data = {
                 "winner_id": table.winner_id,
                 "win_type": table.win_type,
                 "final_score": table.final_score,
+                "match_over": match_over,
+                "white_match_score": table.white_match_score,
+                "black_match_score": table.black_match_score,
             }
             for pid in manager.get_player_ids(table_id):
                 await manager.send_to_player(
                     table_id, pid, {"type": "game_over", "data": game_over_data}
                     )
-        game_manager.cleanup_finished_game(table_id)
+        if table and table.status == "finished":
+            game_manager.cleanup_finished_game(table_id)
+
+
+async def _handle_next_game(
+    db, websocket: WebSocket, table_id: str, player_id: str
+) -> None:
+    """Handle a next_game action: start the next game in a match."""
+    await game_manager.start_next_game(db, table_id)
+    await _send_game_state_to_all(table_id, db=db)

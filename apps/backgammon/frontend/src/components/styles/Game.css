@@ -333,6 +333,56 @@
   font-weight: 500;
 }
 
+/* Game over / next game / match over banners */
+
+.game-over-banner,
+.match-over-banner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem 1.5rem;
+}
+
+.game-over-result,
+.match-over-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.match-over-title {
+  font-size: 1.4rem;
+  color: var(--accent);
+}
+
+.game-over-score {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.match-over-result {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.next-game-btn {
+  margin-top: 0.25rem;
+  padding: 0.5rem 1.5rem;
+  background: var(--accent);
+  color: var(--bg-primary);
+  border: none;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.next-game-btn:hover {
+  opacity: 0.85;
+}
+
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }

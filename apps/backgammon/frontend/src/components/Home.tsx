@@ -16,25 +16,26 @@ function Home({ player }: HomeProps) {
   const [creatingTable, setCreatingTable] = useState(false);
   const [joiningTable, setJoiningTable] = useState(false);
   const [creatingBotGame, setCreatingBotGame] = useState(false);
+  const [preferredColor, setPreferredColor] = useState<string | undefined>(undefined);
 
   const handleCreateTable = useCallback(async () => {
     setCreatingTable(true);
     setError(null);
     try {
-      const table = await createTable(player.id);
+      const table = await createTable(player.id, preferredColor);
       navigate(`/game/${table.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create table.");
     } finally {
       setCreatingTable(false);
     }
-  }, [player.id, navigate]);
+  }, [player.id, navigate, preferredColor]);
 
   const handlePlayBot = useCallback(async () => {
     setCreatingBotGame(true);
     setError(null);
     try {
-      const table = await createTable(player.id);
+      const table = await createTable(player.id, preferredColor);
       await inviteBot(table.id);
       navigate(`/game/${table.id}`);
     } catch (err) {
@@ -42,7 +43,7 @@ function Home({ player }: HomeProps) {
     } finally {
       setCreatingBotGame(false);
     }
-  }, [player.id, navigate]);
+  }, [player.id, navigate, preferredColor]);
 
   const handleJoinTable = useCallback(
     async (e: React.FormEvent) => {
@@ -78,6 +79,31 @@ function Home({ player }: HomeProps) {
       </div>
 
       <div className="home-actions">
+        {/* Color preference selector */}
+        <div className="color-selector">
+          <span className="color-selector-label">Play as:</span>
+          <div className="color-options">
+            <button
+              className={`color-option ${preferredColor === "white" ? "selected" : ""}`}
+              onClick={() => setPreferredColor(preferredColor === "white" ? undefined : "white")}
+            >
+              <span className="color-swatch white-swatch" /> White
+            </button>
+            <button
+              className={`color-option ${preferredColor === undefined ? "selected" : ""}`}
+              onClick={() => setPreferredColor(undefined)}
+            >
+              Random
+            </button>
+            <button
+              className={`color-option ${preferredColor === "black" ? "selected" : ""}`}
+              onClick={() => setPreferredColor(preferredColor === "black" ? undefined : "black")}
+            >
+              <span className="color-swatch black-swatch" /> Black
+            </button>
+          </div>
+        </div>
+
         {/* Play vs Bot */}
         <div className="action-card">
           <h3>Play vs Bot</h3>

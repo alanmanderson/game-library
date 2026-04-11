@@ -9,7 +9,7 @@
 export type Color = "white" | "black";
 
 /** High-level phase the game is currently in. */
-export type GameStatus = "waiting" | "rolling" | "moving" | "finished";
+export type GameStatus = "waiting" | "rolling" | "moving" | "finished" | "game_over";
 
 /** How a game was won – affects point scoring in match play. */
 export type WinType = "normal" | "gammon" | "backgammon";

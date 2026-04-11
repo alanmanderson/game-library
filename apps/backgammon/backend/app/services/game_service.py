@@ -46,10 +46,13 @@ class GameManager:
     # Table lifecycle
     # ------------------------------------------------------------------
 
-    async def create_table(self, db: AsyncSession, player_id: str) -> Table:
-        """Create a new table. The creating player is initially assigned as white (will be randomized on join)."""
+    async def create_table(self, db: AsyncSession, player_id: str, preferred_color: Optional[str] = None) -> Table:
+        """Create a new table. The creating player is assigned based on preferred_color."""
         table_id = self.generate_table_id()
-        table = Table(id=table_id, white_player_id=player_id, status="waiting")
+        if preferred_color == "black":
+            table = Table(id=table_id, black_player_id=player_id, status="waiting")
+        else:
+            table = Table(id=table_id, white_player_id=player_id, status="waiting")
         db.add(table)
         await db.flush()
         return table
@@ -57,25 +60,32 @@ class GameManager:
     async def join_table(self, db: AsyncSession, table_id: str, player_id: str) -> Table:
         """Second player joins an existing table.
 
-        Colors are randomly assigned, a BackgammonEngine is created, and
-        the game is started.  The opening roll determines who goes first
-        (handled by the engine).
+        Colors are randomly assigned (unless creator chose a specific color),
+        a BackgammonEngine is created, and the game is started.  The opening
+        roll determines who goes first (handled by the engine).
         """
         table = await db.get(Table, table_id)
         if not table:
             raise ValueError("Table not found")
         if table.status != "waiting":
             raise ValueError("Table is not waiting for players")
-        if table.white_player_id == player_id:
+        if table.white_player_id == player_id or table.black_player_id == player_id:
             raise ValueError("Cannot join your own table")
 
-        # Randomly assign colors between the two players
-        if random.random() < 0.5:
-            table.black_player_id = player_id
-        else:
-            # Swap: joining player becomes white, creator becomes black
-            table.black_player_id = table.white_player_id
+        if table.white_player_id and not table.black_player_id:
+            # Creator chose white (or default); joiner gets black
+            # Randomly swap unless creator explicitly picked a slot
+            if random.random() < 0.5:
+                table.black_player_id = player_id
+            else:
+                table.black_player_id = table.white_player_id
+                table.white_player_id = player_id
+        elif table.black_player_id and not table.white_player_id:
+            # Creator chose black; joiner gets white
             table.white_player_id = player_id
+        else:
+            # Fallback
+            table.black_player_id = player_id
 
         table.status = "playing"
 
@@ -114,7 +124,7 @@ class GameManager:
         Returns the restored engine, or None if restoration is not possible.
         """
         table = await db.get(Table, table_id)
-        if table is None or table.status != "playing" or table.game_state is None:
+        if table is None or table.status not in ("playing", "game_over") or table.game_state is None:
             return None
 
         snap = table.game_state
@@ -510,7 +520,12 @@ class GameManager:
     async def _finish_game(
         self, db: AsyncSession, table_id: str, engine: BackgammonEngine
     ) -> None:
-        """Handle game completion: update the table record and player stats."""
+        """Handle game completion: update the table record and player stats.
+
+        If neither player has reached match_points, the table status is set to
+        "game_over" (individual game over, match continues).  Otherwise the
+        status is set to "finished" (match over).
+        """
         from app.services.stats_service import update_stats
 
         table = await db.get(Table, table_id)
@@ -530,14 +545,24 @@ class GameManager:
         base_score = win_type.value if win_type else 1
         cube_score = base_score * engine.state.cube_value
         table.final_score = cube_score
-        table.status = "finished"
-        table.finished_at = datetime.now(timezone.utc)
 
         # Update match scores
         if winner_color == Color.WHITE:
             table.white_match_score += cube_score
         elif winner_color == Color.BLACK:
             table.black_match_score += cube_score
+
+        # Check if match is over
+        match_over = (
+            table.white_match_score >= table.match_points
+            or table.black_match_score >= table.match_points
+        )
+
+        if match_over:
+            table.status = "finished"
+            table.finished_at = datetime.now(timezone.utc)
+        else:
+            table.status = "game_over"
 
         table.game_state = engine.get_state_snapshot()
 
@@ -553,6 +578,37 @@ class GameManager:
 
         # NOTE: Engine cleanup is deferred to cleanup_finished_game() so that
         # the WebSocket handler can still broadcast the final game state.
+
+    async def start_next_game(self, db: AsyncSession, table_id: str) -> Table:
+        """Start the next game in a match after a game_over.
+
+        Resets per-game fields, creates a fresh engine, and sets status
+        back to "playing".
+        """
+        table = await db.get(Table, table_id)
+        if not table:
+            raise ValueError("Table not found")
+        if table.status != "game_over":
+            raise ValueError("No game to continue")
+
+        # Clear per-game fields
+        table.winner_id = None
+        table.win_type = None
+        table.final_score = None
+
+        # Create fresh engine and start game
+        engine = BackgammonEngine()
+        engine.start_game()
+        self._engines[table_id] = engine
+        self._player_colors[table_id] = {
+            table.white_player_id: Color.WHITE,
+            table.black_player_id: Color.BLACK,
+        }
+
+        table.status = "playing"
+        table.game_state = engine.get_state_snapshot()
+        await db.flush()
+        return table
 
     def cleanup_finished_game(self, table_id: str) -> None:
         """Remove the in-memory engine for a finished game.

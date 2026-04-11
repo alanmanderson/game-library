@@ -213,10 +213,13 @@ async def create_table(
     db: AsyncSession = Depends(get_db),
 ) -> Table:
     """Create a new game table. The creating player waits for an opponent."""
-    table = await game_manager.create_table(db, current_player.id)
+    table = await game_manager.create_table(db, current_player.id, data.preferred_color)
     await db.refresh(table)
-    # Eagerly load the white_player relationship for the response
-    table.white_player = current_player
+    # Eagerly load the player relationship for the response
+    if table.white_player_id == current_player.id:
+        table.white_player = current_player
+    elif table.black_player_id == current_player.id:
+        table.black_player = current_player
     return table
 
 

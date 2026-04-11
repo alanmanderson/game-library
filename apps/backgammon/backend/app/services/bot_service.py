@@ -169,17 +169,23 @@ async def execute_bot_turn(table_id: str) -> None:
                         from app.models import Table
                         table = await db.get(Table, table_id)
                         if table:
+                            match_over = table.status == "finished"
                             game_over_data = {
                                 "winner_id": table.winner_id,
                                 "win_type": table.win_type,
                                 "final_score": table.final_score,
+                                "match_over": match_over,
+                                "white_match_score": table.white_match_score,
+                                "black_match_score": table.black_match_score,
                             }
                             for pid in manager.get_player_ids(table_id):
                                 await manager.send_to_player(
                                     table_id, pid,
                                     {"type": "game_over", "data": game_over_data},
                                 )
-                        game_manager.cleanup_finished_game(table_id)
+                        # Only clean up when match is truly over
+                        if table and table.status == "finished":
+                            game_manager.cleanup_finished_game(table_id)
                         return
 
     except Exception:
