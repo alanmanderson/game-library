@@ -1,8 +1,14 @@
-"""Bot service for playing against a random-move AI opponent."""
+"""Bot service for playing against an ML-powered AI opponent.
+
+Uses a trained neural network (TD-Gammon style) for move selection,
+with fallback to random moves if the model is unavailable.
+"""
 
 import asyncio
 import logging
+import os
 import random
+import sys
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -18,6 +24,45 @@ BOT_NICKNAME = "Bot"
 # Delay between bot actions (seconds) for UX
 BOT_MOVE_DELAY = 0.6
 BOT_ROLL_DELAY = 0.8
+
+# --- ML Model Integration ---
+_ml_bot = None
+
+def _load_ml_bot():
+    """Lazily load the ML bot player. Returns None if unavailable."""
+    global _ml_bot
+    if _ml_bot is not None:
+        return _ml_bot
+
+    try:
+        ml_dir = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'ml')
+        model_path = os.path.join(ml_dir, 'models', 'backgammon_model_final.pt')
+
+        if not os.path.exists(model_path):
+            logger.info("ML model not found at %s, using random moves", model_path)
+            return None
+
+        sys.path.insert(0, ml_dir)
+        from bot_integration import MLBotPlayer
+        _ml_bot = MLBotPlayer(model_path)
+        logger.info("ML bot loaded successfully from %s", model_path)
+        return _ml_bot
+    except Exception as e:
+        logger.warning("Failed to load ML bot: %s. Falling back to random.", e)
+        return None
+
+
+def _select_bot_move(engine, valid_moves):
+    """Select the best move using ML model, with random fallback."""
+    ml_bot = _load_ml_bot()
+    if ml_bot is not None:
+        try:
+            move = ml_bot.select_move(engine)
+            if move is not None:
+                return move
+        except Exception as e:
+            logger.warning("ML move selection failed: %s", e)
+    return random.choice(valid_moves)
 
 
 async def ensure_bot_player(db: AsyncSession) -> Player:
@@ -86,8 +131,18 @@ async def execute_bot_turn(table_id: str) -> None:
             if not engine:
                 return
             if engine.state.double_offered and engine.state.double_offered_by != get_bot_color(table_id):
+                ml_bot = _load_ml_bot()
+                should_accept = True
+                if ml_bot is not None:
+                    try:
+                        should_accept = ml_bot.should_accept_double(engine)
+                    except Exception:
+                        pass
                 async with async_session() as db:
-                    await game_manager.accept_double(db, table_id, BOT_PLAYER_ID)
+                    if should_accept:
+                        await game_manager.accept_double(db, table_id, BOT_PLAYER_ID)
+                    else:
+                        await game_manager.reject_double(db, table_id, BOT_PLAYER_ID)
                     await db.commit()
                     await _send_game_state_to_all(table_id, db=db)
 
@@ -145,8 +200,8 @@ async def execute_bot_turn(table_id: str) -> None:
                         await _send_game_state_to_all(table_id, db=db)
                     return
 
-                # Pick a random move
-                move = random.choice(valid_moves)
+                # Pick the best move using ML model (falls back to random)
+                move = _select_bot_move(engine, valid_moves)
                 async with async_session() as db:
                     state_snapshot = engine.get_state_snapshot()
                     try:
