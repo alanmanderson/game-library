@@ -1,0 +1,12 @@
+**/.git
+**/node_modules
+**/dist
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+frontend/
+infra/
+.github/
+ml/models/checkpoint_*.pt
+ml/__pycache__/
+backend/tests/

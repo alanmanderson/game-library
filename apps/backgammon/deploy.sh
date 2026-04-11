@@ -23,7 +23,7 @@ GOOGLE_CID=$(cd "$SCRIPT_DIR/infra" && terraform output -raw google_client_id 2>
 
 # 2. Build Docker image
 echo "==> Building Docker image..."
-docker build --platform linux/amd64 -t backgammon-server:latest "$SCRIPT_DIR/backend"
+docker build --platform linux/amd64 -t backgammon-server:latest -f "$SCRIPT_DIR/backend/Dockerfile" "$SCRIPT_DIR"
 
 # 3. Save Docker image as tarball
 echo "==> Saving Docker image..."

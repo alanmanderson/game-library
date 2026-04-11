@@ -35,11 +35,25 @@ def _load_ml_bot():
         return _ml_bot
 
     try:
-        ml_dir = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'ml')
-        model_path = os.path.join(ml_dir, 'models', 'backgammon_model_final.pt')
+        # Search multiple possible locations for the ml/ directory:
+        # 1. /app/ml/ (inside Docker container)
+        # 2. Relative to this file: backend/app/services/ -> ../../.. -> ml/
+        candidates = [
+            os.path.join('/app', 'ml'),
+            os.path.join(os.path.dirname(__file__), '..', '..', '..', 'ml'),
+        ]
 
-        if not os.path.exists(model_path):
-            logger.info("ML model not found at %s, using random moves", model_path)
+        ml_dir = None
+        model_path = None
+        for candidate in candidates:
+            path = os.path.join(candidate, 'models', 'backgammon_model_final.pt')
+            if os.path.exists(path):
+                ml_dir = candidate
+                model_path = path
+                break
+
+        if model_path is None:
+            logger.info("ML model not found in any search path, using random moves")
             return None
 
         sys.path.insert(0, ml_dir)

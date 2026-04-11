@@ -32,7 +32,7 @@ jobs:
           npm run build
 
       - name: Build backend Docker image
-        run: docker build --platform linux/amd64 -t backgammon-server:latest backend/
+        run: docker build --platform linux/amd64 -t backgammon-server:latest -f backend/Dockerfile .
 
       - name: Save Docker image
         run: docker save backgammon-server:latest | gzip > /tmp/backgammon-server.tar.gz
