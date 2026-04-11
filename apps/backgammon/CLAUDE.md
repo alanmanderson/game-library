@@ -28,6 +28,7 @@ cd frontend && npm install && npm run test:run
 - **Database**: PostgreSQL 16 (asyncpg driver)
 - **Real-time**: WebSocket at `/ws/{table_id}/{player_id}?token=JWT`
 - **Auth**: JWT (HS256, 24h expiry), bcrypt passwords, Google OAuth, guest mode
+- **ML/AI**: PyTorch neural network (TD-Gammon style), self-play training
 - **Infra**: Docker Compose (dev), Caddy reverse proxy (prod), Terraform (Azure)
 
 ## Environment Variables
@@ -48,7 +49,7 @@ backend/
     api/websocket.py       # WebSocket handler for real-time game
     services/game_service.py   # GameManager: table lifecycle, move execution
     services/auth_service.py   # Password hashing, JWT, Google verification
-    services/bot_service.py    # Bot AI (random moves), scheduling
+    services/bot_service.py    # Bot AI (ML neural net with random fallback), scheduling
     services/stats_service.py  # Player stats aggregation
     game_engine.py         # Pure Python backgammon rules engine (~1200 lines)
     models.py              # SQLAlchemy: Player, Table, MoveRecord, PlayerStats
@@ -65,6 +66,16 @@ frontend/
     services/api.ts        # REST client with auth headers
     types/game.ts          # TypeScript types mirroring backend models
     constants.ts           # STORAGE_KEY, TOKEN_KEY, BOT_PLAYER_ID
+ml/
+  encoder.py               # 198-feature Tesauro board encoding
+  model.py                 # PyTorch BackgammonNet (198→80→80→5, sigmoid)
+  bot_integration.py       # MLBotPlayer class for server integration
+  td_trainer.py            # TD(lambda) self-play training loop
+  train_fast.py            # Two-phase training pipeline (supervised + TD)
+  evaluate.py              # Evaluation framework (vs random, heuristic)
+  move_validator.py        # Expert heuristic move scoring and validation
+  models/                  # Trained model weights (.pt files)
+  REPORT.md                # Full executive report on model training
 infra/                     # Terraform (Azure VM, PostgreSQL, networking)
 deploy.sh                  # Build and deploy to production via SSH
 docker-compose.yml         # Dev environment
@@ -83,8 +94,25 @@ Holds active `BackgammonEngine` instances in memory keyed by table_id. Per-table
 Client sends: `roll`, `move {from_point, to_point}`, `end_turn`, `undo_move`, `double`, `accept_double`, `reject_double`.
 Server sends: `game_state`, `dice_rolled`, `move_made`, `turn_ended`, `game_over`, `error`, `waiting`, `player_joined`, `opponent_disconnected`.
 
-### Bot
-Player ID: `"BOT"`. Selects random valid moves. 0.6–0.8s delay per action for UX. Auto-accepts doubles.
+### Bot (`backend/app/services/bot_service.py`)
+Player ID: `"BOT"`. Uses a trained neural network for move selection, with graceful fallback to random moves if the model is unavailable. 0.6–0.8s delay per action for UX. ML model also handles doubling cube decisions (accept if equity > -0.5, offer if equity > 0.5).
+
+### ML Model (`ml/`)
+TD-Gammon style neural network for backgammon position evaluation. Trained via two-phase pipeline: supervised pre-training on 1.34M positions from 50K self-play games, then TD(lambda=0.7) reinforcement learning refinement over 5K self-play games. Achieves 98.75% win rate vs random and 73.25% vs a strategic heuristic.
+
+**Architecture**: `198 input → 80 hidden (sigmoid) → 80 hidden (sigmoid) → 5 output (sigmoid)`. 22,805 parameters, 128 KB model file.
+
+**Input encoding** (standard 198-feature Tesauro encoding):
+- 24 points × 4 units × 2 players = 192 features (truncated unary: 0→`[0,0,0,0]`, 1→`[1,0,0,0]`, 2→`[1,1,0,0]`, 3→`[1,1,1,0]`, n≥4→`[1,1,1,(n-3)/2]`)
+- 2 bar features (per player, /2), 2 borne-off features (per player, /15), 2 turn indicator
+
+**Output**: 5 probabilities from the current player's perspective: P(win), P(win gammon), P(lose gammon), P(win backgammon), P(lose backgammon). Equity = `2*P(win) - 1 + P(win_gammon) - P(lose_gammon) + P(win_bg) - P(lose_bg)`.
+
+**Move selection**: For each valid move, snapshot board → apply move → encode 198 features → forward pass → compute equity → restore board. Pick the move with highest equity.
+
+**Integration**: `bot_service.py` lazy-loads the model on first bot game. Searches `/app/ml/` (Docker) then relative repo path (local dev). Falls back to random if model missing. The model file is baked into the Docker image at build time.
+
+**Retraining**: `cd ml && python3 train_fast.py --random-games 50000 --td-games 5000`. Requires `torch` and `numpy`. See `ml/REPORT.md` for full details.
 
 ### Database Models
 - **Player**: UUID id, nickname, optional email/password_hash/google_id, is_guest, auth_provider
@@ -97,7 +125,7 @@ JWT in `localStorage['backgammon_token']`. Four providers: local (email/password
 
 ## Deployment
 
-Production domain: `backgammon.alanmanderson.com`. Run `deploy.sh` or use the `/deploy` skill. Builds frontend, Docker image for backend, transfers to Azure VM via SSH, runs migrations, restarts services behind Caddy (auto-HTTPS).
+Production domain: `backgammon.alanmanderson.com`. Run `deploy.sh` or use the `/deploy` skill. Builds frontend, Docker image for backend (includes ML model + PyTorch CPU), transfers to Azure VM via SSH, runs migrations, restarts services behind Caddy (auto-HTTPS). Docker build context is the repo root (`-f backend/Dockerfile .`) so the `ml/` directory is accessible during build.
 
 ## Conventions
 
@@ -106,3 +134,6 @@ Production domain: `backgammon.alanmanderson.com`. Run `deploy.sh` or use the `/
 - Table IDs: 8-char uppercase alphanumeric. Player IDs: UUIDs. Bot ID: `"BOT"`
 - Backend tests use in-memory SQLite via fixtures in `conftest.py`
 - Frontend proxies `/api` and `/ws` to backend via Vite config (dev) or Caddy (prod)
+- ML model file: `ml/models/backgammon_model_final.pt` — do not delete; baked into Docker image at deploy
+- To retrain the model: `cd ml && pip install torch numpy && python3 train_fast.py`
+- Docker build context is repo root (not `backend/`); `.dockerignore` at root excludes frontend/infra/.git
