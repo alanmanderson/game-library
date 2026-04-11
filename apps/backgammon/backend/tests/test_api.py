@@ -156,6 +156,52 @@ class TestTableEndpoints:
         assert resp.status_code == 400
         assert "not waiting" in resp.json()["detail"].lower()
 
+    async def test_create_table_with_match_points(self, client):
+        """POST /api/tables with match_points sets the value on the table."""
+        auth = await create_test_player(client, "MatchPlayer")
+        token = auth["token"]
+        player = auth["player"]
+        resp = await client.post(
+            "/api/tables",
+            json={"player_id": player["id"], "match_points": 7},
+            headers=auth_headers(token),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["match_points"] == 7
+
+    async def test_create_table_default_match_points(self, client):
+        """POST /api/tables without match_points defaults to 5."""
+        auth = await create_test_player(client, "DefaultMP")
+        token = auth["token"]
+        player = auth["player"]
+        resp = await client.post(
+            "/api/tables",
+            json={"player_id": player["id"]},
+            headers=auth_headers(token),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["match_points"] == 5
+
+    async def test_create_table_invalid_match_points(self, client):
+        """POST /api/tables with out-of-range match_points returns 422."""
+        auth = await create_test_player(client, "BadMP")
+        token = auth["token"]
+        player = auth["player"]
+        # Too high
+        resp = await client.post(
+            "/api/tables",
+            json={"player_id": player["id"], "match_points": 11},
+            headers=auth_headers(token),
+        )
+        assert resp.status_code == 422
+        # Too low
+        resp = await client.post(
+            "/api/tables",
+            json={"player_id": player["id"], "match_points": 0},
+            headers=auth_headers(token),
+        )
+        assert resp.status_code == 422
+
     async def test_join_table_not_found(self, client):
         """Joining a nonexistent table returns 400 (ValueError from game_service)."""
         auth = await create_test_player(client)

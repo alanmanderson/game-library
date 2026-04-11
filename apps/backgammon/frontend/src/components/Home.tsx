@@ -17,25 +17,26 @@ function Home({ player }: HomeProps) {
   const [joiningTable, setJoiningTable] = useState(false);
   const [creatingBotGame, setCreatingBotGame] = useState(false);
   const [preferredColor, setPreferredColor] = useState<string | undefined>(undefined);
+  const [matchPoints, setMatchPoints] = useState(5);
 
   const handleCreateTable = useCallback(async () => {
     setCreatingTable(true);
     setError(null);
     try {
-      const table = await createTable(player.id, preferredColor);
+      const table = await createTable(player.id, preferredColor, matchPoints);
       navigate(`/game/${table.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create table.");
     } finally {
       setCreatingTable(false);
     }
-  }, [player.id, navigate, preferredColor]);
+  }, [player.id, navigate, preferredColor, matchPoints]);
 
   const handlePlayBot = useCallback(async () => {
     setCreatingBotGame(true);
     setError(null);
     try {
-      const table = await createTable(player.id, preferredColor);
+      const table = await createTable(player.id, preferredColor, matchPoints);
       await inviteBot(table.id);
       navigate(`/game/${table.id}`);
     } catch (err) {
@@ -43,7 +44,7 @@ function Home({ player }: HomeProps) {
     } finally {
       setCreatingBotGame(false);
     }
-  }, [player.id, navigate, preferredColor]);
+  }, [player.id, navigate, preferredColor, matchPoints]);
 
   const handleJoinTable = useCallback(
     async (e: React.FormEvent) => {
@@ -101,6 +102,22 @@ function Home({ player }: HomeProps) {
             >
               <span className="color-swatch black-swatch" /> Black
             </button>
+          </div>
+        </div>
+
+        {/* Match points selector */}
+        <div className="match-points-selector">
+          <span className="match-points-label">Match to:</span>
+          <div className="match-points-options">
+            {[1, 3, 5, 7, 10].map((pts) => (
+              <button
+                key={pts}
+                className={`match-points-option ${matchPoints === pts ? "selected" : ""}`}
+                onClick={() => setMatchPoints(pts)}
+              >
+                {pts}
+              </button>
+            ))}
           </div>
         </div>
 

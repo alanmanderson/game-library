@@ -79,6 +79,25 @@ class TestCreateTable:
         assert len(table.id) == 6
 
 
+    async def test_create_table_custom_match_points(self, db_session):
+        gm = GameManager()
+        player = Player(nickname="Carol")
+        db_session.add(player)
+        await db_session.flush()
+
+        table = await gm.create_table(db_session, player.id, match_points=7)
+        assert table.match_points == 7
+
+    async def test_create_table_default_match_points(self, db_session):
+        gm = GameManager()
+        player = Player(nickname="Dave")
+        db_session.add(player)
+        await db_session.flush()
+
+        table = await gm.create_table(db_session, player.id)
+        assert table.match_points == 5
+
+
 class TestJoinTable:
     async def test_join_table_starts_game(self, db_session):
         gm = GameManager()

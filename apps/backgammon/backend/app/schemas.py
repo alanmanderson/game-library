@@ -57,6 +57,7 @@ class AuthResponse(BaseModel):
 class TableCreate(BaseModel):
     player_id: str
     preferred_color: Optional[str] = None  # "white", "black", or None (random)
+    match_points: int = Field(default=5, ge=1, le=10)
 
 
 class TableResponse(BaseModel):
