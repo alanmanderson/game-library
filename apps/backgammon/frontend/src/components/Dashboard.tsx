@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import type { DashboardData, GameHistoryItem } from "../types/game";
 import { getPlayerDashboard } from "../services/api";
 import "./styles/Dashboard.css";
@@ -78,6 +78,7 @@ function resultLabel(game: GameHistoryItem): string {
 }
 
 function Dashboard({ playerId }: DashboardProps) {
+  const navigate = useNavigate();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -171,38 +172,38 @@ function Dashboard({ playerId }: DashboardProps) {
             </tr>
           </thead>
           <tbody>
-            {data.games.map((game) => (
-              <tr
-                key={game.table_id}
-                className={isResumable(game) ? "resumable-row" : undefined}
-              >
-                <td>{formatDate(game.played_at)}</td>
-                <td>{game.opponent_nickname}</td>
-                <td>
-                  <span
-                    className={`color-indicator color-${game.player_color}`}
-                    title={
-                      game.player_color === "white" ? "White" : "Black"
-                    }
-                  />
-                </td>
-                <td>
-                  {isResumable(game) ? (
-                    <Link to={`/game/${game.table_id}`}>
-                      <span className={resultClass(game)}>
-                        {resultLabel(game)}
-                      </span>
-                    </Link>
-                  ) : (
+            {data.games.map((game) => {
+              const resumable = isResumable(game);
+              return (
+                <tr
+                  key={game.table_id}
+                  className={resumable ? "resumable-row" : undefined}
+                  onClick={
+                    resumable
+                      ? () => navigate(`/game/${game.table_id}`)
+                      : undefined
+                  }
+                >
+                  <td>{formatDate(game.played_at)}</td>
+                  <td>{game.opponent_nickname}</td>
+                  <td>
+                    <span
+                      className={`color-indicator color-${game.player_color}`}
+                      title={
+                        game.player_color === "white" ? "White" : "Black"
+                      }
+                    />
+                  </td>
+                  <td>
                     <span className={resultClass(game)}>
                       {resultLabel(game)}
                     </span>
-                  )}
-                </td>
-                <td>{formatWinType(game)}</td>
-                <td>{game.score != null ? game.score : "-"}</td>
-              </tr>
-            ))}
+                  </td>
+                  <td>{formatWinType(game)}</td>
+                  <td>{game.score != null ? game.score : "-"}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}

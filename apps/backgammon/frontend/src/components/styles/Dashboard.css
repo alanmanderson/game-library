@@ -103,9 +103,11 @@
 
 .resumable-row {
   cursor: pointer;
+  border-left: 3px solid #2196f3;
 }
 
-.resumable-row:hover {
+.resumable-row:hover,
+.resumable-row:active {
   background: rgba(33, 150, 243, 0.08);
 }
 

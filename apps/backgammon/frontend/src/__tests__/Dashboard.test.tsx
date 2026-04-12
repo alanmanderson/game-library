@@ -7,9 +7,19 @@
  */
 
 import { render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import Dashboard from "../components/Dashboard";
 import type { DashboardData } from "../types/game";
+
+/** Render Dashboard inside a router context. */
+function renderDashboard(playerId: string) {
+  return render(
+    <MemoryRouter>
+      <Dashboard playerId={playerId} />
+    </MemoryRouter>,
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Mock
@@ -42,6 +52,7 @@ const dashboardWithGames: DashboardData = {
       win_type: "normal",
       score: 1,
       played_at: "2025-03-15T10:00:00",
+      table_status: "finished",
     },
     {
       table_id: "TABLE002",
@@ -51,6 +62,7 @@ const dashboardWithGames: DashboardData = {
       win_type: "gammon",
       score: 2,
       played_at: "2025-03-14T10:00:00",
+      table_status: "finished",
     },
     {
       table_id: "TABLE003",
@@ -60,6 +72,7 @@ const dashboardWithGames: DashboardData = {
       win_type: null,
       score: null,
       played_at: "2025-03-13T10:00:00",
+      table_status: "playing",
     },
   ],
 };
@@ -91,7 +104,7 @@ describe("Dashboard – loading state", () => {
   it("shows a loading indicator while data is being fetched", () => {
     // Never resolve so the component stays in loading state
     vi.mocked(api.getPlayerDashboard).mockReturnValue(new Promise(() => {}));
-    render(<Dashboard playerId="player-1" />);
+    renderDashboard("player-1");
     expect(screen.getByText("Loading dashboard...")).toBeInTheDocument();
   });
 });
@@ -105,7 +118,7 @@ describe("Dashboard – error state", () => {
     vi.mocked(api.getPlayerDashboard).mockRejectedValue(
       new Error("Network error"),
     );
-    render(<Dashboard playerId="player-1" />);
+    renderDashboard("player-1");
 
     await waitFor(() => {
       expect(screen.getByText("Network error")).toBeInTheDocument();
@@ -120,7 +133,7 @@ describe("Dashboard – error state", () => {
 describe("Dashboard – empty state", () => {
   it("shows 'No games played yet' when there are zero games", async () => {
     vi.mocked(api.getPlayerDashboard).mockResolvedValue(emptyDashboard);
-    render(<Dashboard playerId="player-1" />);
+    renderDashboard("player-1");
 
     await waitFor(() => {
       expect(screen.getByText("No games played yet.")).toBeInTheDocument();
@@ -135,7 +148,7 @@ describe("Dashboard – empty state", () => {
 describe("Dashboard – stats summary", () => {
   it("renders the correct total games", async () => {
     vi.mocked(api.getPlayerDashboard).mockResolvedValue(dashboardWithGames);
-    render(<Dashboard playerId="player-1" />);
+    renderDashboard("player-1");
 
     await waitFor(() => {
       expect(screen.getByText("10")).toBeInTheDocument();
@@ -145,7 +158,7 @@ describe("Dashboard – stats summary", () => {
 
   it("renders the correct number of wins", async () => {
     vi.mocked(api.getPlayerDashboard).mockResolvedValue(dashboardWithGames);
-    render(<Dashboard playerId="player-1" />);
+    renderDashboard("player-1");
 
     await waitFor(() => {
       expect(screen.getByText("7")).toBeInTheDocument();
@@ -155,7 +168,7 @@ describe("Dashboard – stats summary", () => {
 
   it("renders the correct number of losses", async () => {
     vi.mocked(api.getPlayerDashboard).mockResolvedValue(dashboardWithGames);
-    render(<Dashboard playerId="player-1" />);
+    renderDashboard("player-1");
 
     await waitFor(() => {
       expect(screen.getByText("3")).toBeInTheDocument();
@@ -165,7 +178,7 @@ describe("Dashboard – stats summary", () => {
 
   it("renders the win rate as a percentage", async () => {
     vi.mocked(api.getPlayerDashboard).mockResolvedValue(dashboardWithGames);
-    render(<Dashboard playerId="player-1" />);
+    renderDashboard("player-1");
 
     await waitFor(() => {
       expect(screen.getByText("70%")).toBeInTheDocument();
@@ -175,12 +188,11 @@ describe("Dashboard – stats summary", () => {
 
   it("renders the number of abandoned games", async () => {
     vi.mocked(api.getPlayerDashboard).mockResolvedValue(dashboardWithGames);
-    render(<Dashboard playerId="player-1" />);
+    renderDashboard("player-1");
 
     await waitFor(() => {
       // The stat label "Abandoned" in the overview section
       const statLabels = screen.getAllByText("Abandoned");
-      // There is a stat-label "Abandoned" and a result-badge "Abandoned"
       const overviewLabel = statLabels.find(
         (el) => el.classList.contains("stat-label"),
       );
@@ -196,7 +208,7 @@ describe("Dashboard – stats summary", () => {
 describe("Dashboard – game history table", () => {
   it("renders the history table with correct column headers", async () => {
     vi.mocked(api.getPlayerDashboard).mockResolvedValue(dashboardWithGames);
-    render(<Dashboard playerId="player-1" />);
+    renderDashboard("player-1");
 
     await waitFor(() => {
       expect(screen.getByText("Date")).toBeInTheDocument();
@@ -210,7 +222,7 @@ describe("Dashboard – game history table", () => {
 
   it("renders opponent nicknames in the table", async () => {
     vi.mocked(api.getPlayerDashboard).mockResolvedValue(dashboardWithGames);
-    render(<Dashboard playerId="player-1" />);
+    renderDashboard("player-1");
 
     await waitFor(() => {
       expect(screen.getByText("Alice")).toBeInTheDocument();
@@ -219,9 +231,9 @@ describe("Dashboard – game history table", () => {
     });
   });
 
-  it("renders result badges (Win, Loss, Abandoned)", async () => {
+  it("renders result badges (Win, Loss, Resume)", async () => {
     vi.mocked(api.getPlayerDashboard).mockResolvedValue(dashboardWithGames);
-    const { container } = render(<Dashboard playerId="player-1" />);
+    const { container } = renderDashboard("player-1");
 
     await waitFor(() => {
       const badges = container.querySelectorAll(".result-badge");
@@ -230,13 +242,14 @@ describe("Dashboard – game history table", () => {
       const badgeTexts = Array.from(badges).map((b) => b.textContent);
       expect(badgeTexts).toContain("Win");
       expect(badgeTexts).toContain("Loss");
-      expect(badgeTexts).toContain("Abandoned");
+      // Abandoned game with table_status "playing" shows as Resume
+      expect(badgeTexts).toContain("Resume");
     });
   });
 
   it("renders formatted win types (Normal, Gammon)", async () => {
     vi.mocked(api.getPlayerDashboard).mockResolvedValue(dashboardWithGames);
-    render(<Dashboard playerId="player-1" />);
+    renderDashboard("player-1");
 
     await waitFor(() => {
       expect(screen.getByText("Normal")).toBeInTheDocument();
@@ -246,7 +259,7 @@ describe("Dashboard – game history table", () => {
 
   it("shows '-' for win type on abandoned games", async () => {
     vi.mocked(api.getPlayerDashboard).mockResolvedValue(dashboardWithGames);
-    const { container } = render(<Dashboard playerId="player-1" />);
+    const { container } = renderDashboard("player-1");
 
     await waitFor(() => {
       // The abandoned game (Charlie) row should have "-" for win type and score
@@ -262,7 +275,7 @@ describe("Dashboard – game history table", () => {
 
   it("renders game scores in the table", async () => {
     vi.mocked(api.getPlayerDashboard).mockResolvedValue(dashboardWithGames);
-    const { container } = render(<Dashboard playerId="player-1" />);
+    const { container } = renderDashboard("player-1");
 
     await waitFor(() => {
       const rows = container.querySelectorAll("tbody tr");
@@ -284,7 +297,7 @@ describe("Dashboard – game history table", () => {
 describe("Dashboard – API integration", () => {
   it("calls getPlayerDashboard with the correct player ID", async () => {
     vi.mocked(api.getPlayerDashboard).mockResolvedValue(emptyDashboard);
-    render(<Dashboard playerId="some-player-id" />);
+    renderDashboard("some-player-id");
 
     await waitFor(() => {
       expect(api.getPlayerDashboard).toHaveBeenCalledWith("some-player-id");
