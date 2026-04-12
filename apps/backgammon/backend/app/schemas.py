@@ -187,6 +187,28 @@ class DashboardResponse(BaseModel):
     rating_games: int = 0
 
 
+# ── Replay Schemas ───────────────────────────────────────────────────────
+
+
+class ReplayMoveRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    move_number: int
+    player_nickname: Optional[str] = None
+    dice_roll: str
+    moves_notation: str
+    game_state_after: Optional[dict] = None
+    created_at: datetime
+
+
+class ReplayResponse(BaseModel):
+    table_id: str
+    white_player_nickname: Optional[str] = None
+    black_player_nickname: Optional[str] = None
+    initial_state: dict
+    moves: list[ReplayMoveRecord]
+
+
 # ── Leaderboard Schemas ───────────────────────────────────────────────────
 
 

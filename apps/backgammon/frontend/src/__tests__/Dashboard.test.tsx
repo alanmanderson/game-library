@@ -273,6 +273,38 @@ describe("Dashboard – game history table", () => {
     });
   });
 
+  it("shows 'Replay' column header", async () => {
+    vi.mocked(api.getPlayerDashboard).mockResolvedValue(dashboardWithGames);
+    renderDashboard("player-1");
+
+    await waitFor(() => {
+      expect(screen.getByText("Replay")).toBeInTheDocument();
+    });
+  });
+
+  it("renders a Replay button for finished games", async () => {
+    vi.mocked(api.getPlayerDashboard).mockResolvedValue(dashboardWithGames);
+    const { container } = renderDashboard("player-1");
+
+    await waitFor(() => {
+      const replayBtns = container.querySelectorAll(".replay-link-btn");
+      // TABLE001 (win, finished) and TABLE002 (loss, finished) get replay buttons
+      expect(replayBtns.length).toBe(2);
+    });
+  });
+
+  it("does not render a Replay button for abandoned games", async () => {
+    vi.mocked(api.getPlayerDashboard).mockResolvedValue(dashboardWithGames);
+    const { container } = renderDashboard("player-1");
+
+    await waitFor(() => {
+      const rows = container.querySelectorAll("tbody tr");
+      // Third row is Charlie (abandoned)
+      const charlieReplay = rows[2].querySelector(".replay-link-btn");
+      expect(charlieReplay).toBeNull();
+    });
+  });
+
   it("renders game scores in the table", async () => {
     vi.mocked(api.getPlayerDashboard).mockResolvedValue(dashboardWithGames);
     const { container } = renderDashboard("player-1");

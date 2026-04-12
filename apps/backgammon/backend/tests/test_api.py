@@ -293,3 +293,58 @@ class TestPlayerStats:
             headers=auth_headers(auth1["token"]),
         )
         assert resp.status_code == 403
+
+
+# -----------------------------------------------------------------------
+# Game replay
+# -----------------------------------------------------------------------
+
+
+class TestGameReplay:
+    async def test_replay_not_found(self, client):
+        """Replay for a nonexistent table returns 404."""
+        resp = await client.get("/api/tables/XXXXXX/replay")
+        assert resp.status_code == 404
+
+    async def test_replay_empty_moves(self, client):
+        """Replay for a table with no moves has an empty moves list."""
+        auth = await create_test_player(client)
+        table = await create_test_table(client, auth["token"], auth["player"]["id"])
+        resp = await client.get(f"/api/tables/{table['id']}/replay")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["table_id"] == table["id"]
+        assert data["moves"] == []
+        assert "initial_state" in data
+        # initial_state should have the standard starting board
+        state = data["initial_state"]
+        assert len(state["points"]) == 26
+        assert state["bar_white"] == 0
+        assert state["bar_black"] == 0
+        assert state["off_white"] == 0
+        assert state["off_black"] == 0
+
+    async def test_replay_includes_player_nicknames(self, client):
+        """Replay response includes white and black player nicknames."""
+        table, creator_auth, joiner_auth = await create_and_join_table(
+            client, "ReplayAlice", "ReplayBob"
+        )
+        resp = await client.get(f"/api/tables/{table['id']}/replay")
+        assert resp.status_code == 200
+        data = resp.json()
+        nicknames = {data.get("white_player_nickname"), data.get("black_player_nickname")}
+        assert "ReplayAlice" in nicknames
+        assert "ReplayBob" in nicknames
+
+    async def test_replay_response_structure(self, client):
+        """Replay response has the expected top-level fields."""
+        table, _, _ = await create_and_join_table(client)
+        resp = await client.get(f"/api/tables/{table['id']}/replay")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "table_id" in data
+        assert "white_player_nickname" in data
+        assert "black_player_nickname" in data
+        assert "initial_state" in data
+        assert "moves" in data
+        assert isinstance(data["moves"], list)

@@ -14,6 +14,7 @@ import type {
   DashboardData,
   AuthResponse,
   LeaderboardData,
+  ReplayData,
 } from "../types/game";
 import { TOKEN_KEY } from "../constants";
 
@@ -196,6 +197,11 @@ export function getTable(tableId: string): Promise<Table> {
 /** Retrieve the full move-history log for a game played at `tableId`. */
 export function getGameHistory(tableId: string): Promise<MoveRecord[]> {
   return request<MoveRecord[]>(`/api/tables/${tableId}/history`);
+}
+
+/** Retrieve full replay data (initial state + per-move snapshots) for a game. */
+export function getReplay(tableId: string): Promise<ReplayData> {
+  return request<ReplayData>(`/api/tables/${tableId}/replay`);
 }
 
 // ---------------------------------------------------------------------------
