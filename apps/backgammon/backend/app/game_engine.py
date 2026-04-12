@@ -174,6 +174,8 @@ class GameState:
     cube_owner: Optional[Color] = None  # None = centered (either can double)
     double_offered: bool = False  # True when a double is pending acceptance
     double_offered_by: Optional[Color] = None
+    # Crawford rule: no doubling allowed during the Crawford game
+    is_crawford_game: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -341,8 +343,11 @@ class BackgammonEngine:
         """Return True if *color* can offer a double right now.
 
         A player can double at the start of their turn (before rolling)
-        when the cube is centered or they own it.
+        when the cube is centered or they own it.  Doubling is never
+        allowed during a Crawford game.
         """
+        if self.state.is_crawford_game:
+            return False
         if self.state.status != GameStatus.ROLLING:
             return False
         if self.state.current_turn != color:
@@ -1214,6 +1219,7 @@ class BackgammonEngine:
             "cube_owner": s.cube_owner.value if s.cube_owner else None,
             "double_offered": s.double_offered,
             "double_offered_by": s.double_offered_by.value if s.double_offered_by else None,
+            "is_crawford_game": s.is_crawford_game,
         }
 
     def get_notation_log(self) -> list[str]:

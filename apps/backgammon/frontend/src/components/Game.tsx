@@ -325,6 +325,9 @@ function Game() {
       return `${opponentName} offers to double to ${gameState.cube_value * 2}. Accept or decline?`;
     }
     if (isMyTurn && gameState.status === "rolling") {
+      if (gameState.is_crawford_game) {
+        return "Crawford Game — no doubling allowed. Roll the dice to begin your turn.";
+      }
       if (gameState.can_double) {
         return "Double the stakes or roll the dice to begin your turn.";
       }
@@ -468,6 +471,9 @@ function Game() {
             <span className="pip-count">{opponentPips} pips</span>
             {table.match_points > 0 && (
               <span className="match-pts">{opponentScore} / {table.match_points}</span>
+            )}
+            {gameState.is_crawford_game && (
+              <span className="crawford-badge">Crawford Game</span>
             )}
           </div>
 

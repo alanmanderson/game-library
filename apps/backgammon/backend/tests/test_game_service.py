@@ -442,3 +442,154 @@ class TestDoubling:
         assert result["winner"] == current_color.value
         assert engine.state.status == GameStatus.FINISHED
         assert engine.state.winner == current_color
+
+
+class TestCrawfordRule:
+    """Tests for the Crawford Rule in the GameManager.
+
+    The Crawford Rule triggers when either player reaches match_points - 1.
+    The next game is a Crawford game (no doubling). It only triggers once
+    per match.
+    """
+
+    async def test_crawford_triggers_at_match_point(self, db_session):
+        """Crawford game triggers when a player reaches match_points - 1."""
+        gm = GameManager()
+        p1 = Player(nickname="Alice")
+        p2 = Player(nickname="Bob")
+        db_session.add_all([p1, p2])
+        await db_session.flush()
+
+        table = await gm.create_table(db_session, p1.id, match_points=5)
+        await gm.join_table(db_session, table.id, p2.id)
+
+        # Simulate: white wins and reaches 4 (match_points - 1)
+        engine = gm.get_engine(table.id)
+        table.white_match_score = 4
+        table.black_match_score = 0
+        table.status = "game_over"
+        table.game_state = engine.get_state_snapshot()
+        await db_session.flush()
+
+        # Start the next game -- should be a Crawford game
+        table = await gm.start_next_game(db_session, table.id)
+        new_engine = gm.get_engine(table.id)
+        assert new_engine.state.is_crawford_game is True
+
+    async def test_crawford_only_triggers_once(self, db_session):
+        """Crawford game only happens once, even if still at match point."""
+        gm = GameManager()
+        p1 = Player(nickname="Alice")
+        p2 = Player(nickname="Bob")
+        db_session.add_all([p1, p2])
+        await db_session.flush()
+
+        table = await gm.create_table(db_session, p1.id, match_points=5)
+        await gm.join_table(db_session, table.id, p2.id)
+
+        # Simulate: white at match_points - 1
+        engine = gm.get_engine(table.id)
+        table.white_match_score = 4
+        table.black_match_score = 0
+        table.status = "game_over"
+        table.game_state = engine.get_state_snapshot()
+        await db_session.flush()
+
+        # First next game: Crawford
+        table = await gm.start_next_game(db_session, table.id)
+        engine = gm.get_engine(table.id)
+        assert engine.state.is_crawford_game is True
+
+        # Simulate: black wins the Crawford game, white still at 4
+        table.status = "game_over"
+        table.game_state = engine.get_state_snapshot()
+        await db_session.flush()
+
+        # Second next game: NOT Crawford (already used)
+        table = await gm.start_next_game(db_session, table.id)
+        engine = gm.get_engine(table.id)
+        assert engine.state.is_crawford_game is False
+
+    async def test_no_crawford_for_1_point_match(self, db_session):
+        """Crawford rule doesn't apply to 1-point matches."""
+        gm = GameManager()
+        p1 = Player(nickname="Alice")
+        p2 = Player(nickname="Bob")
+        db_session.add_all([p1, p2])
+        await db_session.flush()
+
+        table = await gm.create_table(db_session, p1.id, match_points=1)
+        await gm.join_table(db_session, table.id, p2.id)
+
+        engine = gm.get_engine(table.id)
+        table.white_match_score = 0
+        table.black_match_score = 0
+        table.status = "game_over"
+        table.game_state = engine.get_state_snapshot()
+        await db_session.flush()
+
+        table = await gm.start_next_game(db_session, table.id)
+        engine = gm.get_engine(table.id)
+        assert engine.state.is_crawford_game is False
+
+    async def test_crawford_blocks_doubling_in_game_service(self, db_session):
+        """During a Crawford game, offering a double raises an error."""
+        gm = GameManager()
+        p1 = Player(nickname="Alice")
+        p2 = Player(nickname="Bob")
+        db_session.add_all([p1, p2])
+        await db_session.flush()
+
+        table = await gm.create_table(db_session, p1.id, match_points=5)
+        await gm.join_table(db_session, table.id, p2.id)
+
+        # Simulate: white at match_points - 1
+        engine = gm.get_engine(table.id)
+        table.white_match_score = 4
+        table.black_match_score = 0
+        table.status = "game_over"
+        table.game_state = engine.get_state_snapshot()
+        await db_session.flush()
+
+        # Start Crawford game
+        table = await gm.start_next_game(db_session, table.id)
+        engine = gm.get_engine(table.id)
+        assert engine.state.is_crawford_game is True
+
+        # Force into ROLLING so doubling would normally be possible
+        engine.state.status = GameStatus.ROLLING
+        engine.state.cube_owner = None
+
+        current_player_id = (
+            table.white_player_id
+            if engine.state.current_turn == Color.WHITE
+            else table.black_player_id
+        )
+
+        # Attempt to double -- should fail
+        with pytest.raises(ValueError, match="Cannot double now"):
+            await gm.offer_double(db_session, table.id, current_player_id)
+
+    async def test_crawford_game_used_persists_in_snapshot(self, db_session):
+        """crawford_game_used flag is persisted in the game_state JSON."""
+        gm = GameManager()
+        p1 = Player(nickname="Alice")
+        p2 = Player(nickname="Bob")
+        db_session.add_all([p1, p2])
+        await db_session.flush()
+
+        table = await gm.create_table(db_session, p1.id, match_points=5)
+        await gm.join_table(db_session, table.id, p2.id)
+
+        # Simulate: white at match_points - 1
+        engine = gm.get_engine(table.id)
+        table.white_match_score = 4
+        table.black_match_score = 0
+        table.status = "game_over"
+        table.game_state = engine.get_state_snapshot()
+        await db_session.flush()
+
+        # Start Crawford game
+        table = await gm.start_next_game(db_session, table.id)
+        assert table.game_state.get("crawford_game_used") is True
+        assert table.game_state.get("is_crawford_game") is True

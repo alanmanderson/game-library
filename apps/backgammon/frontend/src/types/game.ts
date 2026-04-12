@@ -84,6 +84,7 @@ export interface GameState {
   double_offered: boolean;
   double_offered_by: Color | null;
   can_double: boolean;
+  is_crawford_game: boolean;
   pip_white?: number;
   pip_black?: number;
 }
