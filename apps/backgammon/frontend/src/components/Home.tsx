@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import type { Player, BotDifficulty } from "../types/game";
 import { createTable, joinTable, inviteBot } from "../services/api";
 import Dashboard from "./Dashboard";
+import Lobby from "./Lobby";
 import "./styles/Home.css";
 
 interface HomeProps {
@@ -19,6 +20,7 @@ function Home({ player }: HomeProps) {
   const [preferredColor, setPreferredColor] = useState<string | undefined>(undefined);
   const [matchPoints, setMatchPoints] = useState(5);
   const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>("hard");
+  const [showLobby, setShowLobby] = useState(false);
 
   const handleCreateTable = useCallback(async () => {
     setCreatingTable(true);
@@ -69,6 +71,17 @@ function Home({ player }: HomeProps) {
     },
     [joinTableId, player.id, navigate],
   );
+
+  if (showLobby) {
+    return (
+      <Lobby
+        player={player}
+        onBack={() => setShowLobby(false)}
+        preferredColor={preferredColor}
+        matchPoints={matchPoints}
+      />
+    );
+  }
 
   return (
     <div className="home">
@@ -153,6 +166,15 @@ function Home({ player }: HomeProps) {
           <p>Create a table and invite a friend to play.</p>
           <button onClick={handleCreateTable} disabled={creatingTable}>
             {creatingTable ? "Creating..." : "Create Table"}
+          </button>
+        </div>
+
+        {/* Find Game (Lobby) */}
+        <div className="action-card">
+          <h3>Find Game</h3>
+          <p>Browse open games or get matched with an opponent.</p>
+          <button onClick={() => setShowLobby(true)}>
+            Game Lobby
           </button>
         </div>
 

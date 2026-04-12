@@ -8,6 +8,7 @@
 import type {
   Player,
   Table,
+  LobbyTable,
   MoveRecord,
   StatsOverview,
   DashboardData,
@@ -157,10 +158,10 @@ export function getPlayerDashboard(playerId: string): Promise<DashboardData> {
 // ---------------------------------------------------------------------------
 
 /** Create a new table (game room). The creating player is identified by `playerId`. */
-export function createTable(playerId: string, preferredColor?: string, matchPoints?: number): Promise<Table> {
+export function createTable(playerId: string, preferredColor?: string, matchPoints?: number, isPublic?: boolean): Promise<Table> {
   return request<Table>("/api/tables", {
     method: "POST",
-    body: JSON.stringify({ player_id: playerId, preferred_color: preferredColor || null, match_points: matchPoints ?? 5 }),
+    body: JSON.stringify({ player_id: playerId, preferred_color: preferredColor || null, match_points: matchPoints ?? 5, is_public: isPublic ?? false }),
   });
 }
 
@@ -188,4 +189,20 @@ export function getTable(tableId: string): Promise<Table> {
 /** Retrieve the full move-history log for a game played at `tableId`. */
 export function getGameHistory(tableId: string): Promise<MoveRecord[]> {
   return request<MoveRecord[]>(`/api/tables/${tableId}/history`);
+}
+
+// ---------------------------------------------------------------------------
+// Lobby / matchmaking
+// ---------------------------------------------------------------------------
+
+/** Fetch the list of public tables waiting for opponents. */
+export function getLobby(): Promise<LobbyTable[]> {
+  return request<LobbyTable[]>("/api/lobby");
+}
+
+/** Join an available public table or create a new one. */
+export function quickMatch(): Promise<Table> {
+  return request<Table>("/api/quick-match", {
+    method: "POST",
+  });
 }
