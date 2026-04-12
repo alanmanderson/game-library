@@ -114,6 +114,10 @@ class ConnectionManager:
         """Return a list of currently connected player IDs for a table."""
         return list(self._connections.get(table_id, {}).keys())
 
+    def connection_count(self) -> int:
+        """Return the total number of active WebSocket connections across all tables."""
+        return sum(len(players) for players in self._connections.values())
+
 
 # Global singleton connection manager
 manager = ConnectionManager()

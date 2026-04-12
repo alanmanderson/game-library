@@ -31,6 +31,11 @@ class GameManager:
         self._player_colors: dict[str, dict[str, Color]] = {}  # table_id -> {player_id: color}
         self._locks: dict[str, asyncio.Lock] = {}
 
+    @property
+    def engines(self) -> dict:
+        """Public read-only access to the active engine mapping."""
+        return self._engines
+
     def generate_table_id(self) -> str:
         """Generate a short, unique, human-friendly table ID (6 uppercase alphanumeric chars)."""
         chars = string.ascii_uppercase + string.digits
