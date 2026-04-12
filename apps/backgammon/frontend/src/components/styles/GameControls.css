@@ -89,3 +89,69 @@
   padding: 0.3rem 0.8rem;
   font-size: 0.8rem;
 }
+
+/* ---- Responsive: Tablet ---- */
+
+@media (max-width: 900px) {
+  .controls-row {
+    gap: 0.5rem;
+  }
+
+  .controls-row .roll-btn,
+  .controls-row .end-turn-btn,
+  .controls-row .confirm-turn-btn,
+  .controls-row .double-btn {
+    padding: 0.45rem 1.2rem;
+    font-size: 0.9rem;
+  }
+
+  .controls-row .undo-btn,
+  .controls-row .accept-double-btn,
+  .controls-row .decline-double-btn {
+    padding: 0.4rem 1rem;
+    font-size: 0.85rem;
+  }
+}
+
+/* ---- Responsive: Mobile ---- */
+
+@media (max-width: 600px) {
+  .game-controls {
+    padding: 0.35rem;
+    gap: 0.35rem;
+  }
+
+  .controls-row {
+    gap: 0.35rem;
+  }
+
+  .controls-row .roll-btn,
+  .controls-row .end-turn-btn,
+  .controls-row .confirm-turn-btn,
+  .controls-row .double-btn {
+    padding: 0.35rem 0.9rem;
+    font-size: 0.8rem;
+  }
+
+  .controls-row .undo-btn,
+  .controls-row .accept-double-btn,
+  .controls-row .decline-double-btn {
+    padding: 0.3rem 0.7rem;
+    font-size: 0.75rem;
+  }
+
+  .board-overlay .controls-row .roll-btn {
+    padding: 0.25rem 0.6rem;
+    font-size: 0.7rem;
+  }
+
+  .board-overlay .controls-row .double-btn,
+  .board-overlay .controls-row .undo-btn,
+  .board-overlay .controls-row .confirm-turn-btn,
+  .board-overlay .controls-row .end-turn-btn,
+  .board-overlay .controls-row .accept-double-btn,
+  .board-overlay .controls-row .decline-double-btn {
+    padding: 0.25rem 0.6rem;
+    font-size: 0.7rem;
+  }
+}

@@ -422,3 +422,124 @@
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* ---- Responsive: Tablet ---- */
+
+@media (max-width: 900px) {
+  .game-page {
+    padding: 0.75rem;
+  }
+
+  .game-header {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.5rem;
+  }
+
+  .game-status-msg {
+    order: 3;
+    flex-basis: 100%;
+    text-align: center;
+  }
+
+  .player-info-row {
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .win-banner {
+    font-size: 1.2rem;
+    padding: 0.6rem 1rem;
+  }
+}
+
+/* ---- Responsive: Mobile ---- */
+
+@media (max-width: 600px) {
+  .game-page {
+    padding: 0.5rem;
+  }
+
+  .game-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.4rem;
+    padding: 0.4rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .game-header-left {
+    justify-content: center;
+  }
+
+  .game-header h2 {
+    font-size: 1.1rem;
+  }
+
+  .game-status-msg {
+    order: 0;
+    font-size: 0.8rem;
+  }
+
+  .game-header .back-link {
+    text-align: center;
+    font-size: 0.85rem;
+  }
+
+  .game-center {
+    gap: 0.5rem;
+  }
+
+  .player-info-row {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.4rem;
+  }
+
+  .player-pill {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.65rem;
+  }
+
+  .pip-count,
+  .match-pts {
+    font-size: 0.7rem;
+  }
+
+  .game-error-banner,
+  .connection-banner {
+    font-size: 0.8rem;
+    padding: 0.4rem 0.75rem;
+  }
+
+  .win-banner {
+    font-size: 1rem;
+    padding: 0.5rem 0.75rem;
+    white-space: normal;
+    text-align: center;
+  }
+
+  .waiting-table-id {
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .table-id-code {
+    font-size: 1.1rem;
+  }
+
+  .game-over-banner,
+  .match-over-banner {
+    padding: 0.75rem 1rem;
+  }
+
+  .game-over-result {
+    font-size: 1rem;
+  }
+
+  .match-over-title {
+    font-size: 1.2rem;
+  }
+}

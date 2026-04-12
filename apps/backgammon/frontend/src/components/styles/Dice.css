@@ -85,3 +85,63 @@
   width: 6px;
   height: 6px;
 }
+
+/* ---- Responsive: Tablet ---- */
+
+@media (max-width: 900px) {
+  .die {
+    width: 46px;
+    height: 46px;
+  }
+
+  .die-dots {
+    width: 32px;
+    height: 32px;
+  }
+
+  .die-dot {
+    width: 7px;
+    height: 7px;
+  }
+}
+
+/* ---- Responsive: Mobile ---- */
+
+@media (max-width: 600px) {
+  .dice-container {
+    gap: 0.6rem;
+    padding: 0.35rem;
+  }
+
+  .die {
+    width: 38px;
+    height: 38px;
+    border-radius: 6px;
+  }
+
+  .die-dots {
+    width: 26px;
+    height: 26px;
+  }
+
+  .die-dot {
+    width: 6px;
+    height: 6px;
+  }
+
+  .board-overlay .die {
+    width: 32px;
+    height: 32px;
+    border-radius: 5px;
+  }
+
+  .board-overlay .die-dots {
+    width: 22px;
+    height: 22px;
+  }
+
+  .board-overlay .die-dot {
+    width: 5px;
+    height: 5px;
+  }
+}

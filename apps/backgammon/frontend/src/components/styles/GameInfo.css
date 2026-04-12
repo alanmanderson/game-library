@@ -68,3 +68,32 @@
   text-align: center;
   padding: 0.5rem;
 }
+
+/* ---- Responsive: Tablet ---- */
+
+@media (max-width: 900px) {
+  .move-history-drawer {
+    max-width: 100%;
+  }
+}
+
+/* ---- Responsive: Mobile ---- */
+
+@media (max-width: 600px) {
+  .move-history-drawer {
+    max-width: 100%;
+  }
+
+  .drawer-toggle {
+    font-size: 0.8rem;
+    padding: 0.4rem 0.6rem;
+  }
+
+  .move-history {
+    max-height: 150px;
+  }
+
+  .move-history-entry {
+    font-size: 0.75rem;
+  }
+}
