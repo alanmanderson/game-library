@@ -1163,3 +1163,152 @@ class TestFullGameFlow:
                     })
                     resp = ws.receive_json()
                     assert resp["type"] == "game_state"
+
+
+# ===========================================================================
+# Spectator Tests
+# ===========================================================================
+
+
+class TestSpectatorMode:
+    """Tests for spectator WebSocket connections."""
+
+    def test_spectator_connects_and_receives_game_state(self, ws_test_env):
+        """Spectator receives game state on connect."""
+        client = ws_test_env["client"]
+        sf = ws_test_env["session_factory"]
+        tid, white, black = _run_async(_create_game(sf))
+        spectator = _run_async(_create_player(sf, "Spectator"))
+
+        with client.websocket_connect(
+            f"/ws/{tid}/spectate?token={_token(spectator.id)}"
+        ) as ws:
+            msg = ws.receive_json()
+            assert msg["type"] == "game_state"
+            assert msg["data"]["your_color"] is None
+            assert msg["data"]["game_state"] is not None
+
+    def test_spectator_receives_empty_valid_moves(self, ws_test_env):
+        """Spectator state has no valid_moves (prevent coaching)."""
+        client = ws_test_env["client"]
+        sf = ws_test_env["session_factory"]
+        tid, white, black = _run_async(_create_game(sf))
+        spectator = _run_async(_create_player(sf, "Spectator"))
+
+        with client.websocket_connect(
+            f"/ws/{tid}/spectate?token={_token(spectator.id)}"
+        ) as ws:
+            msg = ws.receive_json()
+            assert msg["data"]["game_state"]["valid_moves"] == []
+
+    def test_spectator_count_in_player_messages(self, ws_test_env):
+        """Players can see the spectator count in their game_state messages."""
+        client = ws_test_env["client"]
+        sf = ws_test_env["session_factory"]
+        tid, white, black = _run_async(_create_game(sf))
+        spectator = _run_async(_create_player(sf, "Spectator"))
+
+        # First check count is 0 before spectator connects
+        with client.websocket_connect(
+            f"/ws/{tid}/{white.id}?token={_token(white.id)}"
+        ) as ws_player:
+            init_msg = ws_player.receive_json()
+            assert init_msg["data"]["table"]["spectator_count"] == 0
+
+        # Now spectator connects and player reconnects -- spectator count should be 1
+        with client.websocket_connect(
+            f"/ws/{tid}/spectate?token={_token(spectator.id)}"
+        ) as ws_spec:
+            ws_spec.receive_json()  # initial state for spectator
+
+            with client.websocket_connect(
+                f"/ws/{tid}/{white.id}?token={_token(white.id)}"
+            ) as ws_player2:
+                player_msg = ws_player2.receive_json()
+                assert player_msg["data"]["table"]["spectator_count"] == 1
+
+    def test_spectator_count_in_spectator_messages(self, ws_test_env):
+        """Spectator count included in spectator's own game_state message."""
+        client = ws_test_env["client"]
+        sf = ws_test_env["session_factory"]
+        tid, white, black = _run_async(_create_game(sf))
+        spectator = _run_async(_create_player(sf, "Spectator"))
+
+        with client.websocket_connect(
+            f"/ws/{tid}/spectate?token={_token(spectator.id)}"
+        ) as ws:
+            msg = ws.receive_json()
+            # 1 spectator currently connected (this one)
+            assert msg["data"]["table"]["spectator_count"] == 1
+
+    def test_spectator_receives_updates_when_players_move(self, ws_test_env):
+        """Spectator receives game_state when players make moves."""
+        client = ws_test_env["client"]
+        sf = ws_test_env["session_factory"]
+        tid, white, black = _run_async(_create_game(sf))
+        spectator = _run_async(_create_player(sf, "Spectator"))
+        current, _ = _current_and_other(tid, white, black)
+
+        with client.websocket_connect(
+            f"/ws/{tid}/{current.id}?token={_token(current.id)}"
+        ) as ws_player:
+            init_msg = ws_player.receive_json()
+
+            with client.websocket_connect(
+                f"/ws/{tid}/spectate?token={_token(spectator.id)}"
+            ) as ws_spec:
+                ws_spec.receive_json()  # initial state
+
+                valid_moves = init_msg["data"]["game_state"].get("valid_moves", [])
+                if valid_moves:
+                    move = valid_moves[0]
+                    ws_player.send_json({
+                        "action": "make_move",
+                        "from_point": move["from_point"],
+                        "to_point": move["to_point"],
+                    })
+
+                    # Player receives updated state
+                    player_update = ws_player.receive_json()
+                    assert player_update["type"] == "game_state"
+
+                    # Spectator also receives updated state
+                    spec_update = ws_spec.receive_json()
+                    assert spec_update["type"] == "game_state"
+                    # Spectator still sees no valid_moves
+                    assert spec_update["data"]["game_state"]["valid_moves"] == []
+                    assert spec_update["data"]["your_color"] is None
+
+    def test_spectator_connection_requires_auth(self, ws_test_env):
+        """Spectator connection without a token is rejected."""
+        client = ws_test_env["client"]
+        sf = ws_test_env["session_factory"]
+        tid, white, black = _run_async(_create_game(sf))
+
+        with pytest.raises(Exception):
+            with client.websocket_connect(f"/ws/{tid}/spectate") as ws:
+                ws.receive_json()
+
+    def test_spectator_connection_rejects_invalid_token(self, ws_test_env):
+        """Spectator connection with an invalid token is rejected."""
+        client = ws_test_env["client"]
+        sf = ws_test_env["session_factory"]
+        tid, white, black = _run_async(_create_game(sf))
+
+        with pytest.raises(Exception):
+            with client.websocket_connect(
+                f"/ws/{tid}/spectate?token={_bad_token()}"
+            ) as ws:
+                ws.receive_json()
+
+    def test_spectator_table_not_found(self, ws_test_env):
+        """Spectator connection to nonexistent table is rejected."""
+        client = ws_test_env["client"]
+        sf = ws_test_env["session_factory"]
+        spectator = _run_async(_create_player(sf, "Spectator"))
+
+        with pytest.raises(Exception):
+            with client.websocket_connect(
+                f"/ws/NOTFOUND/spectate?token={_token(spectator.id)}"
+            ) as ws:
+                ws.receive_json()

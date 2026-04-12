@@ -112,6 +112,7 @@ export interface Table {
   time_control?: string;
   white_time_remaining_ms?: number | null;
   black_time_remaining_ms?: number | null;
+  spectator_count?: number;
 }
 
 /** A public table shown in the game lobby. */
@@ -120,6 +121,18 @@ export interface LobbyTable {
   creator_nickname: string;
   match_points: number | null;
   preferred_color: string | null;
+  created_at: string;
+}
+
+/** A table with an active game in progress, shown in the spectator lobby. */
+export interface ActiveGame {
+  id: string;
+  white_player_nickname: string;
+  black_player_nickname: string;
+  match_points: number | null;
+  white_match_score: number;
+  black_match_score: number;
+  spectator_count: number;
   created_at: string;
 }
 

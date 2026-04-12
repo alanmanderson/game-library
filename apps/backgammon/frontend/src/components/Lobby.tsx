@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import type { Player, LobbyTable } from "../types/game";
-import { getLobby, joinTable, quickMatch, createTable } from "../services/api";
+import type { Player, LobbyTable, ActiveGame } from "../types/game";
+import { getLobby, joinTable, quickMatch, createTable, getActiveGames } from "../services/api";
 import "./styles/Lobby.css";
 
 interface LobbyProps {
@@ -14,14 +14,16 @@ interface LobbyProps {
 function Lobby({ player, onBack, preferredColor, matchPoints }: LobbyProps) {
   const navigate = useNavigate();
   const [tables, setTables] = useState<LobbyTable[]>([]);
+  const [activeGames, setActiveGames] = useState<ActiveGame[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
 
   const fetchLobby = useCallback(async () => {
     try {
-      const data = await getLobby();
-      setTables(data);
+      const [lobbyData, activeData] = await Promise.all([getLobby(), getActiveGames()]);
+      setTables(lobbyData);
+      setActiveGames(activeData);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load lobby");
@@ -51,6 +53,13 @@ function Lobby({ player, onBack, preferredColor, matchPoints }: LobbyProps) {
       }
     },
     [player.id, navigate],
+  );
+
+  const handleWatchGame = useCallback(
+    (tableId: string) => {
+      navigate(`/spectate/${tableId}`);
+    },
+    [navigate],
   );
 
   const handleQuickMatch = useCallback(async () => {
@@ -145,6 +154,44 @@ function Lobby({ player, onBack, preferredColor, matchPoints }: LobbyProps) {
               disabled={actionInProgress !== null}
             >
               {actionInProgress === table.id ? "Joining..." : "Join"}
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div className="lobby-table-list lobby-active-games">
+        <h3>Live Games {!loading && `(${activeGames.length})`}</h3>
+
+        {!loading && activeGames.length === 0 && (
+          <p className="lobby-empty">No live games to watch right now.</p>
+        )}
+
+        {activeGames.map((game) => (
+          <div key={game.id} className="lobby-table-item">
+            <div className="lobby-table-info">
+              <span className="lobby-table-creator">
+                {game.white_player_nickname} vs {game.black_player_nickname}
+              </span>
+              <span className="lobby-table-details">
+                Match to {game.match_points ?? 5}
+                {" \u00B7 "}
+                {game.white_match_score}–{game.black_match_score}
+              </span>
+              <span className="lobby-table-time">
+                {formatTime(game.created_at)}
+                {game.spectator_count > 0 && (
+                  <span className="lobby-spectator-count">
+                    {" \u00B7 "}{game.spectator_count} watching
+                  </span>
+                )}
+              </span>
+            </div>
+            <button
+              className="lobby-watch-btn"
+              onClick={() => handleWatchGame(game.id)}
+              disabled={actionInProgress !== null}
+            >
+              Watch
             </button>
           </div>
         ))}

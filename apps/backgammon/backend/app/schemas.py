@@ -94,6 +94,18 @@ class LobbyTable(BaseModel):
     created_at: datetime
 
 
+class ActiveGame(BaseModel):
+    """A table with an active game in progress, shown in the spectator lobby."""
+    id: str
+    white_player_nickname: str
+    black_player_nickname: str
+    match_points: Optional[int] = None
+    white_match_score: int = 0
+    black_match_score: int = 0
+    spectator_count: int = 0
+    created_at: datetime
+
+
 class JoinTableRequest(BaseModel):
     player_id: str
 
