@@ -137,7 +137,7 @@ def _heuristic_score_move(engine, move):
     if from_bar:
         score += 2.0
     # Prefer making points (landing where we already have one checker)
-    board = engine.state.board
+    board = engine.state.points
     bot_color = engine.state.current_turn
     if 1 <= move.to_point <= 24:
         val = board[move.to_point]
