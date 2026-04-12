@@ -82,6 +82,7 @@ function Dashboard({ playerId }: DashboardProps) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -116,6 +117,7 @@ function Dashboard({ playerId }: DashboardProps) {
 
   /** Trigger a browser download of the game export for `tableId`. */
   async function handleExport(tableId: string) {
+    setExportError(null);
     try {
       const text = await exportGame(tableId);
       const blob = new Blob([text], { type: "text/plain" });
@@ -125,8 +127,10 @@ function Dashboard({ playerId }: DashboardProps) {
       a.download = `game_${tableId}.mat`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch {
-      // Silently ignore – the game may not have recorded moves
+    } catch (err) {
+      setExportError(
+        err instanceof Error ? err.message : "Failed to export game.",
+      );
     }
   }
 
@@ -173,6 +177,10 @@ function Dashboard({ playerId }: DashboardProps) {
           <div className="stat-label">Abandoned</div>
         </div>
       </div>
+
+      {exportError && (
+        <div className="dashboard-empty">{exportError}</div>
+      )}
 
       {/* Game history table */}
       {data.games.length > 0 && (

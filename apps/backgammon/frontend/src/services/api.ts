@@ -205,9 +205,7 @@ export function getGameHistory(tableId: string): Promise<MoveRecord[]> {
  * uses a dedicated text-fetching helper instead of the shared `request`.
  */
 async function requestText(path: string): Promise<string> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
+  const headers: Record<string, string> = {};
   const token = getStoredToken();
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;

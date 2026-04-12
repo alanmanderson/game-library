@@ -477,7 +477,7 @@ async def export_game(
         "Game 1",
     ]
 
-    max_turns = max(len(white_records), len(black_records), 1)
+    max_turns = max(len(white_records), len(black_records))
     for i in range(max_turns):
         turn_num = i + 1
         white_rec = white_records[i] if i < len(white_records) else None
