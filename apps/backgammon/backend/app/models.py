@@ -34,6 +34,10 @@ class Player(Base):
     is_guest: bool = Column(Boolean, default=False, nullable=False)
     auth_provider: str = Column(String(20), default="local", nullable=False)
 
+    # Rating fields
+    rating: int = Column(Integer, default=1500, nullable=False)
+    rating_games: int = Column(Integer, default=0, nullable=False)
+
     # Relationships
     white_tables = relationship(
         "Table", foreign_keys="Table.white_player_id", back_populates="white_player"

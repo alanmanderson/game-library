@@ -21,6 +21,8 @@ class PlayerResponse(BaseModel):
     created_at: datetime
     is_guest: bool = False
     auth_provider: str = "local"
+    rating: int = 1500
+    rating_games: int = 0
 
 
 # ── Auth Schemas ─────────────────────────────────────────────────────────────
@@ -176,3 +178,20 @@ class DashboardResponse(BaseModel):
     abandoned_games: int
     total_count: int = 0
     games: list[GameHistoryItem]
+    rating: int = 1500
+    rating_games: int = 0
+
+
+# ── Leaderboard Schemas ───────────────────────────────────────────────────
+
+
+class LeaderboardEntry(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    nickname: str
+    rating: int
+    rating_games: int
+
+
+class LeaderboardResponse(BaseModel):
+    entries: list[LeaderboardEntry]

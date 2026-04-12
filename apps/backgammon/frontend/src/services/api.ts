@@ -13,6 +13,7 @@ import type {
   StatsOverview,
   DashboardData,
   AuthResponse,
+  LeaderboardData,
 } from "../types/game";
 import { TOKEN_KEY } from "../constants";
 
@@ -205,4 +206,13 @@ export function quickMatch(): Promise<Table> {
   return request<Table>("/api/quick-match", {
     method: "POST",
   });
+}
+
+// ---------------------------------------------------------------------------
+// Leaderboard endpoints
+// ---------------------------------------------------------------------------
+
+/** Fetch the leaderboard of top-rated players. */
+export function getLeaderboard(limit: number = 20): Promise<LeaderboardData> {
+  return request<LeaderboardData>(`/api/leaderboard?limit=${limit}`);
 }

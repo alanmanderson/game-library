@@ -432,6 +432,18 @@
   border: 1px solid rgba(255, 152, 0, 0.4);
 }
 
+/* Player rating badge */
+
+.player-rating {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  background: rgba(255, 193, 7, 0.15);
+  color: #ffc107;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }

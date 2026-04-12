@@ -28,6 +28,8 @@ export interface Player {
   created_at: string;
   is_guest?: boolean;
   auth_provider?: string;
+  rating?: number;
+  rating_games?: number;
 }
 
 /** Response from auth endpoints (register, login, google, guest). */
@@ -158,6 +160,20 @@ export interface DashboardData {
   win_rate: number;
   abandoned_games: number;
   games: GameHistoryItem[];
+  rating: number;
+  rating_games: number;
+}
+
+/** A single entry in the leaderboard. */
+export interface LeaderboardEntry {
+  nickname: string;
+  rating: number;
+  rating_games: number;
+}
+
+/** Response from the leaderboard endpoint. */
+export interface LeaderboardData {
+  entries: LeaderboardEntry[];
 }
 
 // ---------------------------------------------------------------------------

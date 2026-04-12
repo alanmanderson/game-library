@@ -235,17 +235,18 @@ function Game() {
 
   // ----- Derived values -----
 
-  const opponentName = useMemo(() => {
-    if (!table || !myColor) return "Opponent";
-    const opponentPlayer = myColor === "white" ? table.black_player : table.white_player;
-    return opponentPlayer?.nickname ?? "Opponent";
+  const opponentPlayer = useMemo(() => {
+    if (!table || !myColor) return null;
+    return myColor === "white" ? table.black_player : table.white_player;
   }, [table, myColor]);
 
-  const myName = useMemo(() => {
-    if (!table || !myColor) return "You";
-    const myPlayer = myColor === "white" ? table.white_player : table.black_player;
-    return myPlayer?.nickname ?? "You";
+  const myPlayer = useMemo(() => {
+    if (!table || !myColor) return null;
+    return myColor === "white" ? table.white_player : table.black_player;
   }, [table, myColor]);
+
+  const opponentName = opponentPlayer?.nickname ?? "Opponent";
+  const myName = myPlayer?.nickname ?? "You";
 
   const pipCounts = useMemo(() => {
     if (!gameState) return { white: 0, black: 0 };
@@ -467,6 +468,9 @@ function Game() {
                   {table.bot_difficulty}
                 </span>
               )}
+              {!isBotGame && opponentPlayer?.rating != null && (
+                <span className="player-rating">{opponentPlayer.rating}</span>
+              )}
             </div>
             <span className="pip-count">{opponentPips} pips</span>
             {table.match_points > 0 && (
@@ -549,6 +553,9 @@ function Game() {
             <div className="player-pill my-pill">
               <span className="connection-dot connected" />
               <span className="pill-name">{myName}</span>
+              {!isBotGame && myPlayer?.rating != null && (
+                <span className="player-rating">{myPlayer.rating}</span>
+              )}
             </div>
             <span className="pip-count">{myPips} pips</span>
             {table.match_points > 0 && (
