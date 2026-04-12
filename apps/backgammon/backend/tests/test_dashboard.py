@@ -114,6 +114,7 @@ class TestDashboardEndpoint:
         assert game["result"] == "win"
         assert game["win_type"] == "normal"
         assert game["score"] == 1
+        assert game["table_status"] == "finished"
 
     async def test_finished_game_loss(self, client, db_session):
         """A finished game where the player lost shows as a loss."""
@@ -153,6 +154,7 @@ class TestDashboardEndpoint:
         assert game["result"] == "loss"
         assert game["win_type"] == "gammon"
         assert game["score"] == 2
+        assert game["table_status"] == "finished"
 
     async def test_abandoned_game(self, client, db_session):
         """A game with status 'playing' shows as abandoned."""
@@ -189,6 +191,37 @@ class TestDashboardEndpoint:
         assert game["result"] == "abandoned"
         assert game["win_type"] is None
         assert game["score"] is None
+        assert game["table_status"] == "playing"
+
+    async def test_game_over_status_shows_as_abandoned(self, client, db_session):
+        """A table with status 'game_over' (mid-match) shows as abandoned and resumable."""
+        player, token = await register_player(client, "gameover@example.com", "GameOverPlayer")
+        opponent, _ = await register_player(client, "goopp@example.com", "GameOverOpp")
+
+        now = datetime.utcnow()
+        await insert_table(
+            db_session,
+            id="TBLGO001",
+            status="game_over",
+            white_player_id=player["id"],
+            black_player_id=opponent["id"],
+            created_at=now,
+        )
+        await db_session.commit()
+
+        resp = await client.get(
+            f"/api/players/{player['id']}/dashboard",
+            headers=auth_headers(token),
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["abandoned_games"] == 1
+        assert len(data["games"]) == 1
+
+        game = data["games"][0]
+        assert game["table_id"] == "TBLGO001"
+        assert game["result"] == "abandoned"
+        assert game["table_status"] == "game_over"
 
     async def test_summary_calculations(self, client, db_session):
         """Summary stats are calculated correctly across multiple games."""

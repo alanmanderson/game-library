@@ -95,6 +95,20 @@
   color: #ff9800;
 }
 
+.result-resume {
+  background: rgba(33, 150, 243, 0.15);
+  color: #2196f3;
+  cursor: pointer;
+}
+
+.resumable-row {
+  cursor: pointer;
+}
+
+.resumable-row:hover {
+  background: rgba(33, 150, 243, 0.08);
+}
+
 /* Loading / empty states */
 
 .dashboard-loading,
