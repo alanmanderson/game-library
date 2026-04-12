@@ -12,6 +12,7 @@ import type {
   StatsOverview,
   DashboardData,
   AuthResponse,
+  LeaderboardData,
 } from "../types/game";
 import { TOKEN_KEY } from "../constants";
 
@@ -188,4 +189,13 @@ export function getTable(tableId: string): Promise<Table> {
 /** Retrieve the full move-history log for a game played at `tableId`. */
 export function getGameHistory(tableId: string): Promise<MoveRecord[]> {
   return request<MoveRecord[]>(`/api/tables/${tableId}/history`);
+}
+
+// ---------------------------------------------------------------------------
+// Leaderboard endpoints
+// ---------------------------------------------------------------------------
+
+/** Fetch the leaderboard of top-rated players. */
+export function getLeaderboard(limit: number = 20): Promise<LeaderboardData> {
+  return request<LeaderboardData>(`/api/leaderboard?limit=${limit}`);
 }

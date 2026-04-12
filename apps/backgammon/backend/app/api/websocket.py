@@ -137,8 +137,20 @@ async def _build_full_message(table_id: str, player_id: str, msg_type: str = "ga
         return {
             "id": table.id,
             "status": table.status,
-            "white_player": {"id": white_player.id, "nickname": white_player.nickname, "created_at": str(white_player.created_at)} if white_player else None,
-            "black_player": {"id": black_player.id, "nickname": black_player.nickname, "created_at": str(black_player.created_at)} if black_player else None,
+            "white_player": {
+                "id": white_player.id,
+                "nickname": white_player.nickname,
+                "created_at": str(white_player.created_at),
+                "rating": white_player.rating,
+                "rating_games": white_player.rating_games,
+            } if white_player else None,
+            "black_player": {
+                "id": black_player.id,
+                "nickname": black_player.nickname,
+                "created_at": str(black_player.created_at),
+                "rating": black_player.rating,
+                "rating_games": black_player.rating_games,
+            } if black_player else None,
             "created_at": str(table.created_at),
             "match_points": table.match_points,
             "white_match_score": table.white_match_score,

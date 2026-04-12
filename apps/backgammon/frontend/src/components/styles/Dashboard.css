@@ -17,6 +17,10 @@
 /* Re-use .stat-card / .stat-value / .stat-label from Statistics.css.
    Only the color overrides below are dashboard-specific. */
 
+.dashboard-rating {
+  color: #ffc107;
+}
+
 .dashboard-wins {
   color: #4caf50;
 }

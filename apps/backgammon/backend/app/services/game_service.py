@@ -527,6 +527,7 @@ class GameManager:
         status is set to "finished" (match over).
         """
         from app.services.stats_service import update_stats
+        from app.services.rating_service import update_ratings
 
         table = await db.get(Table, table_id)
         if not table:
@@ -575,6 +576,15 @@ class GameManager:
             win_type,
             cube_value=engine.state.cube_value,
         )
+
+        # Update ELO ratings (only for match completion between registered players)
+        if match_over and table.winner_id:
+            loser_id = (
+                table.black_player_id
+                if table.winner_id == table.white_player_id
+                else table.white_player_id
+            )
+            await update_ratings(db, table.winner_id, loser_id)
 
         # NOTE: Engine cleanup is deferred to cleanup_finished_game() so that
         # the WebSocket handler can still broadcast the final game state.

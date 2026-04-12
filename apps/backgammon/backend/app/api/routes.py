@@ -1,6 +1,6 @@
 """REST API routes for the backgammon application."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, func
 
@@ -16,6 +16,8 @@ from app.schemas import (
     StatsOverview,
     DashboardResponse,
     GameHistoryItem,
+    LeaderboardEntry,
+    LeaderboardResponse,
 )
 from app.services.game_service import game_manager
 from app.services.stats_service import get_player_stats
@@ -200,6 +202,8 @@ async def player_dashboard(
         abandoned_games=abandoned_games,
         total_count=total_count,
         games=games,
+        rating=player.rating,
+        rating_games=player.rating_games,
     )
 
 
@@ -317,3 +321,38 @@ async def get_game_history(
         .order_by(MoveRecord.move_number)
     )
     return result.scalars().all()
+
+
+# ------------------------------------------------------------------
+# Leaderboard
+# ------------------------------------------------------------------
+
+
+@router.get("/leaderboard", response_model=LeaderboardResponse)
+async def get_leaderboard(
+    limit: int = Query(default=20, le=100),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Return the top-rated players who have played at least 5 rated games.
+
+    Guest players are excluded. Results are ordered by rating descending.
+    """
+    result = await db.execute(
+        select(Player)
+        .where(Player.rating_games >= 5)
+        .where(Player.is_guest == False)  # noqa: E712
+        .order_by(Player.rating.desc())
+        .limit(limit)
+    )
+    players = result.scalars().all()
+
+    entries = [
+        LeaderboardEntry(
+            nickname=p.nickname,
+            rating=p.rating,
+            rating_games=p.rating_games,
+        )
+        for p in players
+    ]
+
+    return LeaderboardResponse(entries=entries)

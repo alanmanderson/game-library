@@ -115,6 +115,10 @@ function Dashboard({ playerId }: DashboardProps) {
       {/* Summary stat cards */}
       <div className="dashboard-overview">
         <div className="stat-card">
+          <div className="stat-value dashboard-rating">{data.rating}</div>
+          <div className="stat-label">Rating</div>
+        </div>
+        <div className="stat-card">
           <div className="stat-value">{data.total_games}</div>
           <div className="stat-label">Games Played</div>
         </div>
