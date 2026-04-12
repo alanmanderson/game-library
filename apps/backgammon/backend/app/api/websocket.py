@@ -114,6 +114,17 @@ class ConnectionManager:
         """Return a list of currently connected player IDs for a table."""
         return list(self._connections.get(table_id, {}).keys())
 
+    async def close_all(self) -> None:
+        """Gracefully close all WebSocket connections and clear the registry."""
+        for table_id in list(self._connections.keys()):
+            for player_id in list(self._connections[table_id].keys()):
+                try:
+                    ws = self._connections[table_id][player_id]
+                    await ws.close(code=1001, reason="Server shutting down")
+                except Exception:
+                    pass
+        self._connections.clear()
+
 
 # Global singleton connection manager
 manager = ConnectionManager()

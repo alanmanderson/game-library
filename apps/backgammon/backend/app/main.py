@@ -49,14 +49,7 @@ async def lifespan(app: FastAPI):
         pass
 
     # Gracefully close all WebSocket connections
-    for table_id in list(ws_manager._connections.keys()):
-        for player_id in list(ws_manager._connections[table_id].keys()):
-            try:
-                ws = ws_manager._connections[table_id][player_id]
-                await ws.close(code=1001, reason="Server shutting down")
-            except Exception:
-                pass
-    ws_manager._connections.clear()
+    await ws_manager.close_all()
 
 
 app = FastAPI(title="Backgammon Online", version="1.0.0", lifespan=lifespan)
