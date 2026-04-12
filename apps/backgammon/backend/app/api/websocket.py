@@ -49,7 +49,7 @@ class ConnectionManager:
             if pid != player_id:
                 try:
                     await conn.send_json({"type": "opponent_reconnected", "data": {}})
-                except Exception as e:
+                except (ConnectionError, RuntimeError) as e:
                     logger.warning(f"Failed to send to player {pid}: {e}")
                     failed.append(pid)
         for pid in failed:
@@ -71,7 +71,7 @@ class ConnectionManager:
         if ws:
             try:
                 await ws.send_json(message)
-            except Exception as e:
+            except (ConnectionError, RuntimeError) as e:
                 logger.warning(f"Failed to send to player {player_id}: {e}")
                 self.disconnect(table_id, player_id)
 
@@ -88,7 +88,7 @@ class ConnectionManager:
             if pid != exclude:
                 try:
                     await ws.send_json(message)
-                except Exception as e:
+                except (ConnectionError, RuntimeError) as e:
                     logger.warning(f"Failed to send to player {pid}: {e}")
                     failed.append(pid)
         for pid in failed:
@@ -104,7 +104,7 @@ class ConnectionManager:
             if pid != player_id:
                 try:
                     await ws.send_json({"type": "opponent_disconnected", "data": {}})
-                except Exception as e:
+                except (ConnectionError, RuntimeError) as e:
                     logger.warning(f"Failed to send to player {pid}: {e}")
                     failed.append(pid)
         for pid in failed:
@@ -190,7 +190,7 @@ async def _send_game_state_to_all(table_id: str, db=None) -> None:
         try:
             message = await _build_full_message(table_id, pid, db=db)
             await manager.send_to_player(table_id, pid, message)
-        except Exception:
+        except (ConnectionError, RuntimeError, ValueError, KeyError):
             logger.exception("Failed to send game state to player %s", pid)
 
 
@@ -198,8 +198,8 @@ async def _send_error(ws: WebSocket, message: str) -> None:
     """Send an error message to a single WebSocket client."""
     try:
         await ws.send_json({"type": "error", "data": {"message": message}})
-    except Exception:
-        pass
+    except (ConnectionError, RuntimeError):
+        pass  # Client already disconnected, nothing to do
 
 
 async def websocket_endpoint(websocket: WebSocket, table_id: str, player_id: str) -> None:
@@ -350,7 +350,7 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, player_id: str
                         if engine and state_snapshot:
                             await game_manager.restore_engine_from_snapshot(table_id, engine, state_snapshot)
                         await _send_error(websocket, str(e))
-                    except Exception:
+                    except Exception:  # Broad catch intentional: safety net to keep WS loop alive and rollback DB
                         await db.rollback()
                         # Restore engine state on DB failure
                         if engine and state_snapshot:
@@ -370,7 +370,7 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, player_id: str
 
     except WebSocketDisconnect:
         logger.info("Player %s disconnected from table %s", player_id, table_id)
-    except Exception:
+    except Exception:  # Broad catch intentional: ensure cleanup in finally block always runs
         logger.exception(
             "WebSocket error for player %s at table %s", player_id, table_id
         )
