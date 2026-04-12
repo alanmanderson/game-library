@@ -43,3 +43,10 @@ variable "google_client_id" {
   type        = string
   default     = ""
 }
+
+# TODO: Restrict this to your actual IP addresses for production use
+variable "allowed_ssh_ips" {
+  description = "List of CIDR blocks allowed to SSH into the VM (e.g. [\"203.0.113.10/32\"])"
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
