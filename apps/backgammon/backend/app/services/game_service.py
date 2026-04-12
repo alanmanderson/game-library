@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import secrets
 import string
 import random
 from typing import Optional
@@ -34,7 +35,7 @@ class GameManager:
     def generate_table_id(self) -> str:
         """Generate a short, unique, human-friendly table ID (6 uppercase alphanumeric chars)."""
         chars = string.ascii_uppercase + string.digits
-        return "".join(random.choices(chars, k=6))
+        return "".join(secrets.choice(chars) for _ in range(6))
 
     def _get_lock(self, table_id: str) -> asyncio.Lock:
         """Return (creating if needed) the per-table asyncio lock."""
