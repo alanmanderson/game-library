@@ -232,3 +232,94 @@
   margin-bottom: 1rem;
   color: var(--accent);
 }
+
+/* ---- Responsive: Tablet ---- */
+
+@media (max-width: 900px) {
+  .home {
+    padding: 1.5rem;
+    gap: 1.5rem;
+  }
+
+  .home-hero {
+    max-width: 380px;
+  }
+
+  .home-actions {
+    max-width: 100%;
+  }
+
+  .stats-section {
+    max-width: 100%;
+  }
+}
+
+/* ---- Responsive: Mobile ---- */
+
+@media (max-width: 600px) {
+  .home {
+    padding: 1rem;
+    gap: 1rem;
+  }
+
+  .home-hero {
+    max-width: 300px;
+  }
+
+  .home-header .welcome-text {
+    font-size: 0.95rem;
+  }
+
+  .home-actions {
+    max-width: 100%;
+    gap: 1rem;
+  }
+
+  .home-actions .action-card {
+    padding: 1rem;
+    gap: 0.5rem;
+  }
+
+  .join-form {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .join-form input {
+    width: 100%;
+  }
+
+  .color-selector {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .match-points-selector {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .difficulty-selector {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .difficulty-options {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .match-points-options {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .color-options {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .stats-section {
+    max-width: 100%;
+  }
+}

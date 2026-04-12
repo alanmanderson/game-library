@@ -167,3 +167,40 @@
 .guest-form input {
   text-align: center;
 }
+
+/* ---- Responsive: Mobile ---- */
+
+@media (max-width: 600px) {
+  .auth-modal {
+    padding: 1.5rem;
+    width: 95%;
+  }
+
+  .auth-modal h2 {
+    font-size: 1.2rem;
+    margin-bottom: 1rem;
+  }
+
+  .auth-tabs {
+    margin-bottom: 1rem;
+  }
+
+  .auth-tab {
+    font-size: 0.85rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  .auth-form input {
+    font-size: 0.9rem;
+    padding: 0.6rem 0.75rem;
+  }
+
+  .auth-btn {
+    padding: 0.65rem;
+    font-size: 0.9rem;
+  }
+
+  .auth-divider {
+    margin: 1rem 0;
+  }
+}

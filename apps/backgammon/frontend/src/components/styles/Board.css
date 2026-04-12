@@ -33,3 +33,23 @@
 .board-svg .bearoff-area {
   cursor: pointer;
 }
+
+/* ---- Responsive: Tablet ---- */
+
+@media (max-width: 900px) {
+  .board-svg {
+    width: 100%;
+    max-width: 700px;
+  }
+}
+
+/* ---- Responsive: Mobile ---- */
+
+@media (max-width: 600px) {
+  .board-svg {
+    width: 100%;
+    max-width: 100%;
+    filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.3));
+    border-radius: 4px;
+  }
+}
