@@ -39,7 +39,11 @@ scp "$SCRIPT_DIR/Caddyfile" "$REMOTE":/opt/backgammon/
 ssh "$REMOTE" "rm -rf /opt/backgammon/web-dist"
 scp -r "$SCRIPT_DIR/frontend/dist" "$REMOTE":/opt/backgammon/web-dist
 
-# 5. Load image and restart services on VM
+# 5. Tag current image as :previous for rollback
+echo "==> Tagging current image as :previous for rollback..."
+ssh "$REMOTE" "docker tag backgammon-server:latest backgammon-server:previous 2>/dev/null || true"
+
+# 6. Load image and restart services on VM
 echo "==> Loading image and starting services..."
 ssh "$REMOTE" bash -s <<'EOF'
 set -euo pipefail
@@ -70,5 +74,17 @@ docker compose up -d --force-recreate
 
 echo "==> Deployment complete!"
 EOF
+
+# 7. Health check with auto-rollback on failure
+COMPOSE="/opt/backgammon/docker-compose.yml"
+echo "==> Verifying deployment..."
+sleep 5
+if ! ssh "$REMOTE" "curl -sf http://localhost:8000/api/health > /dev/null"; then
+    echo "ERROR: Health check failed! Rolling back..."
+    ssh "$REMOTE" "docker tag backgammon-server:previous backgammon-server:latest && cd /opt/backgammon && docker compose down && docker compose up -d"
+    echo "==> Rolled back to previous version."
+    exit 1
+fi
+echo "==> Health check passed."
 
 echo "==> Done. Visit https://$(cd "$SCRIPT_DIR/infra" && terraform output -raw domain_name 2>/dev/null || echo '<your-domain>')"
