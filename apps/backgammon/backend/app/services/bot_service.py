@@ -267,7 +267,7 @@ async def execute_bot_turn(table_id: str) -> None:
                     if should_accept:
                         await game_manager.accept_double(db, table_id, BOT_PLAYER_ID)
                     else:
-                        await game_manager.reject_double(db, table_id, BOT_PLAYER_ID)
+                        await game_manager.decline_double(db, table_id, BOT_PLAYER_ID)
                     await db.commit()
                     await _send_game_state_to_all(table_id, db=db)
 
