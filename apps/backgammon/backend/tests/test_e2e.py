@@ -50,12 +50,8 @@ from app.services.game_service import game_manager
 
 
 def _run_async(coro):
-    """Run a coroutine synchronously in a new event loop."""
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
+    """Run a coroutine synchronously using a dedicated event loop."""
+    return asyncio.run(coro)
 
 
 def _auth_headers(token: str) -> dict:
