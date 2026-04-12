@@ -186,6 +186,7 @@ async def player_dashboard(
                 win_type=win_type,
                 score=score,
                 played_at=played_at,
+                table_status=table.status,
             )
         )
 

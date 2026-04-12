@@ -156,6 +156,7 @@ class GameHistoryItem(BaseModel):
     win_type: Optional[str] = None  # "normal", "gammon", "backgammon"
     score: Optional[int] = None
     played_at: datetime
+    table_status: str
 
 
 class DashboardResponse(BaseModel):

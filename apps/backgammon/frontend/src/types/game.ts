@@ -137,6 +137,7 @@ export interface GameHistoryItem {
   win_type: string | null;
   score: number | null;
   played_at: string;
+  table_status: string;
 }
 
 /** Dashboard data with game history and summary stats. */

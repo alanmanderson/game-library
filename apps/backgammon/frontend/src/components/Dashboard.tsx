@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import type { DashboardData, GameHistoryItem } from "../types/game";
 import { getPlayerDashboard } from "../services/api";
 import "./styles/Dashboard.css";
@@ -34,9 +35,20 @@ function formatWinType(item: GameHistoryItem): string {
   }
 }
 
+/** Whether the game can be resumed (abandoned but table still active). */
+function isResumable(game: GameHistoryItem): boolean {
+  return (
+    game.result === "abandoned" &&
+    (game.table_status === "playing" || game.table_status === "game_over")
+  );
+}
+
 /** Return the CSS class for a result badge. */
-function resultClass(result: GameHistoryItem["result"]): string {
-  switch (result) {
+function resultClass(game: GameHistoryItem): string {
+  if (isResumable(game)) {
+    return "result-badge result-resume";
+  }
+  switch (game.result) {
     case "win":
       return "result-badge result-win";
     case "loss":
@@ -49,8 +61,11 @@ function resultClass(result: GameHistoryItem["result"]): string {
 }
 
 /** Return a display label for the result. */
-function resultLabel(result: GameHistoryItem["result"]): string {
-  switch (result) {
+function resultLabel(game: GameHistoryItem): string {
+  if (isResumable(game)) {
+    return "Resume";
+  }
+  switch (game.result) {
     case "win":
       return "Win";
     case "loss":
@@ -58,7 +73,7 @@ function resultLabel(result: GameHistoryItem["result"]): string {
     case "abandoned":
       return "Abandoned";
     default:
-      return result;
+      return game.result;
   }
 }
 
@@ -153,7 +168,10 @@ function Dashboard({ playerId }: DashboardProps) {
           </thead>
           <tbody>
             {data.games.map((game) => (
-              <tr key={game.table_id}>
+              <tr
+                key={game.table_id}
+                className={isResumable(game) ? "resumable-row" : undefined}
+              >
                 <td>{formatDate(game.played_at)}</td>
                 <td>{game.opponent_nickname}</td>
                 <td>
@@ -165,9 +183,17 @@ function Dashboard({ playerId }: DashboardProps) {
                   />
                 </td>
                 <td>
-                  <span className={resultClass(game.result)}>
-                    {resultLabel(game.result)}
-                  </span>
+                  {isResumable(game) ? (
+                    <Link to={`/game/${game.table_id}`}>
+                      <span className={resultClass(game)}>
+                        {resultLabel(game)}
+                      </span>
+                    </Link>
+                  ) : (
+                    <span className={resultClass(game)}>
+                      {resultLabel(game)}
+                    </span>
+                  )}
                 </td>
                 <td>{formatWinType(game)}</td>
                 <td>{game.score != null ? game.score : "-"}</td>
