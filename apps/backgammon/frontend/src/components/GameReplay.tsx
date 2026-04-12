@@ -50,6 +50,12 @@ function GameReplay() {
   const [playSpeed, setPlaySpeed] = useState(1500); // ms between moves
   const autoPlayRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Speed slider constants: the slider is inverted so right = faster.
+  // Slider range is [SPEED_SLIDER_MIN, SPEED_SLIDER_MAX]; actual delay = SPEED_OFFSET - sliderValue.
+  const SPEED_MIN_MS = 300;
+  const SPEED_MAX_MS = 3000;
+  const SPEED_OFFSET = SPEED_MIN_MS + SPEED_MAX_MS; // 3300
+
   useEffect(() => {
     if (!tableId) return;
     let cancelled = false;
@@ -302,11 +308,11 @@ function GameReplay() {
         <input
           id="replay-speed-slider"
           type="range"
-          min={300}
-          max={3000}
+          min={SPEED_OFFSET - SPEED_MAX_MS}
+          max={SPEED_OFFSET - SPEED_MIN_MS}
           step={100}
-          value={3300 - playSpeed} /* invert so right = faster */
-          onChange={(e) => setPlaySpeed(3300 - Number(e.target.value))}
+          value={SPEED_OFFSET - playSpeed} /* invert so right = faster */
+          onChange={(e) => setPlaySpeed(SPEED_OFFSET - Number(e.target.value))}
           className="replay-speed-slider"
           aria-label="Auto-play speed"
         />
