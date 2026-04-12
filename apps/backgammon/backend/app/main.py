@@ -2,10 +2,16 @@
 
 import asyncio
 import logging
+import time
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+try:
+    from pythonjsonlogger.json import JsonFormatter as _JsonFormatter
+except ImportError:
+    from pythonjsonlogger import jsonlogger as _jl
+    _JsonFormatter = _jl.JsonFormatter
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
@@ -20,9 +26,32 @@ from app.database import async_session, get_db
 from app.limiter import limiter
 from app.services.game_service import game_manager
 
+# ---------------------------------------------------------------------------
+# Structured JSON logging
+# ---------------------------------------------------------------------------
+
+
+def setup_logging() -> None:
+    """Configure structured JSON logging for the entire application."""
+    handler = logging.StreamHandler()
+    formatter = _JsonFormatter(
+        fmt="%(asctime)s %(name)s %(levelname)s %(message)s",
+        rename_fields={"asctime": "timestamp", "levelname": "level"},
+    )
+    handler.setFormatter(formatter)
+    root_logger = logging.getLogger()
+    root_logger.handlers = [handler]
+    root_logger.setLevel(logging.INFO)
+
+
+setup_logging()
+
 logger = logging.getLogger(__name__)
 
 CLEANUP_INTERVAL_SECONDS = 600  # 10 minutes
+
+# Track application start time for uptime reporting
+_start_time: float = time.time()
 
 
 async def _periodic_engine_cleanup() -> None:
@@ -41,6 +70,9 @@ async def _periodic_engine_cleanup() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan: start background tasks on startup, cancel on shutdown."""
+    global _start_time
+    _start_time = time.time()
+    logger.info("Application starting up")
     cleanup_task = asyncio.create_task(_periodic_engine_cleanup())
     yield
     cleanup_task.cancel()
@@ -51,6 +83,7 @@ async def lifespan(app: FastAPI):
 
     # Gracefully close all WebSocket connections
     await ws_manager.close_all()
+    logger.info("Application shut down")
 
 
 app = FastAPI(title="Backgammon Online", version="1.0.0", lifespan=lifespan)
@@ -66,6 +99,31 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization"],
 )
 
+# ---------------------------------------------------------------------------
+# Request logging middleware
+# ---------------------------------------------------------------------------
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log each HTTP request with method, path, status, and duration."""
+    start = time.time()
+    response = await call_next(request)
+    duration = time.time() - start
+    # Skip noisy health-check logs in production
+    if request.url.path != "/api/health":
+        logger.info(
+            "request",
+            extra={
+                "method": request.method,
+                "path": request.url.path,
+                "status": response.status_code,
+                "duration_ms": round(duration * 1000),
+            },
+        )
+    return response
+
+
 app.include_router(router)
 app.include_router(auth_router)
 
@@ -73,10 +131,20 @@ app.include_router(auth_router)
 app.websocket("/ws/{table_id}/{player_id}")(websocket_endpoint)
 
 
+# ---------------------------------------------------------------------------
+# Health check
+# ---------------------------------------------------------------------------
+
+
 @app.get("/api/health")
 async def health_check(db: AsyncSession = Depends(get_db)):
     try:
         await db.execute(text("SELECT 1"))
-        return {"status": "healthy"}
+        return {
+            "status": "healthy",
+            "active_games": len(game_manager.engines),
+            "active_connections": ws_manager.connection_count(),
+            "uptime_seconds": round(time.time() - _start_time),
+        }
     except (SQLAlchemyError, ConnectionError, OSError):
         raise HTTPException(status_code=503, detail="Database unavailable")
