@@ -61,6 +61,20 @@ fi
 docker load < /tmp/backgammon-server.tar.gz
 rm /tmp/backgammon-server.tar.gz
 
+# Ensure backup directory exists
+mkdir -p /opt/backgammon/backups
+
+# Pre-deploy database backup (non-blocking: don't fail deploy if backup fails)
+echo "Creating pre-deploy database backup..."
+if BACKUP_FILE="/opt/backgammon/backups/pre-deploy-$(date +%Y%m%d_%H%M%S).sql" && \
+   set -a && source .env && set +a && \
+   [ -n "${DATABASE_URL_SYNC:-}" ] && \
+   docker compose run --rm fastapi pg_dump "$DATABASE_URL_SYNC" > "$BACKUP_FILE" 2>/dev/null; then
+  echo "Backup saved to $BACKUP_FILE"
+else
+  echo "Warning: pre-deploy backup failed (non-blocking, continuing deploy)"
+fi
+
 # Run Alembic migrations
 echo "Running migrations..."
 docker compose run --rm fastapi alembic upgrade head
