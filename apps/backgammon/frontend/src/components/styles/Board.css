@@ -17,6 +17,12 @@
   transition: transform 0.2s ease;
 }
 
+/* Animated checker sliding from source to destination */
+.board-svg .checker-animating {
+  pointer-events: none;
+  will-change: transform;
+}
+
 /* Clickable areas */
 .board-svg .point-area {
   cursor: pointer;
