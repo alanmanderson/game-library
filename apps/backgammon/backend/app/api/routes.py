@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, func
 
 from app.database import get_db
-from app.models import Player, Table, MoveRecord
+from app.models import Player, Table, MoveRecord, PlayerStats
 from app.schemas import (
     PlayerResponse,
     TableCreate,
@@ -434,29 +434,85 @@ async def get_game_history(
 
 @router.get("/leaderboard", response_model=LeaderboardResponse)
 async def get_leaderboard(
-    limit: int = Query(default=20, le=100),
+    metric: str = Query(default="wins", pattern="^(rating|wins|win_rate)$"),
+    limit: int = Query(default=100, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Return the top-rated players who have played at least 5 rated games.
+    """Return leaderboard entries sorted by the chosen metric.
 
-    Guest players are excluded. Results are ordered by rating descending.
+    metric=rating  – top players by ELO rating (min 5 rated games)
+    metric=wins    – top players by total wins (from PlayerStats)
+    metric=win_rate – top players by win rate (min 10 games)
+
+    Guest and bot accounts are always excluded.
     """
-    result = await db.execute(
-        select(Player)
-        .where(Player.rating_games >= 5)
-        .where(Player.is_guest == False)  # noqa: E712
-        .order_by(Player.rating.desc())
-        .limit(limit)
-    )
-    players = result.scalars().all()
-
-    entries = [
-        LeaderboardEntry(
-            nickname=p.nickname,
-            rating=p.rating,
-            rating_games=p.rating_games,
+    # Build a subquery that aggregates wins/games from PlayerStats
+    stats_sq = (
+        select(
+            PlayerStats.player_id,
+            func.sum(PlayerStats.games_won).label("total_wins"),
+            func.sum(PlayerStats.games_played).label("total_games"),
         )
-        for p in players
-    ]
+        .group_by(PlayerStats.player_id)
+        .subquery()
+    )
 
-    return LeaderboardResponse(entries=entries)
+    base_q = (
+        select(
+            Player.id,
+            Player.nickname,
+            Player.rating,
+            Player.rating_games,
+            func.coalesce(stats_sq.c.total_wins, 0).label("total_wins"),
+            func.coalesce(stats_sq.c.total_games, 0).label("total_games"),
+        )
+        .outerjoin(stats_sq, Player.id == stats_sq.c.player_id)
+        .where(Player.is_guest == False)  # noqa: E712
+        .where(Player.id != BOT_PLAYER_ID)
+    )
+
+    if metric == "rating":
+        q = (
+            base_q
+            .where(Player.rating_games >= 5)
+            .order_by(Player.rating.desc())
+        )
+    elif metric == "wins":
+        q = base_q.order_by(func.coalesce(stats_sq.c.total_wins, 0).desc())
+    else:  # win_rate
+        q = (
+            base_q
+            .where(func.coalesce(stats_sq.c.total_games, 0) >= 10)
+            .order_by(
+                (func.coalesce(stats_sq.c.total_wins, 0) * 1.0
+                 / func.coalesce(stats_sq.c.total_games, 1)).desc()
+            )
+        )
+
+    # Count total matching rows (before pagination)
+    count_result = await db.execute(select(func.count()).select_from(q.subquery()))
+    total = count_result.scalar() or 0
+
+    result = await db.execute(q.offset(offset).limit(limit))
+    rows = result.all()
+
+    entries = []
+    for i, row in enumerate(rows):
+        total_wins = int(row.total_wins)
+        total_games = int(row.total_games)
+        win_rate = (total_wins / total_games * 100.0) if total_games > 0 else 0.0
+        entries.append(
+            LeaderboardEntry(
+                rank=offset + i + 1,
+                player_id=row.id,
+                nickname=row.nickname,
+                rating=row.rating,
+                rating_games=row.rating_games,
+                total_wins=total_wins,
+                total_games=total_games,
+                win_rate=win_rate,
+            )
+        )
+
+    return LeaderboardResponse(entries=entries, total=total)
