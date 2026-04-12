@@ -58,6 +58,7 @@ class TableCreate(BaseModel):
     player_id: str
     preferred_color: Optional[str] = None  # "white", "black", or None (random)
     match_points: int = Field(default=5, ge=1, le=10)
+    is_public: bool = False
 
 
 class TableResponse(BaseModel):
@@ -72,10 +73,19 @@ class TableResponse(BaseModel):
     white_match_score: int = 0
     black_match_score: int = 0
     bot_difficulty: Optional[str] = None
+    is_public: bool = False
 
 
 class InviteBotRequest(BaseModel):
     difficulty: Literal["easy", "medium", "hard", "expert"] = "hard"
+
+
+class LobbyTable(BaseModel):
+    id: str
+    creator_nickname: str
+    match_points: Optional[int] = None
+    preferred_color: Optional[str] = None
+    created_at: datetime
 
 
 class JoinTableRequest(BaseModel):

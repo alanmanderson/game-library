@@ -16,6 +16,7 @@ from app.schemas import (
     StatsOverview,
     DashboardResponse,
     GameHistoryItem,
+    LobbyTable,
 )
 from app.services.game_service import game_manager
 from app.services.stats_service import get_player_stats
@@ -215,7 +216,7 @@ async def create_table(
     db: AsyncSession = Depends(get_db),
 ) -> Table:
     """Create a new game table. The creating player waits for an opponent."""
-    table = await game_manager.create_table(db, current_player.id, data.preferred_color, data.match_points)
+    table = await game_manager.create_table(db, current_player.id, data.preferred_color, data.match_points, data.is_public)
     await db.refresh(table)
     # Eagerly load the player relationship for the response
     if table.white_player_id == current_player.id:
@@ -298,6 +299,108 @@ async def invite_bot(
     # If the bot goes first, schedule its turn
     schedule_bot_turn_if_needed(table_id)
 
+    return table
+
+
+# ------------------------------------------------------------------
+# Lobby / matchmaking
+# ------------------------------------------------------------------
+
+
+@router.get("/lobby", response_model=list[LobbyTable])
+async def get_lobby(db: AsyncSession = Depends(get_db)):
+    """Get all public tables waiting for opponents."""
+    result = await db.execute(
+        select(Table).where(
+            Table.is_public == True,  # noqa: E712
+            Table.status == "waiting",
+        ).order_by(Table.created_at.desc()).limit(20)
+    )
+    tables = result.scalars().all()
+
+    # Load creator nicknames
+    creator_ids: set[str] = set()
+    for table in tables:
+        cid = table.white_player_id or table.black_player_id
+        if cid:
+            creator_ids.add(cid)
+
+    if creator_ids:
+        players_result = await db.execute(
+            select(Player).where(Player.id.in_(creator_ids))
+        )
+        player_lookup = {p.id: p for p in players_result.scalars().all()}
+    else:
+        player_lookup = {}
+
+    lobby_tables: list[LobbyTable] = []
+    for table in tables:
+        creator_id = table.white_player_id or table.black_player_id
+        creator = player_lookup.get(creator_id) if creator_id else None
+        # Determine preferred color based on which slot the creator took
+        if table.white_player_id and not table.black_player_id:
+            preferred_color = "white"
+        elif table.black_player_id and not table.white_player_id:
+            preferred_color = "black"
+        else:
+            preferred_color = None
+
+        lobby_tables.append(
+            LobbyTable(
+                id=table.id,
+                creator_nickname=creator.nickname if creator else "Unknown",
+                match_points=table.match_points,
+                preferred_color=preferred_color,
+                created_at=table.created_at,
+            )
+        )
+
+    return lobby_tables
+
+
+@router.post("/quick-match", response_model=TableResponse)
+async def quick_match(
+    current_player: Player = Depends(get_current_player),
+    db: AsyncSession = Depends(get_db),
+):
+    """Join an available public table or create a new one.
+
+    Tries to find an existing waiting public table that wasn't created
+    by the requesting player. If found, joins it. Otherwise, creates a
+    new public table.
+    """
+    # Try to find a waiting public table not created by this player
+    result = await db.execute(
+        select(Table).where(
+            Table.is_public == True,  # noqa: E712
+            Table.status == "waiting",
+            Table.white_player_id != current_player.id,
+            Table.black_player_id != current_player.id,
+        ).order_by(Table.created_at.asc()).limit(1)
+    )
+    existing_table = result.scalars().first()
+
+    if existing_table:
+        # Join the existing table
+        try:
+            table = await game_manager.join_table(db, existing_table.id, current_player.id)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        # Load relationships
+        if table.white_player_id:
+            table.white_player = await db.get(Player, table.white_player_id)
+        if table.black_player_id:
+            table.black_player = await db.get(Player, table.black_player_id)
+        await notify_game_started(table.id)
+        return table
+
+    # No available table found; create a new public one
+    table = await game_manager.create_table(db, current_player.id, is_public=True)
+    await db.refresh(table)
+    if table.white_player_id == current_player.id:
+        table.white_player = current_player
+    elif table.black_player_id == current_player.id:
+        table.black_player = current_player
     return table
 
 

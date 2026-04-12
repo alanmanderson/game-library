@@ -158,7 +158,7 @@ describe("createTable", () => {
       expect.stringContaining("/api/tables"),
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ player_id: "p1", preferred_color: null, match_points: 5 }),
+        body: JSON.stringify({ player_id: "p1", preferred_color: null, match_points: 5, is_public: false }),
       }),
     );
   });

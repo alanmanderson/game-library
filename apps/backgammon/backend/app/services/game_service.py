@@ -53,13 +53,13 @@ class GameManager:
     # Table lifecycle
     # ------------------------------------------------------------------
 
-    async def create_table(self, db: AsyncSession, player_id: str, preferred_color: Optional[str] = None, match_points: int = 5) -> Table:
+    async def create_table(self, db: AsyncSession, player_id: str, preferred_color: Optional[str] = None, match_points: int = 5, is_public: bool = False) -> Table:
         """Create a new table. The creating player is assigned based on preferred_color."""
         table_id = self.generate_table_id()
         if preferred_color == "black":
-            table = Table(id=table_id, black_player_id=player_id, status="waiting", match_points=match_points)
+            table = Table(id=table_id, black_player_id=player_id, status="waiting", match_points=match_points, is_public=is_public)
         else:
-            table = Table(id=table_id, white_player_id=player_id, status="waiting", match_points=match_points)
+            table = Table(id=table_id, white_player_id=player_id, status="waiting", match_points=match_points, is_public=is_public)
         db.add(table)
         await db.flush()
         return table

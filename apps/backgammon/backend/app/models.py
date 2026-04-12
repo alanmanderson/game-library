@@ -79,6 +79,8 @@ class Table(Base):
     black_match_score: int = Column(Integer, nullable=False, default=0)
     # Bot difficulty
     bot_difficulty: str | None = Column(String(10), nullable=True)
+    # Lobby visibility
+    is_public: bool = Column(Boolean, default=False, server_default="false")
 
     # Relationships
     white_player = relationship(

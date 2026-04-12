@@ -100,6 +100,16 @@ export interface Table {
   white_match_score: number;
   black_match_score: number;
   bot_difficulty?: string;
+  is_public?: boolean;
+}
+
+/** A public table shown in the game lobby. */
+export interface LobbyTable {
+  id: string;
+  creator_nickname: string;
+  match_points: number | null;
+  preferred_color: string | null;
+  created_at: string;
 }
 
 /** A single row in the move-history log for a completed turn. */
