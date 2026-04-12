@@ -243,8 +243,75 @@ class TestGameHistory:
 
 
 # -----------------------------------------------------------------------
-# Player stats
+# Game export
 # -----------------------------------------------------------------------
+
+
+class TestGameExport:
+    async def test_export_not_found(self, client):
+        """GET /api/tables/{id}/export returns 404 for a nonexistent table."""
+        resp = await client.get("/api/tables/XXXXXXXX/export")
+        assert resp.status_code == 404
+
+    async def test_export_empty_game(self, client):
+        """Export of a newly-created table returns valid plain-text with headers."""
+        table, creator_auth, joiner_auth = await create_and_join_table(client, "Alice", "Bob")
+        table_id = table["id"]
+
+        resp = await client.get(f"/api/tables/{table_id}/export")
+        assert resp.status_code == 200
+        assert "text/plain" in resp.headers["content-type"]
+        content = resp.text
+        # Both player nicknames appear (order depends on white/black assignment).
+        assert "Alice" in content
+        assert "Bob" in content
+        assert "Match to" in content
+        assert "Game 1" in content
+
+    async def test_export_with_move_records(self, client, db_session):
+        """Export output includes dice and move notation from recorded moves."""
+        from app.models import MoveRecord
+
+        table, creator_auth, joiner_auth = await create_and_join_table(client, "WhitePlayer", "BlackPlayer")
+        table_id = table["id"]
+        white_id = table["white_player"]["id"]
+        black_id = table["black_player"]["id"]
+
+        # Insert synthetic move records directly into the test database.
+        rec1 = MoveRecord(
+            table_id=table_id,
+            player_id=white_id,
+            move_number=1,
+            dice_roll="3-1",
+            moves_notation="8/5 6/5",
+        )
+        rec2 = MoveRecord(
+            table_id=table_id,
+            player_id=black_id,
+            move_number=2,
+            dice_roll="4-2",
+            moves_notation="24/20 13/11",
+        )
+        db_session.add(rec1)
+        db_session.add(rec2)
+        await db_session.commit()
+
+        resp = await client.get(f"/api/tables/{table_id}/export")
+        assert resp.status_code == 200
+        content = resp.text
+        assert "31: 8/5 6/5" in content
+        assert "42: 24/20 13/11" in content
+        assert " 1)" in content
+
+    async def test_export_content_disposition_header(self, client):
+        """The response carries a Content-Disposition attachment header."""
+        table, _, _ = await create_and_join_table(client)
+        table_id = table["id"]
+        resp = await client.get(f"/api/tables/{table_id}/export")
+        assert resp.status_code == 200
+        cd = resp.headers.get("content-disposition", "")
+        assert "attachment" in cd
+        assert f"game_{table_id}.mat" in cd
 
 
 class TestPlayerStats:

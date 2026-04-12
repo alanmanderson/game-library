@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import type { DashboardData, GameHistoryItem } from "../types/game";
-import { getPlayerDashboard } from "../services/api";
+import { getPlayerDashboard, exportGame } from "../services/api";
 import "./styles/Dashboard.css";
 
 interface DashboardProps {
@@ -114,6 +114,22 @@ function Dashboard({ playerId }: DashboardProps) {
     };
   }, [playerId]);
 
+  /** Trigger a browser download of the game export for `tableId`. */
+  async function handleExport(tableId: string) {
+    try {
+      const text = await exportGame(tableId);
+      const blob = new Blob([text], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `game_${tableId}.mat`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // Silently ignore – the game may not have recorded moves
+    }
+  }
+
   if (loading) {
     return <div className="dashboard-loading">Loading dashboard...</div>;
   }
@@ -169,6 +185,7 @@ function Dashboard({ playerId }: DashboardProps) {
               <th>Result</th>
               <th>Win Type</th>
               <th>Score</th>
+              <th>Export</th>
             </tr>
           </thead>
           <tbody>
@@ -201,6 +218,20 @@ function Dashboard({ playerId }: DashboardProps) {
                   </td>
                   <td>{formatWinType(game)}</td>
                   <td>{game.score != null ? game.score : "-"}</td>
+                  <td>
+                    {game.result !== "abandoned" && (
+                      <button
+                        className="export-btn"
+                        title="Download game as .mat file"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleExport(game.table_id);
+                        }}
+                      >
+                        ↓
+                      </button>
+                    )}
+                  </td>
                 </tr>
               );
             })}

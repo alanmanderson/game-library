@@ -198,6 +198,35 @@ export function getGameHistory(tableId: string): Promise<MoveRecord[]> {
   return request<MoveRecord[]>(`/api/tables/${tableId}/history`);
 }
 
+/**
+ * Fetch a completed game as a standard backgammon notation string.
+ *
+ * The response is plain text (`.mat` format) rather than JSON, so this
+ * uses a dedicated text-fetching helper instead of the shared `request`.
+ */
+async function requestText(path: string): Promise<string> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  const token = getStoredToken();
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  const response = await fetch(`${API_URL}${path}`, { headers });
+  if (!response.ok) {
+    const error = await response
+      .json()
+      .catch(() => ({ detail: "Unknown error" }));
+    throw new Error(error.detail || `HTTP ${response.status}`);
+  }
+  return response.text();
+}
+
+/** Download the move history for `tableId` in standard backgammon notation. */
+export function exportGame(tableId: string): Promise<string> {
+  return requestText(`/api/tables/${tableId}/export`);
+}
+
 // ---------------------------------------------------------------------------
 // Lobby / matchmaking
 // ---------------------------------------------------------------------------
