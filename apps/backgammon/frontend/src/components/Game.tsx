@@ -22,10 +22,17 @@ function Game() {
   const [opponentReconnected, setOpponentReconnected] = useState(false);
   const [copied, setCopied] = useState(false);
   const [invitingBot, setInvitingBot] = useState(false);
+  // Clock state: server-authoritative values updated on each game_state
+  const [whiteTimeMs, setWhiteTimeMs] = useState<number | null>(null);
+  const [blackTimeMs, setBlackTimeMs] = useState<number | null>(null);
+  const [timeControl, setTimeControl] = useState<string>("unlimited");
+  // Timestamp when last server state was received (for client-side countdown)
+  const lastSyncRef = useRef<number>(Date.now());
 
   const errorTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
   const reconnectedTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
   const copiedTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const clockIntervalRef = useRef<ReturnType<typeof setInterval>>();
 
   // Get player from localStorage
   const player = useMemo(() => {
@@ -53,12 +60,36 @@ function Game() {
         // Full state update: data contains { game_state, your_color, table }
         if (message.data.game_state) {
           setGameState(message.data.game_state);
+          // Sync time from server (authoritative)
+          const gs = message.data.game_state;
+          if (gs.white_time_remaining_ms != null) {
+            setWhiteTimeMs(gs.white_time_remaining_ms);
+          }
+          if (gs.black_time_remaining_ms != null) {
+            setBlackTimeMs(gs.black_time_remaining_ms);
+          }
+          if (gs.time_control) {
+            setTimeControl(gs.time_control);
+          }
+          lastSyncRef.current = Date.now();
         }
         if (message.data.your_color) {
           setMyColor(message.data.your_color);
         }
         if (message.data.table) {
           setTable(message.data.table);
+          // Also sync time from table data
+          const t = message.data.table;
+          if (t.white_time_remaining_ms != null) {
+            setWhiteTimeMs(t.white_time_remaining_ms);
+          }
+          if (t.black_time_remaining_ms != null) {
+            setBlackTimeMs(t.black_time_remaining_ms);
+          }
+          if (t.time_control) {
+            setTimeControl(t.time_control);
+          }
+          lastSyncRef.current = Date.now();
         }
         setWaitingForOpponent(false);
         setError(null);
@@ -116,8 +147,36 @@ function Game() {
       if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current);
       if (reconnectedTimeoutRef.current) clearTimeout(reconnectedTimeoutRef.current);
       if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
+      if (clockIntervalRef.current) clearInterval(clockIntervalRef.current);
     };
   }, []);
+
+  // Client-side countdown timer (display only -- server is authoritative)
+  useEffect(() => {
+    if (clockIntervalRef.current) clearInterval(clockIntervalRef.current);
+
+    if (timeControl === "unlimited" || whiteTimeMs == null || blackTimeMs == null) return;
+    if (!gameState || gameState.status === "finished" || gameState.status === "waiting") return;
+
+    // Only count down when a player is actively moving (status is "moving")
+    // The server starts the clock on roll and we get updated times on each state push.
+    // Between server pushes, we decrement locally for smooth display.
+    const isActive = gameState.status === "moving" || gameState.status === "rolling";
+    if (!isActive) return;
+
+    clockIntervalRef.current = setInterval(() => {
+      const elapsed = Date.now() - lastSyncRef.current;
+      if (gameState.current_turn === "white") {
+        setWhiteTimeMs((prev) => (prev != null ? Math.max(0, prev - 100) : prev));
+      } else {
+        setBlackTimeMs((prev) => (prev != null ? Math.max(0, prev - 100) : prev));
+      }
+    }, 100);
+
+    return () => {
+      if (clockIntervalRef.current) clearInterval(clockIntervalRef.current);
+    };
+  }, [timeControl, gameState?.status, gameState?.current_turn, whiteTimeMs != null]);
 
   // ----- Actions -----
 
@@ -264,6 +323,27 @@ function Game() {
     blackPips += 25 * gameState.bar_black;
     return { white: whitePips, black: blackPips };
   }, [gameState]);
+
+  // Clock display helpers
+  const formatClock = useCallback((ms: number | null): string => {
+    if (ms == null) return "";
+    const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  }, []);
+
+  const myTimeMs = myColor === "white" ? whiteTimeMs : blackTimeMs;
+  const opponentTimeMs = myColor === "white" ? blackTimeMs : whiteTimeMs;
+  const isTimed = timeControl !== "unlimited" && whiteTimeMs != null;
+
+  const getClockClass = useCallback((ms: number | null, isActive: boolean): string => {
+    const classes = ["chess-clock"];
+    if (isActive) classes.push("clock-active");
+    if (ms != null && ms <= 10_000) classes.push("clock-critical");
+    else if (ms != null && ms <= 30_000) classes.push("clock-warning");
+    return classes.join(" ");
+  }, []);
 
   const isBotGame = !!(table && (
     table.white_player?.id === BOT_PLAYER_ID || table.black_player?.id === BOT_PLAYER_ID
@@ -465,6 +545,11 @@ function Game() {
                 </span>
               )}
             </div>
+            {isTimed && (
+              <span className={getClockClass(opponentTimeMs, !isMyTurn && gameState.status !== "finished")}>
+                {formatClock(opponentTimeMs)}
+              </span>
+            )}
             <span className="pip-count">{opponentPips} pips</span>
             {table.match_points > 0 && (
               <span className="match-pts">{opponentScore} / {table.match_points}</span>
@@ -544,6 +629,11 @@ function Game() {
               <span className="connection-dot connected" />
               <span className="pill-name">{myName}</span>
             </div>
+            {isTimed && (
+              <span className={getClockClass(myTimeMs, isMyTurn && gameState.status !== "finished")}>
+                {formatClock(myTimeMs)}
+              </span>
+            )}
             <span className="pip-count">{myPips} pips</span>
             {table.match_points > 0 && (
               <span className="match-pts">{myScore} / {table.match_points}</span>

@@ -17,6 +17,9 @@ export type WinType = "normal" | "gammon" | "backgammon";
 /** Bot difficulty levels. */
 export type BotDifficulty = "easy" | "medium" | "hard" | "expert";
 
+/** Time control modes. */
+export type TimeControl = "blitz" | "rapid" | "classical" | "unlimited";
+
 // ---------------------------------------------------------------------------
 // Domain models
 // ---------------------------------------------------------------------------
@@ -86,6 +89,9 @@ export interface GameState {
   can_double: boolean;
   pip_white?: number;
   pip_black?: number;
+  time_control?: string;
+  white_time_remaining_ms?: number | null;
+  black_time_remaining_ms?: number | null;
 }
 
 /** A table (lobby / game room) that two players can join. */
@@ -99,6 +105,9 @@ export interface Table {
   white_match_score: number;
   black_match_score: number;
   bot_difficulty?: string;
+  time_control?: string;
+  white_time_remaining_ms?: number | null;
+  black_time_remaining_ms?: number | null;
 }
 
 /** A single row in the move-history log for a completed turn. */

@@ -79,6 +79,11 @@ class Table(Base):
     black_match_score: int = Column(Integer, nullable=False, default=0)
     # Bot difficulty
     bot_difficulty: str | None = Column(String(10), nullable=True)
+    # Time control
+    time_control: str = Column(String(20), default="unlimited", nullable=False, server_default="unlimited")
+    white_time_remaining_ms: int | None = Column(Integer, nullable=True)
+    black_time_remaining_ms: int | None = Column(Integer, nullable=True)
+    turn_started_at: datetime | None = Column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     white_player = relationship(

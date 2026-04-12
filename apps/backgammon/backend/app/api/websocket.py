@@ -134,6 +134,8 @@ async def _build_full_message(table_id: str, player_id: str, msg_type: str = "ga
             return None
         white_player = await session.get(Player, table.white_player_id) if table.white_player_id else None
         black_player = await session.get(Player, table.black_player_id) if table.black_player_id else None
+        # Get live time remaining from in-memory state
+        white_time_ms, black_time_ms = game_manager.get_time_remaining(table_id)
         return {
             "id": table.id,
             "status": table.status,
@@ -144,6 +146,9 @@ async def _build_full_message(table_id: str, player_id: str, msg_type: str = "ga
             "white_match_score": table.white_match_score,
             "black_match_score": table.black_match_score,
             "bot_difficulty": table.bot_difficulty,
+            "time_control": table.time_control,
+            "white_time_remaining_ms": white_time_ms,
+            "black_time_remaining_ms": black_time_ms,
         }
 
     if db is not None:
@@ -280,8 +285,35 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, player_id: str
             trigger_bot_double = False
 
             async with game_manager._get_lock(table_id):
-                # Snapshot engine state before action so we can restore on DB failure
+                # Check for timeout before processing any action
                 engine = game_manager.get_engine(table_id)
+                if engine and engine.state.status != GameStatus.FINISHED:
+                    timed_out_color = game_manager.check_timeout(table_id)
+                    if timed_out_color is not None:
+                        async with async_session() as db:
+                            await game_manager.handle_timeout(db, table_id)
+                            await db.commit()
+                            await _send_game_state_to_all(table_id, db=db)
+                            # Send time_expired game over
+                            table = await db.get(Table, table_id)
+                            if table:
+                                game_over_data = {
+                                    "winner_id": table.winner_id,
+                                    "win_type": "timeout",
+                                    "final_score": table.final_score,
+                                    "match_over": table.status == "finished",
+                                    "white_match_score": table.white_match_score,
+                                    "black_match_score": table.black_match_score,
+                                }
+                                for pid in manager.get_player_ids(table_id):
+                                    await manager.send_to_player(
+                                        table_id, pid, {"type": "game_over", "data": game_over_data}
+                                    )
+                                if table.status == "finished":
+                                    game_manager.cleanup_finished_game(table_id)
+                        continue
+
+                # Snapshot engine state before action so we can restore on DB failure
                 state_snapshot = engine.get_state_snapshot() if engine else None
 
                 async with async_session() as db:

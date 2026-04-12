@@ -58,6 +58,7 @@ class TableCreate(BaseModel):
     player_id: str
     preferred_color: Optional[str] = None  # "white", "black", or None (random)
     match_points: int = Field(default=5, ge=1, le=10)
+    time_control: str = Field(default="unlimited")
 
 
 class TableResponse(BaseModel):
@@ -72,6 +73,9 @@ class TableResponse(BaseModel):
     white_match_score: int = 0
     black_match_score: int = 0
     bot_difficulty: Optional[str] = None
+    time_control: str = "unlimited"
+    white_time_remaining_ms: Optional[int] = None
+    black_time_remaining_ms: Optional[int] = None
 
 
 class InviteBotRequest(BaseModel):
