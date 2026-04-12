@@ -31,6 +31,8 @@ const dashboardWithGames: DashboardData = {
   losses: 3,
   win_rate: 70,
   abandoned_games: 1,
+  rating: 1500,
+  rating_games: 10,
   games: [
     {
       table_id: "TABLE001",
@@ -68,6 +70,8 @@ const emptyDashboard: DashboardData = {
   losses: 0,
   win_rate: 0,
   abandoned_games: 0,
+  rating: 1500,
+  rating_games: 0,
   games: [],
 };
 

@@ -58,6 +58,8 @@ beforeEach(() => {
     losses: 0,
     win_rate: 0,
     abandoned_games: 0,
+    rating: 1500,
+    rating_games: 0,
     games: [],
   });
 });

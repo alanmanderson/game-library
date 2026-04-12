@@ -18,6 +18,14 @@ from app.game_engine import (
 
 logger = logging.getLogger(__name__)
 
+# Time control presets: mode -> (total_time_ms, increment_ms)
+TIME_CONTROL_PRESETS: dict[str, tuple[int | None, int | None]] = {
+    "blitz": (180_000, 2_000),       # 3 min + 2s increment
+    "rapid": (420_000, 5_000),       # 7 min + 5s increment
+    "classical": (900_000, 10_000),  # 15 min + 10s increment
+    "unlimited": (None, None),
+}
+
 
 class GameManager:
     """Manages active game engines in memory, keyed by table_id.
@@ -32,6 +40,8 @@ class GameManager:
         self._player_colors: dict[str, dict[str, Color]] = {}  # table_id -> {player_id: color}
         self._locks: dict[str, asyncio.Lock] = {}
         self._crawford_used: dict[str, bool] = {}  # table_id -> whether Crawford game has been used
+        # In-memory time tracking: table_id -> {time_control, white_time_ms, black_time_ms, turn_started_at}
+        self._time_state: dict[str, dict] = {}
 
     @property
     def engines(self) -> dict:
@@ -50,16 +60,158 @@ class GameManager:
         return self._locks[table_id]
 
     # ------------------------------------------------------------------
+    # Time control helpers
+    # ------------------------------------------------------------------
+
+    def init_time_state(self, table_id: str, time_control: str, white_ms: int | None, black_ms: int | None) -> None:
+        """Initialize in-memory time tracking for a table."""
+        if time_control == "unlimited" or white_ms is None or black_ms is None:
+            return
+        self._time_state[table_id] = {
+            "time_control": time_control,
+            "white_time_ms": white_ms,
+            "black_time_ms": black_ms,
+            "turn_started_at": None,
+        }
+
+    def start_turn_timer(self, table_id: str) -> None:
+        """Record the start time of the current turn's clock."""
+        ts = self._time_state.get(table_id)
+        if ts is None:
+            return
+        ts["turn_started_at"] = datetime.now(timezone.utc)
+
+    def end_turn_timer(self, table_id: str, color: Color) -> None:
+        """Stop the clock for the given color, deduct elapsed time, add increment.
+
+        Should be called when a turn ends (end_turn, auto-switch after last move).
+        Bot players are exempt from time deduction.
+        """
+        from app.services.bot_service import BOT_PLAYER_ID
+        ts = self._time_state.get(table_id)
+        if ts is None:
+            return
+
+        # Check if the current player is the bot -- exempt bot from time pressure
+        colors = self._player_colors.get(table_id, {})
+        for pid, c in colors.items():
+            if c == color and pid == BOT_PLAYER_ID:
+                ts["turn_started_at"] = None
+                return
+
+        started_at = ts.get("turn_started_at")
+        if started_at is None:
+            return
+
+        now = datetime.now(timezone.utc)
+        elapsed_ms = int((now - started_at).total_seconds() * 1000)
+
+        time_key = "white_time_ms" if color == Color.WHITE else "black_time_ms"
+        ts[time_key] = max(0, ts[time_key] - elapsed_ms)
+
+        # Add increment
+        _total, increment_ms = TIME_CONTROL_PRESETS.get(ts["time_control"], (None, None))
+        if increment_ms is not None and ts[time_key] > 0:
+            ts[time_key] += increment_ms
+
+        ts["turn_started_at"] = None
+
+    def check_timeout(self, table_id: str) -> Color | None:
+        """Check if the current player's time has expired.
+
+        Returns the Color of the player who timed out, or None if no timeout.
+        """
+        ts = self._time_state.get(table_id)
+        if ts is None:
+            return None
+
+        engine = self._engines.get(table_id)
+        if engine is None or engine.state.status == GameStatus.FINISHED:
+            return None
+
+        started_at = ts.get("turn_started_at")
+        if started_at is None:
+            return None
+
+        # Check if current player is bot -- bots never time out
+        from app.services.bot_service import BOT_PLAYER_ID
+        current_color = engine.state.current_turn
+        colors = self._player_colors.get(table_id, {})
+        for pid, c in colors.items():
+            if c == current_color and pid == BOT_PLAYER_ID:
+                return None
+
+        now = datetime.now(timezone.utc)
+        elapsed_ms = int((now - started_at).total_seconds() * 1000)
+
+        time_key = "white_time_ms" if current_color == Color.WHITE else "black_time_ms"
+        remaining = ts[time_key] - elapsed_ms
+
+        if remaining <= 0:
+            ts[time_key] = 0
+            ts["turn_started_at"] = None
+            return current_color
+
+        return None
+
+    def get_time_remaining(self, table_id: str) -> tuple[int | None, int | None]:
+        """Return (white_time_ms, black_time_ms) with live elapsed deducted.
+
+        Returns (None, None) for unlimited games.
+        """
+        ts = self._time_state.get(table_id)
+        if ts is None:
+            return (None, None)
+
+        white_ms = ts["white_time_ms"]
+        black_ms = ts["black_time_ms"]
+
+        # If a turn is in progress, deduct live elapsed from the active player
+        started_at = ts.get("turn_started_at")
+        if started_at is not None:
+            engine = self._engines.get(table_id)
+            if engine and engine.state.status not in (GameStatus.FINISHED, GameStatus.WAITING):
+                now = datetime.now(timezone.utc)
+                elapsed_ms = int((now - started_at).total_seconds() * 1000)
+                if engine.state.current_turn == Color.WHITE:
+                    white_ms = max(0, white_ms - elapsed_ms)
+                else:
+                    black_ms = max(0, black_ms - elapsed_ms)
+
+        return (white_ms, black_ms)
+
+    def persist_time_to_table(self, table: "Table") -> None:
+        """Write in-memory time state back to a Table model for DB persistence."""
+        ts = self._time_state.get(table.id)
+        if ts is None:
+            return
+        table.white_time_remaining_ms = ts["white_time_ms"]
+        table.black_time_remaining_ms = ts["black_time_ms"]
+        table.turn_started_at = ts.get("turn_started_at")
+
+    # ------------------------------------------------------------------
     # Table lifecycle
     # ------------------------------------------------------------------
 
-    async def create_table(self, db: AsyncSession, player_id: str, preferred_color: Optional[str] = None, match_points: int = 5, is_public: bool = False) -> Table:
+    async def create_table(self, db: AsyncSession, player_id: str, preferred_color: Optional[str] = None, match_points: int = 5, is_public: bool = False, time_control: str = "unlimited") -> Table:
         """Create a new table. The creating player is assigned based on preferred_color."""
         table_id = self.generate_table_id()
+
+        # Validate and apply time control preset
+        if time_control not in TIME_CONTROL_PRESETS:
+            time_control = "unlimited"
+        total_time_ms, _increment_ms = TIME_CONTROL_PRESETS[time_control]
+
         if preferred_color == "black":
-            table = Table(id=table_id, black_player_id=player_id, status="waiting", match_points=match_points, is_public=is_public)
+            table = Table(id=table_id, black_player_id=player_id, status="waiting", match_points=match_points, is_public=is_public, time_control=time_control)
         else:
-            table = Table(id=table_id, white_player_id=player_id, status="waiting", match_points=match_points, is_public=is_public)
+            table = Table(id=table_id, white_player_id=player_id, status="waiting", match_points=match_points, is_public=is_public, time_control=time_control)
+
+        # Initialize time banks if timed game
+        if total_time_ms is not None:
+            table.white_time_remaining_ms = total_time_ms
+            table.black_time_remaining_ms = total_time_ms
+
         db.add(table)
         await db.flush()
         return table
@@ -104,6 +256,12 @@ class GameManager:
             table.white_player_id: Color.WHITE,
             table.black_player_id: Color.BLACK,
         }
+
+        # Initialize time tracking
+        self.init_time_state(
+            table_id, table.time_control,
+            table.white_time_remaining_ms, table.black_time_remaining_ms,
+        )
 
         # Persist initial game state
         table.game_state = engine.get_state_snapshot()
@@ -204,6 +362,17 @@ class GameManager:
         if table.black_player_id:
             self._player_colors[table_id][table.black_player_id] = Color.BLACK
 
+        # Restore time state from the table record
+        if table.time_control and table.time_control != "unlimited":
+            self.init_time_state(
+                table_id, table.time_control,
+                table.white_time_remaining_ms, table.black_time_remaining_ms,
+            )
+            # Restore turn_started_at if there was a running clock
+            ts = self._time_state.get(table_id)
+            if ts and table.turn_started_at:
+                ts["turn_started_at"] = table.turn_started_at
+
         logger.info("Restored engine for table %s from database", table_id)
         return engine
 
@@ -297,6 +466,13 @@ class GameManager:
         snapshot["valid_moves"] = valid_moves
         snapshot["can_double"] = engine.can_double(color) if color else False
 
+        # Include time control info
+        white_time_ms, black_time_ms = self.get_time_remaining(table_id)
+        ts = self._time_state.get(table_id)
+        snapshot["time_control"] = ts["time_control"] if ts else "unlimited"
+        snapshot["white_time_remaining_ms"] = white_time_ms
+        snapshot["black_time_remaining_ms"] = black_time_ms
+
         # Calculate pip counts
         pip_white = 0
         pip_black = 0
@@ -336,15 +512,20 @@ class GameManager:
 
         roll = engine.roll_dice()
 
+        # Start the turn timer (clock starts ticking after roll)
+        self.start_turn_timer(table_id)
+
         # If the turn was auto-skipped (no valid moves), record the
-        # turn so it appears in move history.
+        # turn so it appears in move history and stop the timer.
         if engine.state.current_turn != color:
+            self.end_turn_timer(table_id, color)
             await self._record_moves(db, table_id, player_id, engine)
 
-        # Persist updated game state
+        # Persist updated game state (including time)
         table = await db.get(Table, table_id)
         if table:
             table.game_state = engine.get_state_snapshot()
+            self.persist_time_to_table(table)
 
         return {"die1": roll.die1, "die2": roll.die2}
 
@@ -395,7 +576,12 @@ class GameManager:
         )
 
         if turn_ended:
+            self.end_turn_timer(table_id, moving_color)
             await self._record_moves(db, table_id, player_id, engine)
+
+        # Persist time state
+        if table:
+            self.persist_time_to_table(table)
 
         # Handle game completion
         if engine.state.status == GameStatus.FINISHED:
@@ -421,12 +607,16 @@ class GameManager:
         if not success:
             raise ValueError("Cannot end turn now")
 
+        # Stop clock and add increment
+        self.end_turn_timer(table_id, color)
+
         await self._record_moves(db, table_id, player_id, engine)
 
-        # Persist updated game state
+        # Persist updated game state (including time)
         table = await db.get(Table, table_id)
         if table:
             table.game_state = engine.get_state_snapshot()
+            self.persist_time_to_table(table)
 
         return True
 
@@ -496,6 +686,34 @@ class GameManager:
             table.game_state = engine.get_state_snapshot()
 
         return True
+
+    async def handle_timeout(self, db: AsyncSession, table_id: str) -> Color | None:
+        """Check for timeout and finish the game if a player's time expired.
+
+        Returns the Color of the player who timed out, or None.
+        """
+        timed_out_color = self.check_timeout(table_id)
+        if timed_out_color is None:
+            return None
+
+        engine = self._engines.get(table_id)
+        if not engine or engine.state.status == GameStatus.FINISHED:
+            return None
+
+        # Force the game to end -- the player who timed out loses
+        winner_color = Color.BLACK if timed_out_color == Color.WHITE else Color.WHITE
+        engine.state.winner = winner_color
+        engine.state.win_type = WinType.NORMAL
+        engine.state.status = GameStatus.FINISHED
+
+        await self._finish_game(db, table_id, engine)
+
+        table = await db.get(Table, table_id)
+        if table:
+            table.game_state = engine.get_state_snapshot()
+            self.persist_time_to_table(table)
+
+        return timed_out_color
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -656,6 +874,16 @@ class GameManager:
         snap = engine.get_state_snapshot()
         snap["crawford_game_used"] = self._crawford_used.get(table_id, False)
         table.game_state = snap
+
+        # Re-initialize time banks for the next game
+        if table.time_control and table.time_control != "unlimited":
+            total_time_ms, _increment = TIME_CONTROL_PRESETS.get(table.time_control, (None, None))
+            if total_time_ms is not None:
+                table.white_time_remaining_ms = total_time_ms
+                table.black_time_remaining_ms = total_time_ms
+                table.turn_started_at = None
+                self.init_time_state(table_id, table.time_control, total_time_ms, total_time_ms)
+
         await db.flush()
         return table
 
@@ -669,6 +897,7 @@ class GameManager:
         self._player_colors.pop(table_id, None)
         self._locks.pop(table_id, None)
         self._crawford_used.pop(table_id, None)
+        self._time_state.pop(table_id, None)
 
     async def cleanup_stale_engines(self, db: AsyncSession) -> int:
         """Remove in-memory engines for games that are finished or abandoned.
@@ -708,6 +937,7 @@ class GameManager:
                 self._player_colors.pop(table_id, None)
                 self._locks.pop(table_id, None)
                 self._crawford_used.pop(table_id, None)
+                self._time_state.pop(table_id, None)
                 cleaned += 1
                 logger.info("Cleaned up stale engine for table %s", table_id)
 

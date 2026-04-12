@@ -159,10 +159,16 @@ export function getPlayerDashboard(playerId: string): Promise<DashboardData> {
 // ---------------------------------------------------------------------------
 
 /** Create a new table (game room). The creating player is identified by `playerId`. */
-export function createTable(playerId: string, preferredColor?: string, matchPoints?: number, isPublic?: boolean): Promise<Table> {
+export function createTable(playerId: string, preferredColor?: string, matchPoints?: number, isPublic?: boolean, timeControl?: string): Promise<Table> {
   return request<Table>("/api/tables", {
     method: "POST",
-    body: JSON.stringify({ player_id: playerId, preferred_color: preferredColor || null, match_points: matchPoints ?? 5, is_public: isPublic ?? false }),
+    body: JSON.stringify({
+      player_id: playerId,
+      preferred_color: preferredColor || null,
+      match_points: matchPoints ?? 5,
+      is_public: isPublic ?? false,
+      time_control: timeControl ?? "unlimited",
+    }),
   });
 }
 

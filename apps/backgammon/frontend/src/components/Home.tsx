@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import type { Player, BotDifficulty } from "../types/game";
+import type { Player, BotDifficulty, TimeControl } from "../types/game";
 import { createTable, joinTable, inviteBot } from "../services/api";
 import Dashboard from "./Dashboard";
 import Lobby from "./Lobby";
@@ -21,25 +21,26 @@ function Home({ player }: HomeProps) {
   const [matchPoints, setMatchPoints] = useState(5);
   const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>("hard");
   const [showLobby, setShowLobby] = useState(false);
+  const [timeControl, setTimeControl] = useState<TimeControl>("unlimited");
 
   const handleCreateTable = useCallback(async () => {
     setCreatingTable(true);
     setError(null);
     try {
-      const table = await createTable(player.id, preferredColor, matchPoints);
+      const table = await createTable(player.id, preferredColor, matchPoints, false, timeControl);
       navigate(`/game/${table.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create table.");
     } finally {
       setCreatingTable(false);
     }
-  }, [player.id, navigate, preferredColor, matchPoints]);
+  }, [player.id, navigate, preferredColor, matchPoints, timeControl]);
 
   const handlePlayBot = useCallback(async () => {
     setCreatingBotGame(true);
     setError(null);
     try {
-      const table = await createTable(player.id, preferredColor, matchPoints);
+      const table = await createTable(player.id, preferredColor, matchPoints, false, timeControl);
       await inviteBot(table.id, botDifficulty);
       navigate(`/game/${table.id}`);
     } catch (err) {
@@ -47,7 +48,7 @@ function Home({ player }: HomeProps) {
     } finally {
       setCreatingBotGame(false);
     }
-  }, [player.id, navigate, preferredColor, matchPoints, botDifficulty]);
+  }, [player.id, navigate, preferredColor, matchPoints, botDifficulty, timeControl]);
 
   const handleJoinTable = useCallback(
     async (e: React.FormEvent) => {
@@ -130,6 +131,27 @@ function Home({ player }: HomeProps) {
                 onClick={() => setMatchPoints(pts)}
               >
                 {pts}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Time control selector */}
+        <div className="time-control-selector">
+          <span className="time-control-label">Time control:</span>
+          <div className="time-control-options">
+            {([
+              { value: "unlimited" as TimeControl, label: "Unlimited" },
+              { value: "classical" as TimeControl, label: "Classical (15m)" },
+              { value: "rapid" as TimeControl, label: "Rapid (7m)" },
+              { value: "blitz" as TimeControl, label: "Blitz (3m)" },
+            ]).map(({ value, label }) => (
+              <button
+                key={value}
+                className={`time-control-option ${timeControl === value ? "selected" : ""}`}
+                onClick={() => setTimeControl(value)}
+              >
+                {label}
               </button>
             ))}
           </div>

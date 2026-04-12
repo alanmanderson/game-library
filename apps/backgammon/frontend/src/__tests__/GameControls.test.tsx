@@ -38,6 +38,7 @@ function makeGameState(overrides: Partial<GameState> = {}): GameState {
     double_offered: false,
     double_offered_by: null,
     can_double: false,
+    is_crawford_game: false,
     ...overrides,
   };
 }
