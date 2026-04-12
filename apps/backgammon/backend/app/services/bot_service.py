@@ -91,7 +91,7 @@ def _load_ml_bot():
         _ml_bot = MLBotPlayer(model_path)
         logger.info("ML bot (hard) loaded from %s", model_path)
         return _ml_bot
-    except Exception as e:
+    except (FileNotFoundError, OSError, ImportError) as e:
         logger.warning("Failed to load ML bot: %s", e)
         return None
 
@@ -118,7 +118,7 @@ def _load_expert_bot():
         _ml_expert_bot = MLBotPlayer(model_path)
         logger.info("ML bot (expert) loaded from %s", model_path)
         return _ml_expert_bot
-    except Exception as e:
+    except (FileNotFoundError, OSError, ImportError) as e:
         logger.warning("Failed to load expert ML bot: %s", e)
         return None
 
@@ -174,7 +174,7 @@ def _select_bot_move(engine, valid_moves, table_id: str = ""):
                 move = expert_bot.select_move(engine)
                 if move is not None:
                     return move
-            except Exception as e:
+            except (ValueError, IndexError, KeyError) as e:
                 logger.warning("Expert ML move selection failed: %s", e)
         # Fall through to hard if expert unavailable
 
@@ -185,7 +185,7 @@ def _select_bot_move(engine, valid_moves, table_id: str = ""):
             move = ml_bot.select_move(engine)
             if move is not None:
                 return move
-        except Exception as e:
+        except (ValueError, IndexError, KeyError) as e:
             logger.warning("ML move selection failed: %s", e)
     return random.choice(valid_moves)
 
@@ -261,8 +261,8 @@ async def execute_bot_turn(table_id: str) -> None:
                 if ml_bot is not None:
                     try:
                         should_accept = ml_bot.should_accept_double(engine)
-                    except Exception:
-                        pass
+                    except (ValueError, IndexError, KeyError):
+                        pass  # Fall back to default (accept)
                 async with async_session() as db:
                     if should_accept:
                         await game_manager.accept_double(db, table_id, BOT_PLAYER_ID)
@@ -334,7 +334,7 @@ async def execute_bot_turn(table_id: str) -> None:
                             db, table_id, BOT_PLAYER_ID,
                             move.from_point, move.to_point,
                         )
-                    except (ValueError, Exception) as e:
+                    except (ValueError, IndexError, KeyError) as e:
                         logger.warning("Bot move failed for table %s: %s", table_id, e)
                         await game_manager.restore_engine_from_snapshot(
                             table_id, engine, state_snapshot
@@ -368,7 +368,7 @@ async def execute_bot_turn(table_id: str) -> None:
                             game_manager.cleanup_finished_game(table_id)
                         return
 
-    except Exception:
+    except Exception:  # Broad catch intentional: top-level asyncio task must not propagate
         logger.exception("Error during bot turn for table %s", table_id)
 
 

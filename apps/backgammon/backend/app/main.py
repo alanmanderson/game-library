@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routes import router
@@ -33,7 +34,7 @@ async def _periodic_engine_cleanup() -> None:
                 cleaned = await game_manager.cleanup_stale_engines(db)
                 if cleaned:
                     logger.info("Periodic cleanup removed %d stale engine(s)", cleaned)
-        except Exception:
+        except Exception:  # Broad catch intentional: background task must not crash the server
             logger.exception("Error during periodic engine cleanup")
 
 
@@ -54,7 +55,7 @@ async def lifespan(app: FastAPI):
             try:
                 ws = ws_manager._connections[table_id][player_id]
                 await ws.close(code=1001, reason="Server shutting down")
-            except Exception:
+            except Exception:  # Broad catch intentional during shutdown cleanup
                 pass
     ws_manager._connections.clear()
 
@@ -84,5 +85,5 @@ async def health_check(db: AsyncSession = Depends(get_db)):
     try:
         await db.execute(text("SELECT 1"))
         return {"status": "healthy"}
-    except Exception:
+    except (SQLAlchemyError, ConnectionError, OSError):
         raise HTTPException(status_code=503, detail="Database unavailable")
