@@ -214,7 +214,7 @@ function Home({ player }: HomeProps) {
         {/* Leaderboard */}
         <div className="action-card">
           <h3>Leaderboard</h3>
-          <p>See the top players ranked by wins and win rate.</p>
+          <p>See the top players ranked by wins, win rate, and rating.</p>
           <button onClick={() => setShowLeaderboard(true)}>
             View Leaderboard
           </button>

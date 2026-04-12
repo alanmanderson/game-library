@@ -486,7 +486,7 @@ async def get_leaderboard(
             .where(func.coalesce(stats_sq.c.total_games, 0) >= 10)
             .order_by(
                 (func.coalesce(stats_sq.c.total_wins, 0) * 1.0
-                 / func.coalesce(stats_sq.c.total_games, 1)).desc()
+                 / stats_sq.c.total_games).desc()
             )
         )
 
