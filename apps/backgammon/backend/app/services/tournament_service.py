@@ -91,9 +91,8 @@ async def register_player(
 async def start_tournament(db: AsyncSession, tournament_id: str) -> Tournament:
     """Start the tournament by generating a single-elimination bracket.
 
-    Requires at least 2 registered players. Players are seeded in their
-    registration order; BYEs are assigned to fill out the bracket to the
-    next power of two.
+    Requires at least 2 registered players. Players are randomly seeded;
+    BYEs are assigned to fill out the bracket to the next power of two.
 
     Raises ValueError if the tournament cannot be started.
     """
@@ -380,11 +379,8 @@ async def get_bracket(db: AsyncSession, tournament_id: str) -> TournamentBracket
         for m in matches
     ]
 
-    # Count entries
-    entries_result2 = await db.execute(
-        select(TournamentEntry).where(TournamentEntry.tournament_id == tournament_id)
-    )
-    player_count = len(entries_result2.scalars().all())
+    # Count entries — reuse the already-loaded entries list
+    player_count = len(entries)
 
     tournament_response = TournamentResponse(
         id=tournament.id,
@@ -409,10 +405,17 @@ async def get_bracket(db: AsyncSession, tournament_id: str) -> TournamentBracket
 
 async def list_tournaments(db: AsyncSession) -> list[TournamentResponse]:
     """List all tournaments, newest first."""
+    from sqlalchemy import func
+
     result = await db.execute(
         select(Tournament).order_by(Tournament.created_at.desc()).limit(50)
     )
     tournaments = result.scalars().all()
+
+    if not tournaments:
+        return []
+
+    tournament_ids = [t.id for t in tournaments]
 
     # Collect all relevant IDs for batch loading
     winner_ids = {t.winner_id for t in tournaments if t.winner_id}
@@ -424,13 +427,13 @@ async def list_tournaments(db: AsyncSession) -> list[TournamentResponse]:
         for p in players_result.scalars().all():
             player_lookup[p.id] = p.nickname
 
-    # Count entries per tournament
-    entry_counts: dict[str, int] = {}
-    for t in tournaments:
-        result2 = await db.execute(
-            select(TournamentEntry).where(TournamentEntry.tournament_id == t.id)
-        )
-        entry_counts[t.id] = len(result2.scalars().all())
+    # Count entries per tournament in a single aggregation query
+    counts_result = await db.execute(
+        select(TournamentEntry.tournament_id, func.count(TournamentEntry.id).label("cnt"))
+        .where(TournamentEntry.tournament_id.in_(tournament_ids))
+        .group_by(TournamentEntry.tournament_id)
+    )
+    entry_counts: dict[str, int] = {row.tournament_id: row.cnt for row in counts_result}
 
     return [
         TournamentResponse(
