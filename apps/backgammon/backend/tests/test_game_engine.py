@@ -1203,3 +1203,83 @@ class TestCombinedMoves:
         # Single: 12->15 (die=3), 12->13 (die=1)
         # Combined: 12->16 (3+1)
         assert Move(12, 16) in moves
+
+
+# -----------------------------------------------------------------------
+# Crawford Rule
+# -----------------------------------------------------------------------
+
+class TestCrawfordRule:
+    """Tests for the Crawford Rule in match play.
+
+    The Crawford Rule: when a player reaches match point minus 1 (needs
+    exactly 1 more point to win), the next game is a Crawford game where
+    NO doubling is allowed.  After the Crawford game, normal doubling
+    resumes.
+    """
+
+    def test_doubling_blocked_during_crawford_game(self):
+        """Doubling is not allowed when is_crawford_game is True."""
+        engine = BackgammonEngine()
+        engine.state.status = GameStatus.ROLLING
+        engine.state.current_turn = Color.WHITE
+        engine.state.is_crawford_game = True
+        engine.state.cube_owner = None  # centered cube
+
+        # can_double should return False
+        assert engine.can_double(Color.WHITE) is False
+
+        # offer_double should also fail
+        assert engine.offer_double(Color.WHITE) is False
+
+    def test_doubling_allowed_when_not_crawford(self):
+        """Doubling works normally when is_crawford_game is False."""
+        engine = BackgammonEngine()
+        engine.state.status = GameStatus.ROLLING
+        engine.state.current_turn = Color.WHITE
+        engine.state.is_crawford_game = False
+        engine.state.cube_owner = None
+
+        assert engine.can_double(Color.WHITE) is True
+        assert engine.offer_double(Color.WHITE) is True
+
+    def test_crawford_game_in_snapshot(self):
+        """is_crawford_game is serialized in the state snapshot."""
+        engine = BackgammonEngine()
+        engine.state.is_crawford_game = True
+        snap = engine.get_state_snapshot()
+        assert snap["is_crawford_game"] is True
+
+        engine.state.is_crawford_game = False
+        snap = engine.get_state_snapshot()
+        assert snap["is_crawford_game"] is False
+
+    def test_crawford_default_is_false(self):
+        """By default, is_crawford_game is False."""
+        engine = BackgammonEngine()
+        assert engine.state.is_crawford_game is False
+        snap = engine.get_state_snapshot()
+        assert snap["is_crawford_game"] is False
+
+    def test_crawford_blocks_both_colors(self):
+        """Neither player can double during a Crawford game."""
+        engine = BackgammonEngine()
+        engine.state.status = GameStatus.ROLLING
+        engine.state.is_crawford_game = True
+        engine.state.cube_owner = None
+
+        engine.state.current_turn = Color.WHITE
+        assert engine.can_double(Color.WHITE) is False
+
+        engine.state.current_turn = Color.BLACK
+        assert engine.can_double(Color.BLACK) is False
+
+    def test_crawford_blocks_even_with_owned_cube(self):
+        """Crawford blocks doubling even when the player owns the cube."""
+        engine = BackgammonEngine()
+        engine.state.status = GameStatus.ROLLING
+        engine.state.current_turn = Color.WHITE
+        engine.state.is_crawford_game = True
+        engine.state.cube_owner = Color.WHITE  # White owns cube
+
+        assert engine.can_double(Color.WHITE) is False

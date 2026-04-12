@@ -31,6 +31,7 @@ class GameManager:
         self._engines: dict[str, BackgammonEngine] = {}
         self._player_colors: dict[str, dict[str, Color]] = {}  # table_id -> {player_id: color}
         self._locks: dict[str, asyncio.Lock] = {}
+        self._crawford_used: dict[str, bool] = {}  # table_id -> whether Crawford game has been used
 
     @property
     def engines(self) -> dict:
@@ -171,6 +172,7 @@ class GameManager:
         s.cube_owner = Color(snap["cube_owner"]) if snap.get("cube_owner") else None
         s.double_offered = snap.get("double_offered", False)
         s.double_offered_by = Color(snap["double_offered_by"]) if snap.get("double_offered_by") else None
+        s.is_crawford_game = snap.get("is_crawford_game", False)
 
         # Moves history and turn_moves cannot be fully restored from the
         # snapshot (it only stores turn_moves_count), so initialise them
@@ -188,6 +190,12 @@ class GameManager:
 
         # Store the restored engine
         self._engines[table_id] = engine
+
+        # Restore Crawford state from snapshot
+        if snap.get("crawford_game_used"):
+            self._crawford_used[table_id] = True
+        elif s.is_crawford_game:
+            self._crawford_used[table_id] = True
 
         # Restore player color mappings
         self._player_colors[table_id] = {}
@@ -245,6 +253,7 @@ class GameManager:
         s.cube_owner = Color(snap["cube_owner"]) if snap.get("cube_owner") else None
         s.double_offered = snap.get("double_offered", False)
         s.double_offered_by = Color(snap["double_offered_by"]) if snap.get("double_offered_by") else None
+        s.is_crawford_game = snap.get("is_crawford_game", False)
 
         s.moves_history = []
         s.turn_moves = []
@@ -570,7 +579,10 @@ class GameManager:
         else:
             table.status = "game_over"
 
-        table.game_state = engine.get_state_snapshot()
+        # Persist game state with crawford_game_used for match continuity
+        snap = engine.get_state_snapshot()
+        snap["crawford_game_used"] = self._crawford_used.get(table_id, False)
+        table.game_state = snap
 
         # Update player statistics
         await update_stats(
@@ -589,7 +601,10 @@ class GameManager:
         """Start the next game in a match after a game_over.
 
         Resets per-game fields, creates a fresh engine, and sets status
-        back to "playing".
+        back to "playing".  Applies the Crawford rule when applicable:
+        if either player's match score is exactly match_points - 1 and
+        the Crawford game hasn't been used yet, the next game is a
+        Crawford game (no doubling allowed).
         """
         table = await db.get(Table, table_id)
         if not table:
@@ -611,8 +626,26 @@ class GameManager:
             table.black_player_id: Color.BLACK,
         }
 
+        # Crawford rule: if either player is at match point (needs exactly 1
+        # more point to win) and Crawford hasn't been used yet for this match,
+        # this is the Crawford game (no doubling allowed).
+        crawford_used = self._crawford_used.get(table_id, False)
+        is_crawford = False
+        if not crawford_used and table.match_points > 1:
+            at_match_point = (
+                table.white_match_score == table.match_points - 1
+                or table.black_match_score == table.match_points - 1
+            )
+            if at_match_point:
+                is_crawford = True
+                self._crawford_used[table_id] = True
+
+        engine.state.is_crawford_game = is_crawford
+
         table.status = "playing"
-        table.game_state = engine.get_state_snapshot()
+        snap = engine.get_state_snapshot()
+        snap["crawford_game_used"] = self._crawford_used.get(table_id, False)
+        table.game_state = snap
         await db.flush()
         return table
 
@@ -625,6 +658,7 @@ class GameManager:
         self._engines.pop(table_id, None)
         self._player_colors.pop(table_id, None)
         self._locks.pop(table_id, None)
+        self._crawford_used.pop(table_id, None)
 
     async def cleanup_stale_engines(self, db: AsyncSession) -> int:
         """Remove in-memory engines for games that are finished or abandoned.
@@ -663,6 +697,7 @@ class GameManager:
                 self._engines.pop(table_id, None)
                 self._player_colors.pop(table_id, None)
                 self._locks.pop(table_id, None)
+                self._crawford_used.pop(table_id, None)
                 cleaned += 1
                 logger.info("Cleaned up stale engine for table %s", table_id)
 
