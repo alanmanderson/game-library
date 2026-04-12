@@ -90,15 +90,20 @@ echo "==> Deployment complete!"
 EOF
 
 # 7. Health check with auto-rollback on failure
-COMPOSE="/opt/backgammon/docker-compose.yml"
 echo "==> Verifying deployment..."
-sleep 5
-if ! ssh "$REMOTE" "curl -sf http://localhost:8000/api/health > /dev/null"; then
-    echo "ERROR: Health check failed! Rolling back..."
-    ssh "$REMOTE" "docker tag backgammon-server:previous backgammon-server:latest && cd /opt/backgammon && docker compose down && docker compose up -d"
-    echo "==> Rolled back to previous version."
-    exit 1
-fi
-echo "==> Health check passed."
+for i in 1 2 3 4 5 6; do
+    sleep 5
+    if RESULT=$(ssh "$REMOTE" "cd /opt/backgammon && docker compose exec -T fastapi curl -sf http://localhost:8000/api/health" 2>&1); then
+        echo "==> Health check passed: $RESULT"
+        break
+    fi
+    echo "Attempt $i/6 failed, retrying..."
+    if [ "$i" -eq 6 ]; then
+        echo "ERROR: Health check failed after 6 attempts! Rolling back..."
+        ssh "$REMOTE" "docker tag backgammon-server:previous backgammon-server:latest && cd /opt/backgammon && docker compose down && docker compose up -d"
+        echo "==> Rolled back to previous version."
+        exit 1
+    fi
+done
 
 echo "==> Done. Visit https://$(cd "$SCRIPT_DIR/infra" && terraform output -raw domain_name 2>/dev/null || echo '<your-domain>')"
