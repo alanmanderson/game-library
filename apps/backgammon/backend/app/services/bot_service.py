@@ -4,7 +4,7 @@ Difficulty levels:
   - easy: Random valid moves
   - medium: Heuristic-based move scoring
   - hard: ML neural network (backgammon_model_final.pt)
-  - expert: Improved ML neural network (backgammon_model_expert.pt)
+  - expert: V2 neural network with bearoff DB (v2_model.pt)
 """
 
 import asyncio
@@ -54,7 +54,7 @@ async def restore_bot_difficulty(table_id: str, db: AsyncSession) -> None:
 
 # --- ML Model Integration ---
 _ml_bot = None
-_ml_expert_bot = None
+_ml_v2_bot = None
 
 
 def _find_ml_dir():
@@ -96,30 +96,32 @@ def _load_ml_bot():
         return None
 
 
-def _load_expert_bot():
-    """Lazily load the expert ML bot player. Returns None if unavailable."""
-    global _ml_expert_bot
-    if _ml_expert_bot is not None:
-        return _ml_expert_bot
-
+def _load_v2_bot():
+    """Lazily load the V2 ML bot (expert) with bearoff DB."""
+    global _ml_v2_bot
+    if _ml_v2_bot is not None:
+        return _ml_v2_bot
     try:
         ml_dir = _find_ml_dir()
         if ml_dir is None:
             return None
-
-        model_path = os.path.join(ml_dir, 'models', 'backgammon_model_expert.pt')
+        models_dir = os.path.join(ml_dir, 'models')
+        model_path = os.path.join(models_dir, 'v2_model.pt')
+        bearoff_path = os.path.join(models_dir, 'bearoff.npz')
         if not os.path.exists(model_path):
-            logger.info("Expert model not found at %s", model_path)
+            logger.info("V2 model not found at %s", model_path)
             return None
-
         if ml_dir not in sys.path:
             sys.path.insert(0, ml_dir)
-        from bot_integration import MLBotPlayer
-        _ml_expert_bot = MLBotPlayer(model_path)
-        logger.info("ML bot (expert) loaded from %s", model_path)
-        return _ml_expert_bot
+        from bot_integration import MLBotPlayerV2
+        _ml_v2_bot = MLBotPlayerV2(
+            single_model_path=model_path,
+            bearoff_db_path=bearoff_path if os.path.exists(bearoff_path) else None,
+        )
+        logger.info("V2 bot (expert) loaded, bearoff DB: %s", os.path.exists(bearoff_path))
+        return _ml_v2_bot
     except (FileNotFoundError, OSError, ImportError) as e:
-        logger.warning("Failed to load expert ML bot: %s", e)
+        logger.warning("Failed to load V2 bot: %s", e)
         return None
 
 
@@ -168,15 +170,15 @@ def _select_bot_move(engine, valid_moves, table_id: str = ""):
         return max(valid_moves, key=lambda m: _heuristic_score_move(engine, m))
 
     if difficulty == "expert":
-        expert_bot = _load_expert_bot()
-        if expert_bot is not None:
+        v2_bot = _load_v2_bot()
+        if v2_bot is not None:
             try:
-                move = expert_bot.select_move(engine)
+                move = v2_bot.select_move(engine)
                 if move is not None:
                     return move
             except (ValueError, IndexError, KeyError) as e:
-                logger.warning("Expert ML move selection failed: %s", e)
-        # Fall through to hard if expert unavailable
+                logger.warning("V2 expert move selection failed: %s", e)
+        # Fall through to hard if V2 unavailable
 
     # Default: hard (ML model)
     ml_bot = _load_ml_bot()
@@ -256,13 +258,22 @@ async def execute_bot_turn(table_id: str) -> None:
             if not engine:
                 return
             if engine.state.double_offered and engine.state.double_offered_by != get_bot_color(table_id):
-                ml_bot = _load_ml_bot()
                 should_accept = True
-                if ml_bot is not None:
-                    try:
-                        should_accept = ml_bot.should_accept_double(engine)
-                    except (ValueError, IndexError, KeyError):
-                        pass  # Fall back to default (accept)
+                difficulty = get_bot_difficulty(table_id)
+                if difficulty == "expert":
+                    v2_bot = _load_v2_bot()
+                    if v2_bot is not None:
+                        try:
+                            should_accept = v2_bot.should_accept_double(engine)
+                        except (ValueError, IndexError, KeyError):
+                            pass
+                elif difficulty == "hard":
+                    ml_bot = _load_ml_bot()
+                    if ml_bot is not None:
+                        try:
+                            should_accept = ml_bot.should_accept_double(engine)
+                        except (ValueError, IndexError, KeyError):
+                            pass
                 async with async_session() as db:
                     if should_accept:
                         await game_manager.accept_double(db, table_id, BOT_PLAYER_ID)

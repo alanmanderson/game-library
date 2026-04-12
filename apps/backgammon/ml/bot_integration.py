@@ -15,14 +15,15 @@ The MLBotPlayer class also handles doubling cube decisions.
 
 import sys
 import os
+import numpy as np
 import torch
 
 # Add paths
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
 from app.game_engine import BackgammonEngine, Color, Move
 
-from encoder import encode_state
-from model import BackgammonNet, compute_equity, load_model
+from encoder import encode_state, encode_state_v2
+from model import BackgammonNet, BackgammonNetV2, compute_equity, load_model
 
 
 class MLBotPlayer:
@@ -159,6 +160,63 @@ class MLBotPlayer:
             'lose_backgammon_probability': outputs[4].item(),
             'equity': equity,
         }
+
+
+class MLBotPlayerV2:
+    """V2 ML bot with 213-feature encoding, ReLU network, and bearoff DB."""
+    def __init__(self, single_model_path=None, bearoff_db_path=None, device='cpu'):
+        self.device = device
+        self.single_model = None
+        self.bearoff_db = None
+        if single_model_path and os.path.exists(single_model_path):
+            self.single_model = load_model(single_model_path).to(device)
+            self.single_model.eval()
+        if bearoff_db_path and os.path.exists(bearoff_db_path):
+            from bearoff import BearoffDB
+            self.bearoff_db = BearoffDB()
+            self.bearoff_db.load(bearoff_db_path)
+
+    def _encode(self, engine, perspective):
+        model = self.single_model
+        if model is not None and model.fc1.in_features <= 198:
+            return encode_state(engine, perspective)
+        return encode_state_v2(engine, perspective)
+
+    def _evaluate_position(self, engine, perspective):
+        if self.bearoff_db and self.bearoff_db.is_bearoff_position(engine, perspective):
+            own_pos, opp_pos = self.bearoff_db.get_position_key(engine, perspective)
+            equity = self.bearoff_db.lookup(own_pos, opp_pos)
+            if equity is not None:
+                return equity
+        model = self.single_model
+        if model is None:
+            return 0.0
+        with torch.no_grad():
+            features = self._encode(engine, perspective)
+            ft = torch.from_numpy(features).to(self.device)
+            return compute_equity(model(ft)).item()
+
+    def select_move(self, engine):
+        valid_moves = engine.get_valid_moves()
+        if not valid_moves:
+            return None
+        current_color = engine.state.current_turn
+        best_move, best_equity = None, float('-inf')
+        for move in valid_moves:
+            snapshot = engine._snapshot_internals()
+            engine._apply_move_internal(current_color, move)
+            equity = self._evaluate_position(engine, current_color)
+            engine._restore_internals(snapshot)
+            if equity > best_equity:
+                best_equity = equity
+                best_move = move
+        return best_move
+
+    def should_accept_double(self, engine):
+        return self._evaluate_position(engine, engine.state.current_turn) > -0.5
+
+    def should_double(self, engine):
+        return self._evaluate_position(engine, engine.state.current_turn) > 0.5
 
 
 # Example showing how to modify bot_service.py

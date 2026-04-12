@@ -189,3 +189,67 @@ def get_outcome_targets(winner: str, win_type: str, perspective: str) -> np.ndar
             return np.array([0.0, 0.0, 1.0, 0.0, 0.0], dtype=np.float32)
         else:
             return np.array([0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float32)
+
+
+def encode_state_v2(engine: BackgammonEngine, perspective: Color = Color.WHITE) -> np.ndarray:
+    """Encode board position as a 213-feature vector (198 base + 15 strategic)."""
+    base_features = encode_state(engine, perspective)
+    state = engine.state
+    if perspective == Color.WHITE:
+        own_sign, opp_sign = 1, -1
+        own_bar, opp_bar = state.bar_white, state.bar_black
+        own_home_range, opp_home_range = range(1, 7), range(19, 25)
+    else:
+        own_sign, opp_sign = -1, 1
+        own_bar, opp_bar = state.bar_black, state.bar_white
+        own_home_range, opp_home_range = range(19, 25), range(1, 7)
+    own_pips = opp_pips = 0
+    for i in range(1, 25):
+        val = state.points[i]
+        if perspective == Color.WHITE:
+            if val > 0: own_pips += val * i
+            elif val < 0: opp_pips += (-val) * (25 - i)
+        else:
+            if val < 0: own_pips += (-val) * (25 - i)
+            elif val > 0: opp_pips += val * i
+    own_pips += own_bar * 25
+    opp_pips += opp_bar * 25
+    def longest_prime(sign):
+        best = current = 0
+        for i in range(1, 25):
+            if (sign > 0 and state.points[i] >= 2) or (sign < 0 and state.points[i] <= -2):
+                current += 1
+                best = max(best, current)
+            else:
+                current = 0
+        return best
+    own_prime, opp_prime = longest_prime(own_sign), longest_prime(opp_sign)
+    own_blots = sum(1 for i in range(1, 25) if (own_sign > 0 and state.points[i] == 1) or (own_sign < 0 and state.points[i] == -1))
+    opp_blots = sum(1 for i in range(1, 25) if (opp_sign > 0 and state.points[i] == 1) or (opp_sign < 0 and state.points[i] == -1))
+    own_anchors = sum(1 for i in opp_home_range if (own_sign > 0 and state.points[i] >= 2) or (own_sign < 0 and state.points[i] <= -2))
+    opp_anchors = sum(1 for i in own_home_range if (opp_sign > 0 and state.points[i] >= 2) or (opp_sign < 0 and state.points[i] <= -2))
+    own_home = sum(max(0, state.points[i] * own_sign) for i in own_home_range)
+    opp_home = sum(max(0, state.points[i] * opp_sign) for i in opp_home_range)
+    if own_bar > 0 or opp_bar > 0:
+        contact = 1.0
+    else:
+        own_back = opp_back = 0
+        if perspective == Color.WHITE:
+            for i in range(24, 0, -1):
+                if state.points[i] > 0: own_back = i; break
+            for i in range(1, 25):
+                if state.points[i] < 0: opp_back = i; break
+        else:
+            for i in range(1, 25):
+                if state.points[i] < 0: own_back = 25 - i; break
+            for i in range(24, 0, -1):
+                if state.points[i] > 0: opp_back = 25 - i; break
+        contact = 1.0 if own_back >= opp_back and opp_back > 0 else 0.0
+    extra = np.array([
+        own_pips / 375.0, opp_pips / 375.0, own_prime / 6.0, opp_prime / 6.0,
+        own_blots / 15.0, opp_blots / 15.0, own_anchors / 6.0, opp_anchors / 6.0,
+        own_home / 15.0, opp_home / 15.0, contact,
+        (375 - own_pips) / 375.0, (375 - opp_pips) / 375.0,
+        own_bar / 2.0, opp_bar / 2.0,
+    ], dtype=np.float32)
+    return np.concatenate([base_features, extra])

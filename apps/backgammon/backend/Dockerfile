@@ -11,9 +11,9 @@ RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/wh
 # Copy backend code
 COPY backend/ .
 
-# Copy ML inference code and trained model
-COPY ml/encoder.py ml/model.py ml/bot_integration.py ./ml/
-COPY ml/models/backgammon_model_final.pt ./ml/models/
+# Copy ML inference code and trained models
+COPY ml/encoder.py ml/model.py ml/bot_integration.py ml/bearoff.py ./ml/
+COPY ml/models/backgammon_model_final.pt ml/models/v2_model.pt ml/models/bearoff.npz ./ml/models/
 
 EXPOSE 8000
 

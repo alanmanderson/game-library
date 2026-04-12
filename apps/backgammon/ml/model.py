@@ -85,40 +85,59 @@ def compute_equity(outputs: torch.Tensor) -> torch.Tensor:
     return equity
 
 
-def save_model(model: BackgammonNet, path: str, metadata: dict = None):
-    """Save model weights and optional metadata.
+class BackgammonNetV2(nn.Module):
+    """V2 network: 213->160->160->5, ReLU hidden, sigmoid output, Kaiming init."""
+    VERSION = 2
+    def __init__(self, input_size=213, hidden_size=160, output_size=5):
+        super().__init__()
+        self.fc1 = nn.Linear(input_size, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, hidden_size)
+        self.fc3 = nn.Linear(hidden_size, output_size)
+        self.relu = nn.ReLU()
+        self.sigmoid = nn.Sigmoid()
+        nn.init.kaiming_normal_(self.fc1.weight, nonlinearity='relu')
+        nn.init.zeros_(self.fc1.bias)
+        nn.init.kaiming_normal_(self.fc2.weight, nonlinearity='relu')
+        nn.init.zeros_(self.fc2.bias)
+        nn.init.xavier_uniform_(self.fc3.weight)
+        nn.init.zeros_(self.fc3.bias)
+    def forward(self, x):
+        return self.sigmoid(self.fc3(self.relu(self.fc2(self.relu(self.fc1(x))))))
 
-    Args:
-        model: The neural network to save.
-        path: File path for the saved model.
-        metadata: Optional dict of training metadata.
-    """
+
+def save_model(model, path: str, metadata: dict = None):
+    """Save model weights and optional metadata."""
     save_dict = {
         'model_state_dict': model.state_dict(),
         'input_size': model.fc1.in_features,
         'hidden_size': model.fc1.out_features,
         'output_size': model.fc3.out_features,
+        'version': getattr(model, 'VERSION', 1),
     }
     if metadata:
         save_dict['metadata'] = metadata
     torch.save(save_dict, path)
 
 
-def load_model(path: str) -> BackgammonNet:
-    """Load a model from disk.
-
-    Args:
-        path: Path to saved model file.
-
-    Returns:
-        Loaded BackgammonNet in eval mode.
-    """
+def load_model(path: str):
+    """Load a model from disk, auto-detecting V1 vs V2."""
     checkpoint = torch.load(path, map_location='cpu', weights_only=False)
-    model = BackgammonNet(
-        input_size=checkpoint.get('input_size', 198),
-        hidden_size=checkpoint.get('hidden_size', 80),
-        output_size=checkpoint.get('output_size', 5),
-    )
+    version = checkpoint.get('version', 1)
+    input_size = checkpoint.get('input_size', 198)
+    hidden_size = checkpoint.get('hidden_size', 80)
+    output_size = checkpoint.get('output_size', 5)
+    if version >= 2 or input_size > 198:
+        model = BackgammonNetV2(input_size=input_size, hidden_size=hidden_size, output_size=output_size)
+    else:
+        model = BackgammonNet(input_size=input_size, hidden_size=hidden_size, output_size=output_size)
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
     return model
+
+
+def get_model_version(path: str) -> int:
+    """Get the version of a saved model without fully loading it."""
+    checkpoint = torch.load(path, map_location='cpu', weights_only=False)
+    if checkpoint.get('version', 1) >= 2 or checkpoint.get('input_size', 198) > 198:
+        return 2
+    return 1
