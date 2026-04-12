@@ -23,13 +23,19 @@ jobs:
           pip install -r requirements.txt -r requirements-dev.txt
           pytest
 
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run frontend tests
+        working-directory: frontend
+        run: npm run test:run
+
       - name: Build frontend
         working-directory: frontend
         env:
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-        run: |
-          npm ci
-          npm run build
+        run: npm run build
 
       - name: Build backend Docker image
         run: docker build --platform linux/amd64 -t backgammon-server:latest -f backend/Dockerfile .
