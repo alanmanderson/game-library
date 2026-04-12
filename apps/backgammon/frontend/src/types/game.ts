@@ -187,6 +187,58 @@ export interface LeaderboardData {
 }
 
 // ---------------------------------------------------------------------------
+// Tournament types
+// ---------------------------------------------------------------------------
+
+/** Status of a tournament. */
+export type TournamentStatus = "registering" | "in_progress" | "completed";
+
+/** A tournament. */
+export interface Tournament {
+  id: string;
+  name: string;
+  max_players: number;
+  match_points: number;
+  status: TournamentStatus;
+  created_by: string | null;
+  created_at: string;
+  winner_id: string | null;
+  winner_nickname: string | null;
+  player_count: number;
+}
+
+/** A player's entry in a tournament. */
+export interface TournamentEntry {
+  id: number;
+  player_id: string | null;
+  player_nickname: string;
+  seed: number;
+  eliminated: boolean;
+}
+
+/** A single match in a tournament bracket. */
+export interface TournamentMatch {
+  id: number;
+  round_number: number;
+  match_number: number;
+  player1_id: string | null;
+  player1_nickname: string | null;
+  player2_id: string | null;
+  player2_nickname: string | null;
+  table_id: string | null;
+  winner_id: string | null;
+  status: "pending" | "playing" | "completed" | "bye";
+}
+
+/** Full tournament bracket data. */
+export interface TournamentBracket {
+  tournament: Tournament;
+  entries: TournamentEntry[];
+  matches: TournamentMatch[];
+  total_rounds: number;
+}
+
+// ---------------------------------------------------------------------------
 // WebSocket message types
 // ---------------------------------------------------------------------------
 

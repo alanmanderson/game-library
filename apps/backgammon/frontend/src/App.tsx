@@ -14,6 +14,7 @@ import { STORAGE_KEY } from "./constants";
 import Home from "./components/Home";
 import Game from "./components/Game";
 import AuthModal from "./components/AuthModal";
+import { TournamentList, TournamentDetail } from "./components/Tournament";
 
 function App() {
   const [player, setPlayer] = useState<Player | null>(null);
@@ -90,6 +91,32 @@ function App() {
           }
         />
         <Route path="/game/:tableId" element={<Game key={player?.id} />} />
+        <Route
+          path="/tournament"
+          element={
+            player ? (
+              <TournamentList player={player} />
+            ) : (
+              <div className="landing">
+                <h1>Backgammon Online</h1>
+                <p>Please sign in to view tournaments.</p>
+              </div>
+            )
+          }
+        />
+        <Route
+          path="/tournament/:tournamentId"
+          element={
+            player ? (
+              <TournamentDetail player={player} />
+            ) : (
+              <div className="landing">
+                <h1>Backgammon Online</h1>
+                <p>Please sign in to view this tournament.</p>
+              </div>
+            )
+          }
+        />
       </Routes>
     </div>
   );
