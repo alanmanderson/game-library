@@ -70,6 +70,13 @@ jobs:
           $SSH "$REMOTE" "rm -rf /opt/backgammon/web-dist"
           $SCP -r frontend/dist "$REMOTE":/opt/backgammon/web-dist
 
+      - name: Tag previous image for rollback
+        env:
+          REMOTE: azureuser@${{ secrets.VM_HOST }}
+        run: |
+          SSH="ssh -i ~/.ssh/id_deploy $REMOTE"
+          $SSH "docker tag backgammon-server:latest backgammon-server:previous 2>/dev/null || true"
+
       - name: Deploy on VM
         env:
           REMOTE: azureuser@${{ secrets.VM_HOST }}
@@ -79,3 +86,31 @@ jobs:
           $SSH "cd /opt/backgammon && docker compose run --rm fastapi alembic upgrade head"
           $SSH "cd /opt/backgammon && docker compose up -d --force-recreate"
           echo "Deployment complete!"
+
+      - name: Verify deployment
+        env:
+          REMOTE: azureuser@${{ secrets.VM_HOST }}
+        run: |
+          SSH="ssh -i ~/.ssh/id_deploy $REMOTE"
+          echo "Waiting for service to start..."
+          sleep 5
+          if ! $SSH "curl -sf http://localhost:8000/api/health > /dev/null"; then
+            echo "::error::Health check failed after deployment!"
+            exit 1
+          fi
+          echo "Health check passed."
+
+      - name: Rollback on failure
+        if: failure()
+        env:
+          REMOTE: azureuser@${{ secrets.VM_HOST }}
+        run: |
+          SSH="ssh -i ~/.ssh/id_deploy $REMOTE"
+          echo "Rolling back to previous image..."
+          if $SSH "docker image inspect backgammon-server:previous > /dev/null 2>&1"; then
+            $SSH "docker tag backgammon-server:previous backgammon-server:latest"
+            $SSH "cd /opt/backgammon && docker compose down && docker compose up -d"
+            echo "Rollback complete. Previous version restored."
+          else
+            echo "::warning::No previous image found. Cannot rollback automatically."
+          fi
