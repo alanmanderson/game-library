@@ -248,11 +248,13 @@ async def _build_spectator_message(table_id: str, msg_type: str = "game_state", 
     your_color set to null (they are not participants).
     If *db* is provided, reuse that session; otherwise opens a fresh one.
     """
-    # Spectators get the same board state as a non-current-turn player
-    # (empty valid_moves). We reuse build_game_state_response with a
-    # sentinel player_id that has no registered color.
-    state = game_manager.build_game_state_response(table_id, "")
-    # Ensure valid_moves is empty for spectators (prevent coaching)
+    # Build game state using an empty string as a sentinel player ID that has
+    # no registered color — this is intentionally not a real player, so
+    # build_game_state_response returns an empty valid_moves list (color is None
+    # → no current-turn check passes).
+    _SPECTATOR_SENTINEL = ""
+    state = game_manager.build_game_state_response(table_id, _SPECTATOR_SENTINEL)
+    # Enforce empty valid_moves for spectators regardless of engine state
     state["valid_moves"] = []
 
     async def _build_table_data(session):

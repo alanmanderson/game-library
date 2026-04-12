@@ -124,7 +124,7 @@ function Spectator() {
     return () => {
       if (clockIntervalRef.current) clearInterval(clockIntervalRef.current);
     };
-  }, [timeControl, gameState?.status, gameState?.current_turn, whiteTimeMs != null]);
+  }, [timeControl, gameState?.status, gameState?.current_turn, whiteTimeMs, blackTimeMs]);
 
   const pipCounts = useMemo(() => {
     if (!gameState) return { white: 0, black: 0 };

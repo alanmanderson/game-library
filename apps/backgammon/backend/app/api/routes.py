@@ -373,7 +373,7 @@ async def get_active_games(db: AsyncSession = Depends(get_db)):
     """
     result = await db.execute(
         select(Table).where(
-            Table.is_public == True,  # noqa: E712
+            Table.is_public.is_(True),
             Table.status.in_(["playing", "game_over"]),
         ).order_by(Table.created_at.desc()).limit(20)
     )
