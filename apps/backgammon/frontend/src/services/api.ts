@@ -200,7 +200,7 @@ export function getTable(tableId: string): Promise<Table> {
 /** Retrieve the paginated move-history log for a game played at `tableId`. */
 export function getGameHistory(
   tableId: string,
-  limit: number = 50,
+  limit: number = 1000,
   offset: number = 0,
 ): Promise<PaginatedMoveHistory> {
   return request<PaginatedMoveHistory>(

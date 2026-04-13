@@ -272,7 +272,7 @@ describe("getGameHistory", () => {
     expect(result.total).toBe(1);
     expect(result.records).toHaveLength(1);
     expect(fetch).toHaveBeenCalledWith(
-      expect.stringContaining("/api/tables/ABCD12/history?limit=50&offset=0"),
+      expect.stringContaining("/api/tables/ABCD12/history?limit=1000&offset=0"),
       expect.any(Object),
     );
   });

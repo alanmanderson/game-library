@@ -3,7 +3,7 @@ import type { Table, MoveRecord, GameStatus } from "../types/game";
 import { getGameHistory } from "../services/api";
 import "./styles/GameInfo.css";
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 1000;
 
 interface GameInfoProps {
   table: Table;
