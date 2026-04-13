@@ -1,6 +1,12 @@
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useState, useEffect, useRef } from "react";
 import type { GameState, Color, Move } from "../types/game";
 import "./styles/Board.css";
+
+export interface AnimatingMove {
+  from_point: number;
+  to_point: number;
+  color: Color;
+}
 
 interface BoardProps {
   gameState: GameState;
@@ -12,6 +18,7 @@ interface BoardProps {
   onBearOffClick: () => void;
   cubeValue: number;
   cubeOwner: Color | null;
+  animatingMove?: AnimatingMove | null;
 }
 
 // ----- Layout constants -----
@@ -54,7 +61,26 @@ function Board({
   onBearOffClick,
   cubeValue,
   cubeOwner,
+  animatingMove,
 }: BoardProps) {
+  // Animation phase: 'idle' → 'start' (at source) → 'end' (transition to dest)
+  const [animPhase, setAnimPhase] = useState<'idle' | 'start' | 'end'>('idle');
+  const animKeyRef = useRef(0);
+
+  useEffect(() => {
+    if (animatingMove) {
+      animKeyRef.current += 1;
+      setAnimPhase('start');
+      // Double-rAF to ensure the 'start' position renders before transitioning
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setAnimPhase('end');
+        });
+      });
+    } else {
+      setAnimPhase('idle');
+    }
+  }, [animatingMove]);
   /**
    * Layout positions depend on myColor.
    *
@@ -278,7 +304,15 @@ function Board({
     if (value === 0) return null;
 
     const color: Color = value > 0 ? "white" : "black";
-    const count = Math.abs(value);
+    let count = Math.abs(value);
+
+    // During animation, hide the top checker at the destination
+    // (the animation overlay visually represents it sliding into place)
+    if (animatingMove && animPhase !== 'idle' && point === animatingMove.to_point && point >= 1 && point <= 24) {
+      count = Math.max(0, count - 1);
+      if (count === 0) return null;
+    }
+
     const visibleCount = Math.min(count, MAX_VISIBLE_CHECKERS);
     const cx = columnX(pos.col);
     const elements: JSX.Element[] = [];
@@ -473,6 +507,42 @@ function Board({
     }
 
     return elements;
+  }
+
+  /**
+   * Compute the pixel position for an animating checker at a given point.
+   * For source: the checker was at the top of the old stack (index = current count).
+   * For destination: the checker lands at the top of the new stack (index = count - 1).
+   */
+  function getAnimPosition(point: number, isSource: boolean): { cx: number; cy: number } {
+    // Regular board points (1-24)
+    if (point >= 1 && point <= 24) {
+      const pos = pointPositions[point];
+      if (!pos) return { cx: 0, cy: 0 };
+      const cx = columnX(pos.col);
+      const count = Math.abs(gameState.points[point]);
+      // Source: checker was at the top of the old (larger) stack
+      // Dest: checker is now the top of the new stack
+      const stackIndex = isSource ? count : Math.max(0, count - 1);
+      const cappedIndex = Math.min(stackIndex, MAX_VISIBLE_CHECKERS - 1);
+      const cy = pos.isTop
+        ? MARGIN + CHECKER_RADIUS + cappedIndex * (CHECKER_RADIUS * 2 + CHECKER_GAP)
+        : BOARD_HEIGHT - MARGIN - CHECKER_RADIUS - cappedIndex * (CHECKER_RADIUS * 2 + CHECKER_GAP);
+      return { cx, cy };
+    }
+
+    // Bar (from_point = 25 for white, 0 for black)
+    if (point === 25 || point === 0) {
+      if (isSource) {
+        const barCx = layout.barX + BAR_WIDTH / 2;
+        return { cx: barCx, cy: BOARD_HEIGHT / 2 };
+      }
+      // Bear-off destination
+      const bearCx = layout.bearoffX + BEAROFF_WIDTH / 2;
+      return { cx: bearCx, cy: BOARD_HEIGHT / 2 };
+    }
+
+    return { cx: 0, cy: 0 };
   }
 
   function renderPointHighlight(point: number) {
@@ -768,6 +838,35 @@ function Board({
 
         {/* Bear-off checkers */}
         {renderBearOffCheckers()}
+
+        {/* Animated checker overlay */}
+        {animatingMove && animPhase !== 'idle' && (() => {
+          const from = getAnimPosition(animatingMove.from_point, true);
+          const to = getAnimPosition(animatingMove.to_point, false);
+          const pos = animPhase === 'start' ? from : to;
+          const color = animatingMove.color;
+          const gradId = color === "white" ? "glass-white" : "glass-black";
+          const rimId = color === "white" ? "rim-white" : "rim-black";
+          const edgeStroke = color === "white" ? "rgba(255,255,255,0.6)" : "rgba(150,150,150,0.4)";
+
+          return (
+            <g
+              key={`anim-${animKeyRef.current}`}
+              className="checker-animating"
+              style={{
+                transform: `translate(${pos.cx}px, ${pos.cy}px)`,
+                transition: animPhase === 'end' ? 'transform 0.35s ease-out' : 'none',
+              }}
+              filter="url(#glass-shadow)"
+            >
+              <circle cx={0} cy={0} r={CHECKER_RADIUS} fill={`url(#${gradId})`} stroke={edgeStroke} strokeWidth={1} />
+              <circle cx={0} cy={0} r={CHECKER_RADIUS} fill={`url(#${rimId})`} />
+              <circle cx={0} cy={0} r={CHECKER_RADIUS - 6} fill="none" stroke={edgeStroke} strokeWidth={0.5} opacity={0.35} />
+              <ellipse cx={-5} cy={-6} rx={10} ry={7} fill="url(#glass-shine)" />
+              <ellipse cx={6} cy={5} rx={4} ry={3} fill="#ffffff" opacity={color === "white" ? 0.2 : 0.1} />
+            </g>
+          );
+        })()}
 
         {/* Point labels */}
         {renderPointLabels()}

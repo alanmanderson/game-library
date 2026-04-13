@@ -14,7 +14,21 @@
   align-items: center;
   justify-content: center;
   position: relative;
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+/* Dice rolling tumble animation */
+@keyframes dice-tumble {
+  0% { transform: scale(0.3) rotateX(0deg) rotateY(0deg); opacity: 0; }
+  10% { opacity: 1; }
+  25% { transform: scale(1.15) rotateX(180deg) rotateY(90deg); }
+  50% { transform: scale(0.95) rotateX(360deg) rotateY(180deg); }
+  75% { transform: scale(1.08) rotateX(540deg) rotateY(270deg); }
+  100% { transform: scale(1) rotateX(720deg) rotateY(360deg); }
+}
+
+.die.rolling {
+  animation: dice-tumble 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
 .die-white {

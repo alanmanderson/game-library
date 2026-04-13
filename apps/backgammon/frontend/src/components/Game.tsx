@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import type { GameState, Color, Table, Move, WSMessage } from "../types/game";
+import type { AnimatingMove } from "./Board";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { STORAGE_KEY, BOT_PLAYER_ID } from "../constants";
 import { inviteBot } from "../services/api";
@@ -9,6 +10,67 @@ import Dice from "./Dice";
 import GameControls from "./GameControls";
 import GameInfo from "./GameInfo";
 import "./styles/Game.css";
+
+/**
+ * Detect a single checker move by comparing previous and new game states.
+ * Returns the from/to points and moving color, or null if no single move detected.
+ */
+function detectMove(prev: GameState, next: GameState): AnimatingMove | null {
+  // Only detect when the previous state had a player actively moving
+  if (prev.status !== "moving") return null;
+
+  const movingColor = prev.current_turn;
+
+  function colorCount(val: number, color: Color): number {
+    if (color === "white") return val > 0 ? val : 0;
+    return val < 0 ? -val : 0;
+  }
+
+  let fromPoint = -1;
+  let toPoint = -1;
+  let changes = 0;
+
+  // Check board points 1-24
+  for (let i = 1; i <= 24; i++) {
+    const prevCount = colorCount(prev.points[i], movingColor);
+    const nextCount = colorCount(next.points[i], movingColor);
+    if (nextCount < prevCount) {
+      fromPoint = i;
+      changes++;
+    }
+    if (nextCount > prevCount) {
+      toPoint = i;
+      changes++;
+    }
+  }
+
+  // Check bar (entering from bar)
+  if (movingColor === "white" && next.bar_white < prev.bar_white) {
+    fromPoint = 25;
+    changes++;
+  }
+  if (movingColor === "black" && next.bar_black < prev.bar_black) {
+    fromPoint = 0;
+    changes++;
+  }
+
+  // Check bear-off
+  if (movingColor === "white" && next.off_white > prev.off_white) {
+    toPoint = 0;
+    changes++;
+  }
+  if (movingColor === "black" && next.off_black > prev.off_black) {
+    toPoint = 25;
+    changes++;
+  }
+
+  // Only animate if exactly one source and one destination changed
+  if (changes === 2 && fromPoint >= 0 && toPoint >= 0) {
+    return { from_point: fromPoint, to_point: toPoint, color: movingColor };
+  }
+
+  return null;
+}
 
 function Game() {
   const { tableId } = useParams<{ tableId: string }>();
@@ -24,6 +86,12 @@ function Game() {
   const [invitingBot, setInvitingBot] = useState(false);
   const [moveHistoryOpen, setMoveHistoryOpen] = useState(false);
   const [showShortcutHelp, setShowShortcutHelp] = useState(false);
+  // Checker movement animation state
+  const [animatingMove, setAnimatingMove] = useState<AnimatingMove | null>(null);
+  const prevGameStateRef = useRef<GameState | null>(null);
+  const myColorRef = useRef<Color | null>(null);
+  const animTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
   // Clock state: server-authoritative values updated on each game_state
   const [whiteTimeMs, setWhiteTimeMs] = useState<number | null>(null);
   const [blackTimeMs, setBlackTimeMs] = useState<number | null>(null);
@@ -61,6 +129,19 @@ function Game() {
       case "game_state":
         // Full state update: data contains { game_state, your_color, table }
         if (message.data.game_state) {
+          // Detect opponent/bot moves for animation
+          const prevGS = prevGameStateRef.current;
+          const newGS = message.data.game_state;
+          if (prevGS && prevGS.current_turn !== myColorRef.current) {
+            const move = detectMove(prevGS, newGS);
+            if (move) {
+              setAnimatingMove(move);
+              if (animTimerRef.current) clearTimeout(animTimerRef.current);
+              animTimerRef.current = setTimeout(() => setAnimatingMove(null), 400);
+            }
+          }
+          prevGameStateRef.current = newGS;
+
           setGameState(message.data.game_state);
           // Sync time from server (authoritative)
           const gs = message.data.game_state;
@@ -143,6 +224,9 @@ function Game() {
     onOpen: handleWsOpen,
   });
 
+  // Keep myColorRef in sync
+  useEffect(() => { myColorRef.current = myColor; }, [myColor]);
+
   // Clear timeouts on unmount
   useEffect(() => {
     return () => {
@@ -150,6 +234,7 @@ function Game() {
       if (reconnectedTimeoutRef.current) clearTimeout(reconnectedTimeoutRef.current);
       if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
       if (clockIntervalRef.current) clearInterval(clockIntervalRef.current);
+      if (animTimerRef.current) clearTimeout(animTimerRef.current);
     };
   }, []);
 
@@ -213,10 +298,16 @@ function Game() {
 
   const makeMove = useCallback(
     (fromPoint: number, toPoint: number) => {
+      // Trigger animation for own move immediately
+      if (myColor) {
+        setAnimatingMove({ from_point: fromPoint, to_point: toPoint, color: myColor });
+        if (animTimerRef.current) clearTimeout(animTimerRef.current);
+        animTimerRef.current = setTimeout(() => setAnimatingMove(null), 400);
+      }
       sendMessage({ action: "make_move", from_point: fromPoint, to_point: toPoint });
       setSelectedPoint(null);
     },
-    [sendMessage],
+    [sendMessage, myColor],
   );
 
   // ----- Click handling -----
@@ -695,6 +786,7 @@ function Game() {
               onBearOffClick={handleBearOffClick}
               cubeValue={gameState.cube_value}
               cubeOwner={gameState.cube_owner}
+              animatingMove={animatingMove}
             />
             <div className="board-overlay">
               <Dice

@@ -1174,25 +1174,6 @@ class BackgammonEngine:
         return WinType.GAMMON
 
     # ------------------------------------------------------------------
-    # Higher-die rule helper (exposed for testing)
-    # ------------------------------------------------------------------
-
-    def _must_use_higher_die(self,
-                             moves_for_each_die: dict[int, list[Move]]
-                             ) -> Optional[int]:
-        """If only one of two dice can be used, return the higher value.
-
-        *moves_for_each_die* maps die value -> list of legal moves for
-        that die.  Returns ``None`` if both dice can be used or neither
-        can.
-        """
-        usable = [d for d, m in moves_for_each_die.items() if m]
-        if len(usable) != 1:
-            return max(usable) if len(usable) == 2 else None
-        # Exactly one die is usable; that's fine only if it's the higher.
-        return usable[0]
-
-    # ------------------------------------------------------------------
     # Serialisation / notation
     # ------------------------------------------------------------------
 
