@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { Table, MoveRecord, GameStatus } from "../types/game";
 import { getGameHistory } from "../services/api";
 import "./styles/GameInfo.css";
@@ -19,15 +19,33 @@ function GameInfo({ table, gameStatus, isOpen: externalIsOpen, onToggle }: GameI
   const [moveHistory, setMoveHistory] = useState<MoveRecord[]>([]);
   const [totalMoves, setTotalMoves] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
+  const loadedCountRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
+    loadedCountRef.current = 0;
 
-    async function fetchHistory() {
+    async function fetchInitial() {
       try {
         const data = await getGameHistory(table.id, PAGE_SIZE, 0);
         if (!cancelled) {
           setMoveHistory(data.records);
+          setTotalMoves(data.total);
+          loadedCountRef.current = data.records.length;
+        }
+      } catch {
+        // silently ignore history fetch errors
+      }
+    }
+
+    async function fetchNew() {
+      try {
+        const data = await getGameHistory(table.id, PAGE_SIZE, loadedCountRef.current);
+        if (!cancelled) {
+          if (data.records.length > 0) {
+            setMoveHistory((prev) => [...prev, ...data.records]);
+            loadedCountRef.current += data.records.length;
+          }
           setTotalMoves(data.total);
         }
       } catch {
@@ -35,13 +53,11 @@ function GameInfo({ table, gameStatus, isOpen: externalIsOpen, onToggle }: GameI
       }
     }
 
-    // Always fetch once to get latest history
-    fetchHistory();
+    fetchInitial();
 
-    // Only poll while the game is still active
     let interval: ReturnType<typeof setInterval> | undefined;
     if (gameStatus !== "finished") {
-      interval = setInterval(fetchHistory, 5000);
+      interval = setInterval(fetchNew, 5000);
     }
 
     return () => {
@@ -53,15 +69,16 @@ function GameInfo({ table, gameStatus, isOpen: externalIsOpen, onToggle }: GameI
   const loadMore = useCallback(async () => {
     setLoadingMore(true);
     try {
-      const data = await getGameHistory(table.id, PAGE_SIZE, moveHistory.length);
+      const data = await getGameHistory(table.id, PAGE_SIZE, loadedCountRef.current);
       setMoveHistory((prev) => [...prev, ...data.records]);
+      loadedCountRef.current += data.records.length;
       setTotalMoves(data.total);
     } catch {
       // silently ignore
     } finally {
       setLoadingMore(false);
     }
-  }, [table.id, moveHistory.length]);
+  }, [table.id]);
 
   const hasMore = moveHistory.length < totalMoves;
 

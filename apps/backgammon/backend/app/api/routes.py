@@ -473,7 +473,7 @@ async def quick_match(
 @router.get("/tables/{table_id}/history", response_model=PaginatedMoveHistoryResponse)
 async def get_game_history(
     table_id: str,
-    limit: int = Query(default=50, le=200),
+    limit: int = Query(default=50, le=1000),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
