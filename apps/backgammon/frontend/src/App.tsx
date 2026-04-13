@@ -14,7 +14,9 @@ import { STORAGE_KEY } from "./constants";
 import Home from "./components/Home";
 import Game from "./components/Game";
 import GameReplay from "./components/GameReplay";
+import Spectator from "./components/Spectator";
 import AuthModal from "./components/AuthModal";
+import { TournamentList, TournamentDetail } from "./components/Tournament";
 
 function App() {
   const [player, setPlayer] = useState<Player | null>(null);
@@ -92,6 +94,33 @@ function App() {
         />
         <Route path="/game/:tableId" element={<Game key={player?.id} />} />
         <Route path="/replay/:tableId" element={<GameReplay />} />
+        <Route
+          path="/tournament"
+          element={
+            player ? (
+              <TournamentList player={player} />
+            ) : (
+              <div className="landing">
+                <h1>Backgammon Online</h1>
+                <p>Please sign in to view tournaments.</p>
+              </div>
+            )
+          }
+        />
+        <Route
+          path="/tournament/:tournamentId"
+          element={
+            player ? (
+              <TournamentDetail player={player} />
+            ) : (
+              <div className="landing">
+                <h1>Backgammon Online</h1>
+                <p>Please sign in to view this tournament.</p>
+              </div>
+            )
+          }
+        />
+        <Route path="/spectate/:tableId" element={<Spectator />} />
       </Routes>
     </div>
   );

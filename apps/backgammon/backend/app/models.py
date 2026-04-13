@@ -136,6 +136,99 @@ class MoveRecord(Base):
         )
 
 
+class Tournament(Base):
+    __tablename__ = "tournaments"
+    __table_args__ = (
+        CheckConstraint("status IN ('registering', 'in_progress', 'completed')", name="ck_tournaments_status"),
+    )
+
+    id: str = Column(String(8), primary_key=True)
+    name: str = Column(String(100), nullable=False)
+    max_players: int = Column(Integer, nullable=False)
+    match_points: int = Column(Integer, nullable=False, default=3)
+    status: str = Column(String(20), nullable=False, default="registering")
+    created_by: str | None = Column(
+        String(36), ForeignKey("players.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: datetime = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    winner_id: str | None = Column(
+        String(36), ForeignKey("players.id", ondelete="SET NULL"), nullable=True
+    )
+
+    # Relationships
+    creator = relationship("Player", foreign_keys=[created_by])
+    winner = relationship("Player", foreign_keys=[winner_id])
+    entries = relationship("TournamentEntry", back_populates="tournament", cascade="all, delete-orphan")
+    matches = relationship("TournamentMatch", back_populates="tournament", cascade="all, delete-orphan")
+
+    def __repr__(self) -> str:
+        return f"<Tournament(id={self.id!r}, name={self.name!r}, status={self.status!r})>"
+
+
+class TournamentEntry(Base):
+    __tablename__ = "tournament_entries"
+    __table_args__ = (
+        UniqueConstraint("tournament_id", "player_id", name="uq_tournament_player"),
+    )
+
+    id: int = Column(Integer, primary_key=True, autoincrement=True)
+    tournament_id: str = Column(
+        String(8), ForeignKey("tournaments.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    player_id: str | None = Column(
+        String(36), ForeignKey("players.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    seed: int = Column(Integer, nullable=False, default=0)
+    eliminated: bool = Column(Boolean, default=False, nullable=False)
+
+    # Relationships
+    tournament = relationship("Tournament", back_populates="entries")
+    player = relationship("Player", foreign_keys=[player_id])
+
+    def __repr__(self) -> str:
+        return f"<TournamentEntry(tournament_id={self.tournament_id!r}, player_id={self.player_id!r})>"
+
+
+class TournamentMatch(Base):
+    __tablename__ = "tournament_matches"
+    __table_args__ = (
+        CheckConstraint("status IN ('pending', 'playing', 'completed', 'bye')", name="ck_tournament_match_status"),
+    )
+
+    id: int = Column(Integer, primary_key=True, autoincrement=True)
+    tournament_id: str = Column(
+        String(8), ForeignKey("tournaments.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    round_number: int = Column(Integer, nullable=False)
+    match_number: int = Column(Integer, nullable=False)
+    player1_id: str | None = Column(
+        String(36), ForeignKey("players.id", ondelete="SET NULL"), nullable=True
+    )
+    player2_id: str | None = Column(
+        String(36), ForeignKey("players.id", ondelete="SET NULL"), nullable=True
+    )
+    table_id: str | None = Column(
+        String(8), ForeignKey("tables.id", ondelete="SET NULL"), nullable=True
+    )
+    winner_id: str | None = Column(
+        String(36), ForeignKey("players.id", ondelete="SET NULL"), nullable=True
+    )
+    status: str = Column(String(20), nullable=False, default="pending")
+
+    # Relationships
+    tournament = relationship("Tournament", back_populates="matches")
+    player1 = relationship("Player", foreign_keys=[player1_id])
+    player2 = relationship("Player", foreign_keys=[player2_id])
+    table = relationship("Table", foreign_keys=[table_id])
+    winner = relationship("Player", foreign_keys=[winner_id])
+
+    def __repr__(self) -> str:
+        return (
+            f"<TournamentMatch(id={self.id!r}, tournament_id={self.tournament_id!r}, "
+            f"round={self.round_number!r}, match={self.match_number!r}, status={self.status!r})>"
+        )
+
+
 class PlayerStats(Base):
     __tablename__ = "player_stats"
     __table_args__ = (

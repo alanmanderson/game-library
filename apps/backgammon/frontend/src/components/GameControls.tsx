@@ -77,36 +77,36 @@ function GameControls({
       <div className="controls-row">
         {showAcceptDeclineButtons && (
           <>
-            <button className="accept-double-btn" onClick={onAcceptDouble}>
+            <button className="accept-double-btn" onClick={onAcceptDouble} title="Accept double">
               Accept Double
             </button>
-            <button className="decline-double-btn" onClick={onDeclineDouble}>
+            <button className="decline-double-btn" onClick={onDeclineDouble} title="Decline double">
               Decline Double
             </button>
           </>
         )}
         {showDoubleButton && (
-          <button className="double-btn" onClick={onOfferDouble}>
+          <button className="double-btn" onClick={onOfferDouble} title="Offer double (D)">
             Double
           </button>
         )}
         {showRollButton && (
-          <button className="roll-btn" onClick={onRollDice}>
+          <button className="roll-btn" onClick={onRollDice} title="Roll dice (R)">
             Roll
           </button>
         )}
         {showUndoButton && (
-          <button className="undo-btn" onClick={onUndoTurn}>
+          <button className="undo-btn" onClick={onUndoTurn} title="Undo move (U)">
             Undo
           </button>
         )}
         {showConfirmTurnButton && (
-          <button className="confirm-turn-btn" onClick={onEndTurn}>
+          <button className="confirm-turn-btn" onClick={onEndTurn} title="Confirm turn (E)">
             Confirm Turn
           </button>
         )}
         {showEndTurnButton && (
-          <button className="end-turn-btn" onClick={onEndTurn}>
+          <button className="end-turn-btn" onClick={onEndTurn} title="End turn (E)">
             End Turn
           </button>
         )}

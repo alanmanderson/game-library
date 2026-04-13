@@ -112,6 +112,7 @@ export interface Table {
   time_control?: string;
   white_time_remaining_ms?: number | null;
   black_time_remaining_ms?: number | null;
+  spectator_count?: number;
 }
 
 /** A public table shown in the game lobby. */
@@ -120,6 +121,18 @@ export interface LobbyTable {
   creator_nickname: string;
   match_points: number | null;
   preferred_color: string | null;
+  created_at: string;
+}
+
+/** A table with an active game in progress, shown in the spectator lobby. */
+export interface ActiveGame {
+  id: string;
+  white_player_nickname: string;
+  black_player_nickname: string;
+  match_points: number | null;
+  white_match_score: number;
+  black_match_score: number;
+  spectator_count: number;
   created_at: string;
 }
 
@@ -195,14 +208,72 @@ export interface DashboardData {
 
 /** A single entry in the leaderboard. */
 export interface LeaderboardEntry {
+  rank: number;
+  player_id: string;
   nickname: string;
   rating: number;
   rating_games: number;
+  total_wins: number;
+  total_games: number;
+  win_rate: number;
 }
 
 /** Response from the leaderboard endpoint. */
 export interface LeaderboardData {
   entries: LeaderboardEntry[];
+  total: number;
+}
+
+// ---------------------------------------------------------------------------
+// Tournament types
+// ---------------------------------------------------------------------------
+
+/** Status of a tournament. */
+export type TournamentStatus = "registering" | "in_progress" | "completed";
+
+/** A tournament. */
+export interface Tournament {
+  id: string;
+  name: string;
+  max_players: number;
+  match_points: number;
+  status: TournamentStatus;
+  created_by: string | null;
+  created_at: string;
+  winner_id: string | null;
+  winner_nickname: string | null;
+  player_count: number;
+}
+
+/** A player's entry in a tournament. */
+export interface TournamentEntry {
+  id: number;
+  player_id: string | null;
+  player_nickname: string;
+  seed: number;
+  eliminated: boolean;
+}
+
+/** A single match in a tournament bracket. */
+export interface TournamentMatch {
+  id: number;
+  round_number: number;
+  match_number: number;
+  player1_id: string | null;
+  player1_nickname: string | null;
+  player2_id: string | null;
+  player2_nickname: string | null;
+  table_id: string | null;
+  winner_id: string | null;
+  status: "pending" | "playing" | "completed" | "bye";
+}
+
+/** Full tournament bracket data. */
+export interface TournamentBracket {
+  tournament: Tournament;
+  entries: TournamentEntry[];
+  matches: TournamentMatch[];
+  total_rounds: number;
 }
 
 // ---------------------------------------------------------------------------

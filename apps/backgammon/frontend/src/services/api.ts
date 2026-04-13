@@ -9,12 +9,15 @@ import type {
   Player,
   Table,
   LobbyTable,
+  ActiveGame,
   MoveRecord,
   StatsOverview,
   DashboardData,
   AuthResponse,
   LeaderboardData,
   ReplayData,
+  Tournament,
+  TournamentBracket,
 } from "../types/game";
 import { TOKEN_KEY } from "../constants";
 
@@ -204,6 +207,33 @@ export function getReplay(tableId: string): Promise<ReplayData> {
   return request<ReplayData>(`/api/tables/${tableId}/replay`);
 }
 
+/**
+ * Fetch a completed game as a standard backgammon notation string.
+ *
+ * The response is plain text (`.mat` format) rather than JSON, so this
+ * uses a dedicated text-fetching helper instead of the shared `request`.
+ */
+async function requestText(path: string): Promise<string> {
+  const headers: Record<string, string> = {};
+  const token = getStoredToken();
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  const response = await fetch(`${API_URL}${path}`, { headers });
+  if (!response.ok) {
+    const error = await response
+      .json()
+      .catch(() => ({ detail: "Unknown error" }));
+    throw new Error(error.detail || `HTTP ${response.status}`);
+  }
+  return response.text();
+}
+
+/** Download the move history for `tableId` in standard backgammon notation. */
+export function exportGame(tableId: string): Promise<string> {
+  return requestText(`/api/tables/${tableId}/export`);
+}
+
 // ---------------------------------------------------------------------------
 // Lobby / matchmaking
 // ---------------------------------------------------------------------------
@@ -211,6 +241,11 @@ export function getReplay(tableId: string): Promise<ReplayData> {
 /** Fetch the list of public tables waiting for opponents. */
 export function getLobby(): Promise<LobbyTable[]> {
   return request<LobbyTable[]>("/api/lobby");
+}
+
+/** Fetch the list of public tables with games currently in progress. */
+export function getActiveGames(): Promise<ActiveGame[]> {
+  return request<ActiveGame[]>("/api/active-games");
 }
 
 /** Join an available public table or create a new one. */
@@ -224,7 +259,56 @@ export function quickMatch(): Promise<Table> {
 // Leaderboard endpoints
 // ---------------------------------------------------------------------------
 
-/** Fetch the leaderboard of top-rated players. */
-export function getLeaderboard(limit: number = 20): Promise<LeaderboardData> {
-  return request<LeaderboardData>(`/api/leaderboard?limit=${limit}`);
+/** Fetch the leaderboard sorted by the chosen metric. */
+export function getLeaderboard(
+  metric: "wins" | "win_rate" | "rating" = "wins",
+  limit: number = 100,
+  offset: number = 0,
+): Promise<LeaderboardData> {
+  return request<LeaderboardData>(
+    `/api/leaderboard?metric=${metric}&limit=${limit}&offset=${offset}`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tournament endpoints
+// ---------------------------------------------------------------------------
+
+/** Fetch the list of all tournaments. */
+export function listTournaments(): Promise<Tournament[]> {
+  return request<Tournament[]>("/api/tournaments");
+}
+
+/** Create a new tournament. */
+export function createTournament(name: string, maxPlayers: number, matchPoints: number): Promise<Tournament> {
+  return request<Tournament>("/api/tournaments", {
+    method: "POST",
+    body: JSON.stringify({ name, max_players: maxPlayers, match_points: matchPoints }),
+  });
+}
+
+/** Get tournament details including bracket. */
+export function getTournament(tournamentId: string): Promise<TournamentBracket> {
+  return request<TournamentBracket>(`/api/tournaments/${tournamentId}`);
+}
+
+/** Register the current player for a tournament. */
+export function registerForTournament(tournamentId: string): Promise<TournamentBracket> {
+  return request<TournamentBracket>(`/api/tournaments/${tournamentId}/register`, {
+    method: "POST",
+  });
+}
+
+/** Start a tournament (creator only). */
+export function startTournament(tournamentId: string): Promise<TournamentBracket> {
+  return request<TournamentBracket>(`/api/tournaments/${tournamentId}/start`, {
+    method: "POST",
+  });
+}
+
+/** Start the game table for a pending tournament match. */
+export function startMatchTable(tournamentId: string, matchId: number): Promise<{ table_id: string }> {
+  return request<{ table_id: string }>(`/api/tournaments/${tournamentId}/matches/${matchId}/start-table`, {
+    method: "POST",
+  });
 }

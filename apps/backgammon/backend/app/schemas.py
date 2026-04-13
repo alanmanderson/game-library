@@ -94,6 +94,18 @@ class LobbyTable(BaseModel):
     created_at: datetime
 
 
+class ActiveGame(BaseModel):
+    """A table with an active game in progress, shown in the spectator lobby."""
+    id: str
+    white_player_nickname: str
+    black_player_nickname: str
+    match_points: Optional[int] = None
+    white_match_score: int = 0
+    black_match_score: int = 0
+    spectator_count: int = 0
+    created_at: datetime
+
+
 class JoinTableRequest(BaseModel):
     player_id: str
 
@@ -213,12 +225,69 @@ class ReplayResponse(BaseModel):
 
 
 class LeaderboardEntry(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+    rank: int
+    player_id: str
     nickname: str
     rating: int
     rating_games: int
+    total_wins: int
+    total_games: int
+    win_rate: float
 
 
 class LeaderboardResponse(BaseModel):
     entries: list[LeaderboardEntry]
+    total: int
+
+
+class TournamentCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    max_players: int = Field(ge=2, le=64)
+    match_points: int = Field(default=3, ge=1, le=10)
+
+
+class TournamentEntryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    player_id: Optional[str] = None
+    player_nickname: str
+    seed: int
+    eliminated: bool
+
+
+class TournamentMatchResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    round_number: int
+    match_number: int
+    player1_id: Optional[str] = None
+    player1_nickname: Optional[str] = None
+    player2_id: Optional[str] = None
+    player2_nickname: Optional[str] = None
+    table_id: Optional[str] = None
+    winner_id: Optional[str] = None
+    status: str
+
+
+class TournamentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    max_players: int
+    match_points: int
+    status: str
+    created_by: Optional[str] = None
+    created_at: datetime
+    winner_id: Optional[str] = None
+    winner_nickname: Optional[str] = None
+    player_count: int = 0
+
+
+class TournamentBracketResponse(BaseModel):
+    tournament: TournamentResponse
+    entries: list[TournamentEntryResponse]
+    matches: list[TournamentMatchResponse]
+    total_rounds: int

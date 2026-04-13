@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import type { DashboardData, GameHistoryItem } from "../types/game";
-import { getPlayerDashboard } from "../services/api";
+import { getPlayerDashboard, exportGame } from "../services/api";
 import "./styles/Dashboard.css";
 
 interface DashboardProps {
@@ -82,6 +82,7 @@ function Dashboard({ playerId }: DashboardProps) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -113,6 +114,25 @@ function Dashboard({ playerId }: DashboardProps) {
       cancelled = true;
     };
   }, [playerId]);
+
+  /** Trigger a browser download of the game export for `tableId`. */
+  async function handleExport(tableId: string) {
+    setExportError(null);
+    try {
+      const text = await exportGame(tableId);
+      const blob = new Blob([text], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `game_${tableId}.mat`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setExportError(
+        err instanceof Error ? err.message : "Failed to export game.",
+      );
+    }
+  }
 
   if (loading) {
     return <div className="dashboard-loading">Loading dashboard...</div>;
@@ -158,6 +178,10 @@ function Dashboard({ playerId }: DashboardProps) {
         </div>
       </div>
 
+      {exportError && (
+        <div className="dashboard-empty">{exportError}</div>
+      )}
+
       {/* Game history table */}
       {data.games.length > 0 && (
         <table className="opponent-table dashboard-table">
@@ -170,6 +194,7 @@ function Dashboard({ playerId }: DashboardProps) {
               <th>Win Type</th>
               <th>Score</th>
               <th>Replay</th>
+              <th>Export</th>
             </tr>
           </thead>
           <tbody>
@@ -215,6 +240,20 @@ function Dashboard({ playerId }: DashboardProps) {
                         aria-label={`Replay game against ${game.opponent_nickname}`}
                       >
                         ▶ Replay
+                      </button>
+                    )}
+                  </td>
+                  <td>
+                    {game.result !== "abandoned" && (
+                      <button
+                        className="export-btn"
+                        title="Download game as .mat file"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleExport(game.table_id);
+                        }}
+                      >
+                        ↓
                       </button>
                     )}
                   </td>
