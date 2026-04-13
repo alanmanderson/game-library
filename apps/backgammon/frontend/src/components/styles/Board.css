@@ -24,6 +24,12 @@
   will-change: transform;
 }
 
+/* Ghost checker preview on hover */
+.board-svg .ghost-checker {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
 /* Clickable areas */
 .board-svg .point-area {
   cursor: pointer;

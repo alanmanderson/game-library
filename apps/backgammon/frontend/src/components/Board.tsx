@@ -63,6 +63,9 @@ function Board({
   cubeOwner,
   animatingMove,
 }: BoardProps) {
+  // Hover state for ghost checker preview
+  const [hoveredPoint, setHoveredPoint] = useState<number | null>(null);
+
   // Animation phase: 'idle' → 'start' (at source) → 'end' (transition to dest)
   const [animPhase, setAnimPhase] = useState<'idle' | 'start' | 'end'>('idle');
   const animKeyRef = useRef(0);
@@ -203,6 +206,11 @@ function Board({
     const offPoint = myColor === "white" ? 0 : 25;
     return validDestinations.has(offPoint);
   }, [validDestinations, myColor]);
+
+  // Clear ghost preview when selection changes
+  useEffect(() => {
+    setHoveredPoint(null);
+  }, [selectedPoint]);
 
   // Check if bar is selected
   const barIsSelected = useMemo(() => {
@@ -583,6 +591,67 @@ function Board({
     );
   }
 
+  function renderGhostChecker() {
+    if (hoveredPoint === null || selectedPoint === null) return null;
+
+    const color = myColor;
+    const gradId = color === "white" ? "glass-white" : "glass-black";
+    const rimId = color === "white" ? "rim-white" : "rim-black";
+    const edgeStroke = color === "white" ? "rgba(255,255,255,0.6)" : "rgba(150,150,150,0.4)";
+
+    // Bear-off ghost
+    const offPoint = myColor === "white" ? 0 : 25;
+    if (hoveredPoint === offPoint) {
+      const bearCx = layout.bearoffX + BEAROFF_WIDTH / 2;
+      const offCount = myColor === "white" ? gameState.off_white : gameState.off_black;
+      const isBottom = true; // Player's bear-off is always at bottom
+      const cy = isBottom
+        ? BOARD_HEIGHT - MARGIN - 6 - offCount * 8
+        : MARGIN + 6 + offCount * 8;
+      return (
+        <g key="ghost-bearoff" className="ghost-checker" pointerEvents="none">
+          <rect
+            x={bearCx - 14}
+            y={cy - 5}
+            width={28}
+            height={10}
+            rx={3}
+            fill={`url(#${gradId})`}
+            stroke={edgeStroke}
+            strokeWidth={0.5}
+          />
+        </g>
+      );
+    }
+
+    // Regular point ghost
+    const pos = pointPositions[hoveredPoint];
+    if (!pos) return null;
+
+    const cx = columnX(pos.col);
+    const value = gameState.points[hoveredPoint];
+    const absCount = Math.abs(value);
+    // If there's a single opponent checker (blot), ghost replaces it at position 0
+    const isBlot = absCount === 1 && (
+      (color === "white" && value < 0) || (color === "black" && value > 0)
+    );
+    const stackIndex = isBlot ? 0 : absCount;
+    const cappedIndex = Math.min(stackIndex, MAX_VISIBLE_CHECKERS - 1);
+
+    const cy = pos.isTop
+      ? MARGIN + CHECKER_RADIUS + cappedIndex * (CHECKER_RADIUS * 2 + CHECKER_GAP)
+      : BOARD_HEIGHT - MARGIN - CHECKER_RADIUS - cappedIndex * (CHECKER_RADIUS * 2 + CHECKER_GAP);
+
+    return (
+      <g key="ghost-checker" className="ghost-checker" pointerEvents="none">
+        <circle cx={cx} cy={cy} r={CHECKER_RADIUS} fill={`url(#${gradId})`} stroke={edgeStroke} strokeWidth={1} />
+        <circle cx={cx} cy={cy} r={CHECKER_RADIUS} fill={`url(#${rimId})`} />
+        <circle cx={cx} cy={cy} r={CHECKER_RADIUS - 6} fill="none" stroke={edgeStroke} strokeWidth={0.5} opacity={0.35} />
+        <ellipse cx={cx - 5} cy={cy - 6} rx={10} ry={7} fill="url(#glass-shine)" />
+      </g>
+    );
+  }
+
   function renderPointClickArea(point: number) {
     const pos = pointPositions[point];
     if (!pos) return null;
@@ -590,6 +659,8 @@ function Board({
     const cx = columnX(pos.col);
     const halfWidth = POINT_WIDTH / 2;
     const y = pos.isTop ? MARGIN : BOARD_HEIGHT - MARGIN - TRIANGLE_HEIGHT;
+
+    const isDest = validDestinations.has(point);
 
     return (
       <rect
@@ -605,6 +676,8 @@ function Board({
         tabIndex={0}
         onClick={() => onPointClick(point)}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onPointClick(point); }}
+        onMouseEnter={isDest ? () => setHoveredPoint(point) : undefined}
+        onMouseLeave={isDest ? () => setHoveredPoint(null) : undefined}
       />
     );
   }
@@ -839,6 +912,9 @@ function Board({
         {/* Bear-off checkers */}
         {renderBearOffCheckers()}
 
+        {/* Ghost checker preview */}
+        {renderGhostChecker()}
+
         {/* Animated checker overlay */}
         {animatingMove && animPhase !== 'idle' && (() => {
           const from = getAnimPosition(animatingMove.from_point, true);
@@ -904,6 +980,8 @@ function Board({
           tabIndex={0}
           onClick={onBearOffClick}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onBearOffClick(); }}
+          onMouseEnter={bearOffIsDestination ? () => setHoveredPoint(myColor === "white" ? 0 : 25) : undefined}
+          onMouseLeave={bearOffIsDestination ? () => setHoveredPoint(null) : undefined}
         />
 
         {/* "BAR" label */}
