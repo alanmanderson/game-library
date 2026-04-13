@@ -6,10 +6,14 @@ import "./styles/GameInfo.css";
 interface GameInfoProps {
   table: Table;
   gameStatus: GameStatus;
+  isOpen?: boolean;
+  onToggle?: () => void;
 }
 
-function GameInfo({ table, gameStatus }: GameInfoProps) {
-  const [isOpen, setIsOpen] = useState(false);
+function GameInfo({ table, gameStatus, isOpen: externalIsOpen, onToggle }: GameInfoProps) {
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
+  const isOpen = externalIsOpen !== undefined ? externalIsOpen : internalIsOpen;
+  const toggleOpen = onToggle ?? (() => setInternalIsOpen((prev) => !prev));
   const [moveHistory, setMoveHistory] = useState<MoveRecord[]>([]);
 
   useEffect(() => {
@@ -45,7 +49,8 @@ function GameInfo({ table, gameStatus }: GameInfoProps) {
     <div className="move-history-drawer">
       <button
         className={`drawer-toggle ${isOpen ? "open" : ""}`}
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={toggleOpen}
+        title="Toggle move history (M)"
       >
         <span className="drawer-arrow">{isOpen ? "\u25BC" : "\u25B6"}</span>
         Move History

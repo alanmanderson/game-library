@@ -320,3 +320,66 @@ describe("GameControls – Accept/Decline double buttons", () => {
     expect(handlers.onDeclineDouble).toHaveBeenCalledTimes(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Keyboard shortcut hint tooltips (title attributes)
+// ---------------------------------------------------------------------------
+
+describe("GameControls – keyboard shortcut hints", () => {
+  it("Roll button has shortcut hint in title", () => {
+    renderControls({ current_turn: "white", status: "rolling" }, "white");
+    const btn = screen.getByText("Roll");
+    expect(btn).toHaveAttribute("title");
+    expect(btn.getAttribute("title")).toMatch(/R/);
+  });
+
+  it("End Turn button has shortcut hint in title", () => {
+    renderControls(
+      {
+        current_turn: "white",
+        status: "moving",
+        valid_moves: [],
+        remaining_dice: [3, 5],
+        turn_moves_count: 0,
+      },
+      "white",
+    );
+    const btn = screen.getByText("End Turn");
+    expect(btn).toHaveAttribute("title");
+    expect(btn.getAttribute("title")).toMatch(/E/);
+  });
+
+  it("Confirm Turn button has shortcut hint in title", () => {
+    renderControls(
+      {
+        current_turn: "white",
+        status: "moving",
+        valid_moves: [],
+        remaining_dice: [],
+        turn_moves_count: 2,
+      },
+      "white",
+    );
+    const btn = screen.getByText("Confirm Turn");
+    expect(btn).toHaveAttribute("title");
+    expect(btn.getAttribute("title")).toMatch(/E/);
+  });
+
+  it("Undo button has shortcut hint in title", () => {
+    renderControls(
+      { current_turn: "white", status: "moving", can_undo: true },
+      "white",
+    );
+    const btn = screen.getByText("Undo");
+    expect(btn).toHaveAttribute("title");
+    expect(btn.getAttribute("title")).toMatch(/U/);
+  });
+
+  it("Double button has shortcut hint in title", () => {
+    renderControls({ can_double: true, double_offered: false }, "white");
+    const btn = screen.getByText("Double");
+    expect(btn).toHaveAttribute("title");
+    expect(btn.getAttribute("title")).toMatch(/D/);
+  });
+});
+

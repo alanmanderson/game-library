@@ -84,6 +84,8 @@ function Game() {
   const [opponentReconnected, setOpponentReconnected] = useState(false);
   const [copied, setCopied] = useState(false);
   const [invitingBot, setInvitingBot] = useState(false);
+  const [moveHistoryOpen, setMoveHistoryOpen] = useState(false);
+  const [showShortcutHelp, setShowShortcutHelp] = useState(false);
   // Checker movement animation state
   const [animatingMove, setAnimatingMove] = useState<AnimatingMove | null>(null);
   const prevGameStateRef = useRef<GameState | null>(null);
@@ -309,6 +311,114 @@ function Game() {
   );
 
   // ----- Click handling -----
+
+  // ----- Keyboard shortcuts -----
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+
+      // Don't intercept when user is typing in a form field
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+
+      // When shortcut help is open, only Escape closes it
+      if (showShortcutHelp) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          setShowShortcutHelp(false);
+        }
+        return;
+      }
+
+      if (!gameState || !myColor) return;
+
+      const isTurn = gameState.current_turn === myColor;
+
+      switch (e.key) {
+        case "r":
+        case "R":
+          if (isTurn && gameState.status === "rolling" && !gameState.double_offered) {
+            e.preventDefault();
+            rollDice();
+          }
+          break;
+
+        case "e":
+        case "E":
+        case "Enter": {
+          // Avoid double-triggering when Enter is pressed on a focused interactive element
+          if (e.key === "Enter" && (target.tagName === "BUTTON" || target.tagName === "A")) break;
+          if (isTurn && gameState.status === "moving") {
+            const canEnd =
+              (gameState.turn_moves_count > 0 &&
+                (gameState.remaining_dice.length === 0 || gameState.valid_moves.length === 0)) ||
+              (gameState.valid_moves.length === 0 &&
+                gameState.remaining_dice.length > 0 &&
+                gameState.turn_moves_count === 0);
+            if (canEnd) {
+              e.preventDefault();
+              endTurn();
+            }
+          }
+          break;
+        }
+
+        case "u":
+        case "U":
+          if (isTurn && gameState.can_undo) {
+            e.preventDefault();
+            undoTurn();
+          }
+          break;
+
+        case "z":
+        case "Z":
+          if ((e.ctrlKey || e.metaKey) && isTurn && gameState.can_undo) {
+            e.preventDefault();
+            undoTurn();
+          }
+          break;
+
+        case "d":
+        case "D":
+          if (gameState.can_double && !gameState.double_offered) {
+            e.preventDefault();
+            offerDouble();
+          }
+          break;
+
+        case "Escape":
+          if (selectedPoint !== null) {
+            e.preventDefault();
+            setSelectedPoint(null);
+          }
+          break;
+
+        case "m":
+        case "M":
+          e.preventDefault();
+          setMoveHistoryOpen((prev) => !prev);
+          break;
+
+        case "?":
+          e.preventDefault();
+          setShowShortcutHelp(true);
+          break;
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [showShortcutHelp, gameState, myColor, selectedPoint, rollDice, endTurn, undoTurn, offerDouble, setSelectedPoint, setMoveHistoryOpen, setShowShortcutHelp]);
+
+  // ----- Click handling (mouse) -----
 
   const isMyTurn = gameState?.current_turn === myColor;
   const isMovingPhase = gameState?.status === "moving";
@@ -608,6 +718,14 @@ function Game() {
         {statusMessage && (
           <div className="game-status-msg">{statusMessage}</div>
         )}
+        <button
+          className="shortcut-help-btn"
+          onClick={() => setShowShortcutHelp(true)}
+          title="Keyboard shortcuts (?)"
+          aria-label="Show keyboard shortcuts"
+        >
+          ?
+        </button>
         <Link to="/" className="back-link">
           Home
         </Link>
@@ -750,9 +868,63 @@ function Game() {
             )}
           </div>
 
-          <GameInfo table={table} gameStatus={gameState.status} />
+          <GameInfo
+            table={table}
+            gameStatus={gameState.status}
+            isOpen={moveHistoryOpen}
+            onToggle={() => setMoveHistoryOpen((prev) => !prev)}
+          />
         </div>
       </div>
+
+      {showShortcutHelp && (
+        <div
+          className="shortcut-help-overlay"
+          onClick={() => setShowShortcutHelp(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Keyboard shortcuts"
+        >
+          <div className="shortcut-help-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Keyboard Shortcuts</h3>
+            <table className="shortcut-table">
+              <tbody>
+                <tr>
+                  <td><kbd>R</kbd></td>
+                  <td>Roll dice</td>
+                </tr>
+                <tr>
+                  <td><kbd>E</kbd> / <kbd>Enter</kbd></td>
+                  <td>End / Confirm turn</td>
+                </tr>
+                <tr>
+                  <td><kbd>U</kbd> / <kbd>Ctrl+Z</kbd></td>
+                  <td>Undo move</td>
+                </tr>
+                <tr>
+                  <td><kbd>D</kbd></td>
+                  <td>Offer double</td>
+                </tr>
+                <tr>
+                  <td><kbd>Esc</kbd></td>
+                  <td>Deselect checker</td>
+                </tr>
+                <tr>
+                  <td><kbd>M</kbd></td>
+                  <td>Toggle move history</td>
+                </tr>
+                <tr>
+                  <td><kbd>?</kbd></td>
+                  <td>Show this help</td>
+                </tr>
+              </tbody>
+            </table>
+            <button className="shortcut-help-close" onClick={() => setShowShortcutHelp(false)}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
