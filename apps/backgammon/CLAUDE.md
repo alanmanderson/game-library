@@ -61,11 +61,26 @@ backend/
   tests/                   # pytest-asyncio tests (SQLite in-memory)
 frontend/
   src/
-    components/            # React components (Game, Board, Home, AuthModal, etc.)
-    hooks/useWebSocket.ts  # WebSocket with auto-reconnect and message buffering
-    services/api.ts        # REST client with auth headers
+    components/
+      Home.tsx             # Two-panel layout: play panel (left) + tabbed content (right)
+      Game.tsx             # Main game view (board, controls, chat)
+      Board.tsx            # Backgammon board rendering
+      Lobby.tsx            # Game discovery (open games, live games, quick match)
+      Leaderboard.tsx      # Player rankings with metric tabs (wins/rate/rating)
+      Dashboard.tsx        # Player stats and game history
+      Tournament.tsx       # TournamentList (browse/create) + TournamentDetail (bracket)
+      AuthModal.tsx        # Login/register/guest auth flow
+      GameReplay.tsx       # Move-by-move replay viewer
+      Spectator.tsx        # Spectator view for live games
+      styles/              # Per-component CSS files (Home.css, Lobby.css, etc.)
+    hooks/
+      useWebSocket.ts      # WebSocket with auto-reconnect and message buffering
+      useGameState.ts      # Game state management, move validation, hints
+      useGameKeyboard.ts   # Keyboard shortcut bindings for game controls
+    services/api.ts        # REST client with auth headers and typed responses
     types/game.ts          # TypeScript types mirroring backend models
     constants.ts           # STORAGE_KEY, TOKEN_KEY, BOT_PLAYER_ID
+    __tests__/             # Vitest tests (ComponentName.test.tsx pattern)
 ml/
   encoder.py               # 198-feature Tesauro board encoding
   model.py                 # PyTorch BackgammonNet (198→80→80→5, sigmoid)
@@ -129,11 +144,38 @@ Production domain: `backgammon.alanmanderson.com`. Run `deploy.sh` or use the `/
 
 ## Conventions
 
+### Backend
 - All database calls use `AsyncSession` — never use sync SQLAlchemy
 - Alembic for all schema changes — never modify tables directly
 - Table IDs: 8-char uppercase alphanumeric. Player IDs: UUIDs. Bot ID: `"BOT"`
 - Backend tests use in-memory SQLite via fixtures in `conftest.py`
+- Backend tests require `JWT_SECRET=test` env var: `JWT_SECRET=test python3 -m pytest`
 - Frontend proxies `/api` and `/ws` to backend via Vite config (dev) or Caddy (prod)
+
+### Frontend Architecture
+- **Home page** uses a two-panel CSS Grid layout: left play panel (380px, sticky) + right tabbed content panel (flex)
+- **Embedded pattern**: Lobby, Leaderboard, and TournamentList accept an `embedded?: boolean` prop. When `true`, they hide their standalone header/back button and apply a `--embedded` CSS modifier class (e.g., `.lobby--embedded`). This is how they render inside Home's tab panel vs. as standalone pages.
+- **Tab state**: Home.tsx manages `activeTab: HomeTab` state. Tab content mounts/unmounts on switch (not hidden with CSS). This is intentional — Lobby polling restarts cleanly via useEffect cleanup.
+- **Component props**: All components use typed interfaces. Optional props use `?`. Navigation callbacks (like `onBack`) use `() => void`.
+- **API service**: `api.ts` uses a generic `request<T>()` helper with automatic auth headers and typed returns. Snake_case for API payloads.
+- **Constants**: `STORAGE_KEY`, `TOKEN_KEY`, `BOT_PLAYER_ID` in `constants.ts` — use these, don't hardcode strings.
+
+### Frontend Styling
+- **CSS variables** defined in `index.css`: `--bg-primary` (#1a1a2e), `--bg-secondary` (#22223a), `--accent` (#d4a843), `--text-primary` (#e8e8e8), `--text-secondary` (#9a9ab0), `--danger` (#e74c3c), `--success` (#2ecc71). Always use these — never hardcode colors.
+- **Class naming**: Kebab-case with component prefix (`.lobby-*`, `.play-*`, `.content-tab*`, `.config-pill-*`). BEM-like modifiers for state: `.selected`, `.active`, `.used`.
+- **Per-component CSS files** in `components/styles/` — one CSS file per component, imported directly in the component.
+- **Responsive breakpoints**: 960px (tablet — grid collapses or shrinks), 768px (mobile — single column), 480px (small mobile — compact text). Use `@media (max-width: ...)`.
+- **Interactive states**: Use `:hover:not(:disabled)`, `:active:not(:disabled)`. Transitions default to `0.15s ease`.
+
+### Frontend Testing
+- Test files: `__tests__/ComponentName.test.tsx` — one test file per component
+- Mock pattern: `vi.mock("../services/api", ...)` with `vi.fn()` stubs, configure return values in `beforeEach` with `vi.mocked(api.someFunction).mockResolvedValue(...)`
+- Router mock: `const mockNavigate = vi.fn(); vi.mock("react-router-dom", () => ({ useNavigate: () => mockNavigate }))`
+- When testing components that render sub-components with data fetching (e.g., Home renders Lobby which calls `getLobby`), mock ALL API functions the sub-components call, even if the test doesn't assert on them. Otherwise tests fail with "No export defined on mock" errors.
+- Coverage thresholds: 35% (lines, functions, branches, statements) configured in `vite.config.ts`
+- Run frontend tests: `cd frontend && npx vitest run` (or `npm run test:run`)
+
+### ML / Deployment
 - ML model file: `ml/models/backgammon_model_final.pt` — do not delete; baked into Docker image at deploy
 - To retrain the model: `cd ml && pip install torch numpy && python3 train_fast.py`
 - Docker build context is repo root (not `backend/`); `.dockerignore` at root excludes frontend/infra/.git

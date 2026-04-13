@@ -32,9 +32,7 @@ function Home({ player }: HomeProps) {
   const [matchPoints, setMatchPoints] = useState(5);
   const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>("hard");
   const [timeControl, setTimeControl] = useState<TimeControl>("unlimited");
-  const [activeTab, setActiveTab] = useState<HomeTab>(
-    player.is_guest ? "lobby" : "lobby"
-  );
+  const [activeTab, setActiveTab] = useState<HomeTab>("lobby");
 
   const handleCreateTable = useCallback(async () => {
     setCreatingTable(true);
