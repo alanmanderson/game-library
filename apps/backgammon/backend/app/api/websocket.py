@@ -24,12 +24,15 @@ class ConnectionManager:
     """Manages active WebSocket connections organized by table and player.
 
     Supports per-player messaging for personalized game state delivery,
-    table-wide broadcasts, and graceful disconnect notifications.
+    table-wide broadcasts, graceful disconnect notifications, and spectator
+    connections that receive read-only game state updates.
     """
 
     def __init__(self) -> None:
         # table_id -> {player_id: WebSocket}
         self._connections: dict[str, dict[str, WebSocket]] = {}
+        # table_id -> [WebSocket]  (spectators, tracked by object identity)
+        self._spectators: dict[str, list[WebSocket]] = {}
 
     async def connect(self, table_id: str, player_id: str, ws: WebSocket) -> None:
         """Accept a WebSocket connection and register it for a table/player.
@@ -61,6 +64,40 @@ class ConnectionManager:
             self._connections[table_id].pop(player_id, None)
             if not self._connections[table_id]:
                 del self._connections[table_id]
+
+    async def connect_spectator(self, table_id: str, ws: WebSocket) -> None:
+        """Accept a spectator WebSocket connection for a table."""
+        await ws.accept()
+        if table_id not in self._spectators:
+            self._spectators[table_id] = []
+        self._spectators[table_id].append(ws)
+
+    def disconnect_spectator(self, table_id: str, ws: WebSocket) -> None:
+        """Remove a spectator WebSocket connection from the registry."""
+        if table_id in self._spectators:
+            try:
+                self._spectators[table_id].remove(ws)
+            except ValueError:
+                pass
+            if not self._spectators[table_id]:
+                del self._spectators[table_id]
+
+    def get_spectator_count(self, table_id: str) -> int:
+        """Return the number of spectators currently watching a table."""
+        return len(self._spectators.get(table_id, []))
+
+    async def broadcast_to_spectators(self, table_id: str, message: dict) -> None:
+        """Send a JSON message to all spectators at a table."""
+        spectators = list(self._spectators.get(table_id, []))
+        failed = []
+        for ws in spectators:
+            try:
+                await ws.send_json(message)
+            except (ConnectionError, RuntimeError) as e:
+                logger.warning(f"Failed to send to spectator at table {table_id}: {e}")
+                failed.append(ws)
+        for ws in failed:
+            self.disconnect_spectator(table_id, ws)
 
     async def send_to_player(
         self, table_id: str, player_id: str, message: dict
@@ -124,10 +161,19 @@ class ConnectionManager:
                 except Exception:
                     pass
         self._connections.clear()
+        for table_id in list(self._spectators.keys()):
+            for ws in list(self._spectators[table_id]):
+                try:
+                    await ws.close(code=1001, reason="Server shutting down")
+                except Exception:
+                    pass
+        self._spectators.clear()
 
     def connection_count(self) -> int:
         """Return the total number of active WebSocket connections across all tables."""
-        return sum(len(players) for players in self._connections.values())
+        player_count = sum(len(players) for players in self._connections.values())
+        spectator_count = sum(len(specs) for specs in self._spectators.values())
+        return player_count + spectator_count
 
 
 # Global singleton connection manager
@@ -176,6 +222,7 @@ async def _build_full_message(table_id: str, player_id: str, msg_type: str = "ga
             "time_control": table.time_control,
             "white_time_remaining_ms": white_time_ms,
             "black_time_remaining_ms": black_time_ms,
+            "spectator_count": manager.get_spectator_count(table_id),
         }
 
     if db is not None:
@@ -194,6 +241,73 @@ async def _build_full_message(table_id: str, player_id: str, msg_type: str = "ga
     }
 
 
+async def _build_spectator_message(table_id: str, msg_type: str = "game_state", db=None) -> dict:
+    """Build a game state WebSocket message for spectators.
+
+    Spectators receive full board state but with no valid_moves and
+    your_color set to null (they are not participants).
+    If *db* is provided, reuse that session; otherwise opens a fresh one.
+    """
+    # Build game state using an empty string as a sentinel player ID that has
+    # no registered color — this is intentionally not a real player, so
+    # build_game_state_response returns an empty valid_moves list (color is None
+    # → no current-turn check passes).
+    _SPECTATOR_SENTINEL = ""
+    state = game_manager.build_game_state_response(table_id, _SPECTATOR_SENTINEL)
+    # Enforce empty valid_moves for spectators regardless of engine state
+    state["valid_moves"] = []
+
+    async def _build_table_data(session):
+        table = await session.get(Table, table_id)
+        if not table:
+            return None
+        white_player = await session.get(Player, table.white_player_id) if table.white_player_id else None
+        black_player = await session.get(Player, table.black_player_id) if table.black_player_id else None
+        white_time_ms, black_time_ms = game_manager.get_time_remaining(table_id)
+        return {
+            "id": table.id,
+            "status": table.status,
+            "white_player": {
+                "id": white_player.id,
+                "nickname": white_player.nickname,
+                "created_at": str(white_player.created_at),
+                "rating": white_player.rating,
+                "rating_games": white_player.rating_games,
+            } if white_player else None,
+            "black_player": {
+                "id": black_player.id,
+                "nickname": black_player.nickname,
+                "created_at": str(black_player.created_at),
+                "rating": black_player.rating,
+                "rating_games": black_player.rating_games,
+            } if black_player else None,
+            "created_at": str(table.created_at),
+            "match_points": table.match_points,
+            "white_match_score": table.white_match_score,
+            "black_match_score": table.black_match_score,
+            "bot_difficulty": table.bot_difficulty,
+            "time_control": table.time_control,
+            "white_time_remaining_ms": white_time_ms,
+            "black_time_remaining_ms": black_time_ms,
+            "spectator_count": manager.get_spectator_count(table_id),
+        }
+
+    if db is not None:
+        table_data = await _build_table_data(db)
+    else:
+        async with async_session() as fresh_db:
+            table_data = await _build_table_data(fresh_db)
+
+    return {
+        "type": msg_type,
+        "data": {
+            "game_state": state,
+            "your_color": None,
+            "table": table_data,
+        },
+    }
+
+
 async def notify_game_started(table_id: str) -> None:
     """Called from the REST join endpoint to push the initial game state
     to every WebSocket client already connected at *table_id*."""
@@ -201,10 +315,11 @@ async def notify_game_started(table_id: str) -> None:
 
 
 async def _send_game_state_to_all(table_id: str, db=None) -> None:
-    """Send personalized game state to every connected player at a table.
+    """Send personalized game state to every connected player and spectator.
 
     Each player receives their own valid_moves (only the current player
     whose turn it is sees moves; the opponent sees an empty list).
+    Spectators receive the full board state with empty valid_moves.
     If *db* is provided, reuse it to see uncommitted changes.
     """
     for pid in manager.get_player_ids(table_id):
@@ -214,6 +329,14 @@ async def _send_game_state_to_all(table_id: str, db=None) -> None:
         except (ConnectionError, RuntimeError, ValueError, KeyError):
             logger.exception("Failed to send game state to player %s", pid)
 
+    # Broadcast to spectators (empty valid_moves to prevent coaching)
+    if manager.get_spectator_count(table_id) > 0:
+        try:
+            spectator_message = await _build_spectator_message(table_id, db=db)
+            await manager.broadcast_to_spectators(table_id, spectator_message)
+        except (ConnectionError, RuntimeError, ValueError, KeyError):
+            logger.exception("Failed to send game state to spectators at table %s", table_id)
+
 
 async def _send_error(ws: WebSocket, message: str) -> None:
     """Send an error message to a single WebSocket client."""
@@ -221,6 +344,14 @@ async def _send_error(ws: WebSocket, message: str) -> None:
         await ws.send_json({"type": "error", "data": {"message": message}})
     except (ConnectionError, RuntimeError):
         pass  # Client already disconnected, nothing to do
+
+
+async def _broadcast_game_over(table_id: str, game_over_data: dict) -> None:
+    """Send game_over message to all connected players and spectators at a table."""
+    msg = {"type": "game_over", "data": game_over_data}
+    for pid in manager.get_player_ids(table_id):
+        await manager.send_to_player(table_id, pid, msg)
+    await manager.broadcast_to_spectators(table_id, msg)
 
 
 async def websocket_endpoint(websocket: WebSocket, table_id: str, player_id: str) -> None:
@@ -332,10 +463,7 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, player_id: str
                                     "white_match_score": table.white_match_score,
                                     "black_match_score": table.black_match_score,
                                 }
-                                for pid in manager.get_player_ids(table_id):
-                                    await manager.send_to_player(
-                                        table_id, pid, {"type": "game_over", "data": game_over_data}
-                                    )
+                                await _broadcast_game_over(table_id, game_over_data)
                                 if table.status == "finished":
                                     game_manager.cleanup_finished_game(table_id)
                         continue
@@ -464,10 +592,7 @@ async def _handle_make_move(
                 "white_match_score": table.white_match_score,
                 "black_match_score": table.black_match_score,
             }
-            for pid in manager.get_player_ids(table_id):
-                await manager.send_to_player(
-                    table_id, pid, {"type": "game_over", "data": game_over_data}
-                )
+            await _broadcast_game_over(table_id, game_over_data)
         # Only clean up engine when match is truly over
         if table and table.status == "finished":
             game_manager.cleanup_finished_game(table_id)
@@ -531,10 +656,7 @@ async def _handle_decline_double(
                 "white_match_score": table.white_match_score,
                 "black_match_score": table.black_match_score,
             }
-            for pid in manager.get_player_ids(table_id):
-                await manager.send_to_player(
-                    table_id, pid, {"type": "game_over", "data": game_over_data}
-                    )
+            await _broadcast_game_over(table_id, game_over_data)
         if table and table.status == "finished":
             game_manager.cleanup_finished_game(table_id)
 
@@ -545,3 +667,65 @@ async def _handle_next_game(
     """Handle a next_game action: start the next game in a match."""
     await game_manager.start_next_game(db, table_id)
     await _send_game_state_to_all(table_id, db=db)
+
+
+async def websocket_spectator_endpoint(websocket: WebSocket, table_id: str) -> None:
+    """WebSocket endpoint for spectators watching a live game.
+
+    Path: /ws/{table_id}/spectate
+
+    Spectators receive game state updates in real-time but cannot send
+    game actions. Valid moves are not included in state messages to
+    prevent coaching. A valid JWT token is still required.
+    """
+    # Validate JWT token before anything else
+    token = websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=4001, reason="Authentication required")
+        return
+    try:
+        jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
+    except jwt.InvalidTokenError:
+        await websocket.close(code=4001, reason="Invalid token")
+        return
+
+    # Validate table exists before accepting the connection
+    async with async_session() as db:
+        table = await db.get(Table, table_id)
+
+    if not table:
+        await websocket.accept()
+        await websocket.close(code=4004, reason="Table not found")
+        return
+
+    # Accept and register the spectator connection
+    await manager.connect_spectator(table_id, websocket)
+    logger.info("Spectator connected to table %s (total: %d)", table_id, manager.get_spectator_count(table_id))
+
+    try:
+        # Send initial game state if engine is active
+        async with async_session() as db:
+            engine = await game_manager.get_or_restore_engine(table_id, db)
+        if engine:
+            message = await _build_spectator_message(table_id)
+            await websocket.send_json(message)
+        else:
+            # Game not yet started or already finished
+            async with async_session() as db:
+                table = await db.get(Table, table_id)
+            await websocket.send_json({
+                "type": "waiting",
+                "data": {"table_id": table_id, "status": table.status if table else "unknown"},
+            })
+
+        # Spectators only receive messages; any data they send is ignored
+        while True:
+            await websocket.receive_text()
+
+    except WebSocketDisconnect:
+        logger.info("Spectator disconnected from table %s", table_id)
+    except Exception:  # Broad catch intentional: ensure cleanup always runs
+        logger.exception("WebSocket error for spectator at table %s", table_id)
+    finally:
+        manager.disconnect_spectator(table_id, websocket)
+        logger.info("Spectator left table %s (remaining: %d)", table_id, manager.get_spectator_count(table_id))

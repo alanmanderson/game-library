@@ -13,6 +13,7 @@ import { getMe, getStoredToken, clearStoredToken } from "./services/api";
 import { STORAGE_KEY } from "./constants";
 import Home from "./components/Home";
 import Game from "./components/Game";
+import Spectator from "./components/Spectator";
 import AuthModal from "./components/AuthModal";
 import { TournamentList, TournamentDetail } from "./components/Tournament";
 
@@ -117,6 +118,7 @@ function App() {
             )
           }
         />
+        <Route path="/spectate/:tableId" element={<Spectator />} />
       </Routes>
     </div>
   );

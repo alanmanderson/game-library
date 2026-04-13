@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import type { Color, DiceRoll } from "../types/game";
 import "./styles/Dice.css";
 
@@ -22,11 +22,11 @@ const DOT_PATTERNS: Record<number, number[]> = {
   6: [0, 2, 3, 5, 6, 8],
 };
 
-function DieFace({ value, used, color }: { value: number; used: boolean; color: Color }) {
+function DieFace({ value, used, color, rolling }: { value: number; used: boolean; color: Color; rolling?: boolean }) {
   const filled = DOT_PATTERNS[value] || [];
 
   return (
-    <div className={`die ${used ? "used" : ""} die-${color}`}>
+    <div className={`die ${used ? "used" : ""} ${rolling ? "rolling" : ""} die-${color}`}>
       <div className="die-dots">
         {Array.from({ length: 9 }, (_, i) => (
           <span
@@ -40,7 +40,54 @@ function DieFace({ value, used, color }: { value: number; used: boolean; color: 
 }
 
 function Dice({ dice, remainingDice, currentTurn, openingRoll }: DiceProps) {
-  const diceDisplay = useMemo(() => {
+  const [isRolling, setIsRolling] = useState(false);
+  const [rollingFaces, setRollingFaces] = useState<[number, number]>([1, 1]);
+  const prevDiceRef = useRef<{ die1: number; die2: number } | null>(null);
+  const rollTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const rollIntervalRef = useRef<ReturnType<typeof setInterval>>();
+
+  useEffect(() => {
+    const prev = prevDiceRef.current;
+
+    if (dice) {
+      const isNew = !prev || prev.die1 !== dice.die1 || prev.die2 !== dice.die2;
+      if (isNew) {
+        setIsRolling(true);
+
+        // Cycle random faces during tumble
+        if (rollIntervalRef.current) clearInterval(rollIntervalRef.current);
+        rollIntervalRef.current = setInterval(() => {
+          setRollingFaces([
+            Math.floor(Math.random() * 6) + 1,
+            Math.floor(Math.random() * 6) + 1,
+          ]);
+        }, 60);
+
+        if (rollTimerRef.current) clearTimeout(rollTimerRef.current);
+        rollTimerRef.current = setTimeout(() => {
+          if (rollIntervalRef.current) clearInterval(rollIntervalRef.current);
+          setIsRolling(false);
+        }, 500);
+      }
+      prevDiceRef.current = { die1: dice.die1, die2: dice.die2 };
+    } else {
+      prevDiceRef.current = null;
+      if (rollIntervalRef.current) clearInterval(rollIntervalRef.current);
+      if (rollTimerRef.current) clearTimeout(rollTimerRef.current);
+      setIsRolling(false);
+    }
+  }, [dice]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (rollIntervalRef.current) clearInterval(rollIntervalRef.current);
+      if (rollTimerRef.current) clearTimeout(rollTimerRef.current);
+    };
+  }, []);
+
+  // Normal (non-rolling) dice display
+  const normalDiceDisplay = useMemo(() => {
     if (!dice) return [];
 
     const isDoubles = dice.die1 === dice.die2;
@@ -101,9 +148,19 @@ function Dice({ dice, remainingDice, currentTurn, openingRoll }: DiceProps) {
     return null;
   }
 
+  // During rolling animation: show 2 dice with cycling random faces
+  if (isRolling) {
+    return (
+      <div className="dice-container">
+        <DieFace value={rollingFaces[0]} used={false} color={currentTurn} rolling={true} />
+        <DieFace value={rollingFaces[1]} used={false} color={currentTurn} rolling={true} />
+      </div>
+    );
+  }
+
   return (
     <div className="dice-container">
-      {diceDisplay.map((d, idx) => (
+      {normalDiceDisplay.map((d, idx) => (
         <DieFace key={idx} value={d.value} used={d.used} color={d.color} />
       ))}
     </div>

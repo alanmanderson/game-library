@@ -80,12 +80,14 @@
   flex-direction: column;
   align-items: center;
   gap: 0.75rem;
+  width: 100%;
+  max-width: 1000px;
 }
 
 /* Board area with overlay for dice + controls */
 .board-area {
   position: relative;
-  display: inline-block;
+  width: 100%;
 }
 
 .board-overlay {
@@ -228,6 +230,15 @@
   background: rgba(46, 204, 113, 0.15);
   border-color: var(--success);
   color: var(--success);
+}
+
+.spectator-count-banner {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  padding: 0.3rem 1rem;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 0.8rem;
 }
 
 .waiting-table-id {
@@ -486,6 +497,114 @@
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---- Shortcut help button ---- */
+
+.shortcut-help-btn {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--text-secondary);
+  border-radius: 50%;
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 0.15s, border-color 0.15s;
+  padding: 0;
+}
+
+.shortcut-help-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ---- Shortcut help modal ---- */
+
+.shortcut-help-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.15s ease;
+}
+
+.shortcut-help-modal {
+  background: var(--bg-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  padding: 1.5rem 2rem;
+  min-width: 280px;
+  max-width: 420px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.shortcut-help-modal h3 {
+  color: var(--accent);
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 0;
+  text-align: center;
+}
+
+.shortcut-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.shortcut-table td {
+  padding: 0.35rem 0.5rem;
+  color: var(--text-primary);
+}
+
+.shortcut-table td:first-child {
+  white-space: nowrap;
+  width: 40%;
+}
+
+.shortcut-table tr:not(:last-child) td {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+kbd {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  background: var(--bg-primary);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent);
+  line-height: 1.4;
+}
+
+.shortcut-help-close {
+  align-self: center;
+  padding: 0.4rem 1.5rem;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.shortcut-help-close:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 /* ---- Responsive: Tablet ---- */

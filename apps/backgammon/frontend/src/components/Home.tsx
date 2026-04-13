@@ -4,6 +4,7 @@ import type { Player, BotDifficulty, TimeControl } from "../types/game";
 import { createTable, joinTable, inviteBot } from "../services/api";
 import Dashboard from "./Dashboard";
 import Lobby from "./Lobby";
+import Leaderboard from "./Leaderboard";
 import "./styles/Home.css";
 
 interface HomeProps {
@@ -21,6 +22,7 @@ function Home({ player }: HomeProps) {
   const [matchPoints, setMatchPoints] = useState(5);
   const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>("hard");
   const [showLobby, setShowLobby] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [timeControl, setTimeControl] = useState<TimeControl>("unlimited");
 
   const handleCreateTable = useCallback(async () => {
@@ -80,6 +82,15 @@ function Home({ player }: HomeProps) {
         onBack={() => setShowLobby(false)}
         preferredColor={preferredColor}
         matchPoints={matchPoints}
+      />
+    );
+  }
+
+  if (showLeaderboard) {
+    return (
+      <Leaderboard
+        playerId={player.is_guest ? null : player.id}
+        onBack={() => setShowLeaderboard(false)}
       />
     );
   }
@@ -206,6 +217,12 @@ function Home({ player }: HomeProps) {
           <p>Join or create single-elimination tournaments.</p>
           <button onClick={() => navigate("/tournament")}>
             View Tournaments
+        {/* Leaderboard */}
+        <div className="action-card">
+          <h3>Leaderboard</h3>
+          <p>See the top players ranked by wins, win rate, and rating.</p>
+          <button onClick={() => setShowLeaderboard(true)}>
+            View Leaderboard
           </button>
         </div>
 

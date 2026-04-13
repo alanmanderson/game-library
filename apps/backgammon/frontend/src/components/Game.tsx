@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import type { GameState, Color, Table, Move, WSMessage } from "../types/game";
+import type { AnimatingMove } from "./Board";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { STORAGE_KEY, BOT_PLAYER_ID } from "../constants";
 import { inviteBot } from "../services/api";
@@ -9,6 +10,67 @@ import Dice from "./Dice";
 import GameControls from "./GameControls";
 import GameInfo from "./GameInfo";
 import "./styles/Game.css";
+
+/**
+ * Detect a single checker move by comparing previous and new game states.
+ * Returns the from/to points and moving color, or null if no single move detected.
+ */
+function detectMove(prev: GameState, next: GameState): AnimatingMove | null {
+  // Only detect when the previous state had a player actively moving
+  if (prev.status !== "moving") return null;
+
+  const movingColor = prev.current_turn;
+
+  function colorCount(val: number, color: Color): number {
+    if (color === "white") return val > 0 ? val : 0;
+    return val < 0 ? -val : 0;
+  }
+
+  let fromPoint = -1;
+  let toPoint = -1;
+  let changes = 0;
+
+  // Check board points 1-24
+  for (let i = 1; i <= 24; i++) {
+    const prevCount = colorCount(prev.points[i], movingColor);
+    const nextCount = colorCount(next.points[i], movingColor);
+    if (nextCount < prevCount) {
+      fromPoint = i;
+      changes++;
+    }
+    if (nextCount > prevCount) {
+      toPoint = i;
+      changes++;
+    }
+  }
+
+  // Check bar (entering from bar)
+  if (movingColor === "white" && next.bar_white < prev.bar_white) {
+    fromPoint = 25;
+    changes++;
+  }
+  if (movingColor === "black" && next.bar_black < prev.bar_black) {
+    fromPoint = 0;
+    changes++;
+  }
+
+  // Check bear-off
+  if (movingColor === "white" && next.off_white > prev.off_white) {
+    toPoint = 0;
+    changes++;
+  }
+  if (movingColor === "black" && next.off_black > prev.off_black) {
+    toPoint = 25;
+    changes++;
+  }
+
+  // Only animate if exactly one source and one destination changed
+  if (changes === 2 && fromPoint >= 0 && toPoint >= 0) {
+    return { from_point: fromPoint, to_point: toPoint, color: movingColor };
+  }
+
+  return null;
+}
 
 function Game() {
   const { tableId } = useParams<{ tableId: string }>();
@@ -22,6 +84,14 @@ function Game() {
   const [opponentReconnected, setOpponentReconnected] = useState(false);
   const [copied, setCopied] = useState(false);
   const [invitingBot, setInvitingBot] = useState(false);
+  const [moveHistoryOpen, setMoveHistoryOpen] = useState(false);
+  const [showShortcutHelp, setShowShortcutHelp] = useState(false);
+  // Checker movement animation state
+  const [animatingMove, setAnimatingMove] = useState<AnimatingMove | null>(null);
+  const prevGameStateRef = useRef<GameState | null>(null);
+  const myColorRef = useRef<Color | null>(null);
+  const animTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
   // Clock state: server-authoritative values updated on each game_state
   const [whiteTimeMs, setWhiteTimeMs] = useState<number | null>(null);
   const [blackTimeMs, setBlackTimeMs] = useState<number | null>(null);
@@ -59,6 +129,19 @@ function Game() {
       case "game_state":
         // Full state update: data contains { game_state, your_color, table }
         if (message.data.game_state) {
+          // Detect opponent/bot moves for animation
+          const prevGS = prevGameStateRef.current;
+          const newGS = message.data.game_state;
+          if (prevGS && prevGS.current_turn !== myColorRef.current) {
+            const move = detectMove(prevGS, newGS);
+            if (move) {
+              setAnimatingMove(move);
+              if (animTimerRef.current) clearTimeout(animTimerRef.current);
+              animTimerRef.current = setTimeout(() => setAnimatingMove(null), 400);
+            }
+          }
+          prevGameStateRef.current = newGS;
+
           setGameState(message.data.game_state);
           // Sync time from server (authoritative)
           const gs = message.data.game_state;
@@ -141,6 +224,9 @@ function Game() {
     onOpen: handleWsOpen,
   });
 
+  // Keep myColorRef in sync
+  useEffect(() => { myColorRef.current = myColor; }, [myColor]);
+
   // Clear timeouts on unmount
   useEffect(() => {
     return () => {
@@ -148,6 +234,7 @@ function Game() {
       if (reconnectedTimeoutRef.current) clearTimeout(reconnectedTimeoutRef.current);
       if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
       if (clockIntervalRef.current) clearInterval(clockIntervalRef.current);
+      if (animTimerRef.current) clearTimeout(animTimerRef.current);
     };
   }, []);
 
@@ -211,13 +298,127 @@ function Game() {
 
   const makeMove = useCallback(
     (fromPoint: number, toPoint: number) => {
+      // Trigger animation for own move immediately
+      if (myColor) {
+        setAnimatingMove({ from_point: fromPoint, to_point: toPoint, color: myColor });
+        if (animTimerRef.current) clearTimeout(animTimerRef.current);
+        animTimerRef.current = setTimeout(() => setAnimatingMove(null), 400);
+      }
       sendMessage({ action: "make_move", from_point: fromPoint, to_point: toPoint });
       setSelectedPoint(null);
     },
-    [sendMessage],
+    [sendMessage, myColor],
   );
 
   // ----- Click handling -----
+
+  // ----- Keyboard shortcuts -----
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+
+      // Don't intercept when user is typing in a form field
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+
+      // When shortcut help is open, only Escape closes it
+      if (showShortcutHelp) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          setShowShortcutHelp(false);
+        }
+        return;
+      }
+
+      if (!gameState || !myColor) return;
+
+      const isTurn = gameState.current_turn === myColor;
+
+      switch (e.key) {
+        case "r":
+        case "R":
+          if (isTurn && gameState.status === "rolling" && !gameState.double_offered) {
+            e.preventDefault();
+            rollDice();
+          }
+          break;
+
+        case "e":
+        case "E":
+        case "Enter": {
+          // Avoid double-triggering when Enter is pressed on a focused interactive element
+          if (e.key === "Enter" && (target.tagName === "BUTTON" || target.tagName === "A")) break;
+          if (isTurn && gameState.status === "moving") {
+            const canEnd =
+              (gameState.turn_moves_count > 0 &&
+                (gameState.remaining_dice.length === 0 || gameState.valid_moves.length === 0)) ||
+              (gameState.valid_moves.length === 0 &&
+                gameState.remaining_dice.length > 0 &&
+                gameState.turn_moves_count === 0);
+            if (canEnd) {
+              e.preventDefault();
+              endTurn();
+            }
+          }
+          break;
+        }
+
+        case "u":
+        case "U":
+          if (isTurn && gameState.can_undo) {
+            e.preventDefault();
+            undoTurn();
+          }
+          break;
+
+        case "z":
+        case "Z":
+          if ((e.ctrlKey || e.metaKey) && isTurn && gameState.can_undo) {
+            e.preventDefault();
+            undoTurn();
+          }
+          break;
+
+        case "d":
+        case "D":
+          if (gameState.can_double && !gameState.double_offered) {
+            e.preventDefault();
+            offerDouble();
+          }
+          break;
+
+        case "Escape":
+          if (selectedPoint !== null) {
+            e.preventDefault();
+            setSelectedPoint(null);
+          }
+          break;
+
+        case "m":
+        case "M":
+          e.preventDefault();
+          setMoveHistoryOpen((prev) => !prev);
+          break;
+
+        case "?":
+          e.preventDefault();
+          setShowShortcutHelp(true);
+          break;
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [showShortcutHelp, gameState, myColor, selectedPoint, rollDice, endTurn, undoTurn, offerDouble, setSelectedPoint, setMoveHistoryOpen, setShowShortcutHelp]);
+
+  // ----- Click handling (mouse) -----
 
   const isMyTurn = gameState?.current_turn === myColor;
   const isMovingPhase = gameState?.status === "moving";
@@ -517,6 +718,14 @@ function Game() {
         {statusMessage && (
           <div className="game-status-msg">{statusMessage}</div>
         )}
+        <button
+          className="shortcut-help-btn"
+          onClick={() => setShowShortcutHelp(true)}
+          title="Keyboard shortcuts (?)"
+          aria-label="Show keyboard shortcuts"
+        >
+          ?
+        </button>
         <Link to="/" className="back-link">
           Home
         </Link>
@@ -534,6 +743,11 @@ function Game() {
         </div>
       )}
       {error && <div className="game-error-banner">{error}</div>}
+      {(table.spectator_count ?? 0) > 0 && (
+        <div className="spectator-count-banner">
+          👁 {table.spectator_count} watching
+        </div>
+      )}
 
       <div className="game-layout">
         <div className="game-center">
@@ -577,6 +791,7 @@ function Game() {
               onBearOffClick={handleBearOffClick}
               cubeValue={gameState.cube_value}
               cubeOwner={gameState.cube_owner}
+              animatingMove={animatingMove}
             />
             <div className="board-overlay">
               <Dice
@@ -653,9 +868,63 @@ function Game() {
             )}
           </div>
 
-          <GameInfo table={table} gameStatus={gameState.status} />
+          <GameInfo
+            table={table}
+            gameStatus={gameState.status}
+            isOpen={moveHistoryOpen}
+            onToggle={() => setMoveHistoryOpen((prev) => !prev)}
+          />
         </div>
       </div>
+
+      {showShortcutHelp && (
+        <div
+          className="shortcut-help-overlay"
+          onClick={() => setShowShortcutHelp(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Keyboard shortcuts"
+        >
+          <div className="shortcut-help-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Keyboard Shortcuts</h3>
+            <table className="shortcut-table">
+              <tbody>
+                <tr>
+                  <td><kbd>R</kbd></td>
+                  <td>Roll dice</td>
+                </tr>
+                <tr>
+                  <td><kbd>E</kbd> / <kbd>Enter</kbd></td>
+                  <td>End / Confirm turn</td>
+                </tr>
+                <tr>
+                  <td><kbd>U</kbd> / <kbd>Ctrl+Z</kbd></td>
+                  <td>Undo move</td>
+                </tr>
+                <tr>
+                  <td><kbd>D</kbd></td>
+                  <td>Offer double</td>
+                </tr>
+                <tr>
+                  <td><kbd>Esc</kbd></td>
+                  <td>Deselect checker</td>
+                </tr>
+                <tr>
+                  <td><kbd>M</kbd></td>
+                  <td>Toggle move history</td>
+                </tr>
+                <tr>
+                  <td><kbd>?</kbd></td>
+                  <td>Show this help</td>
+                </tr>
+              </tbody>
+            </table>
+            <button className="shortcut-help-close" onClick={() => setShowShortcutHelp(false)}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -9,6 +9,7 @@ import type {
   Player,
   Table,
   LobbyTable,
+  ActiveGame,
   MoveRecord,
   StatsOverview,
   DashboardData,
@@ -200,6 +201,33 @@ export function getGameHistory(tableId: string): Promise<MoveRecord[]> {
   return request<MoveRecord[]>(`/api/tables/${tableId}/history`);
 }
 
+/**
+ * Fetch a completed game as a standard backgammon notation string.
+ *
+ * The response is plain text (`.mat` format) rather than JSON, so this
+ * uses a dedicated text-fetching helper instead of the shared `request`.
+ */
+async function requestText(path: string): Promise<string> {
+  const headers: Record<string, string> = {};
+  const token = getStoredToken();
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  const response = await fetch(`${API_URL}${path}`, { headers });
+  if (!response.ok) {
+    const error = await response
+      .json()
+      .catch(() => ({ detail: "Unknown error" }));
+    throw new Error(error.detail || `HTTP ${response.status}`);
+  }
+  return response.text();
+}
+
+/** Download the move history for `tableId` in standard backgammon notation. */
+export function exportGame(tableId: string): Promise<string> {
+  return requestText(`/api/tables/${tableId}/export`);
+}
+
 // ---------------------------------------------------------------------------
 // Lobby / matchmaking
 // ---------------------------------------------------------------------------
@@ -207,6 +235,11 @@ export function getGameHistory(tableId: string): Promise<MoveRecord[]> {
 /** Fetch the list of public tables waiting for opponents. */
 export function getLobby(): Promise<LobbyTable[]> {
   return request<LobbyTable[]>("/api/lobby");
+}
+
+/** Fetch the list of public tables with games currently in progress. */
+export function getActiveGames(): Promise<ActiveGame[]> {
+  return request<ActiveGame[]>("/api/active-games");
 }
 
 /** Join an available public table or create a new one. */
@@ -220,9 +253,15 @@ export function quickMatch(): Promise<Table> {
 // Leaderboard endpoints
 // ---------------------------------------------------------------------------
 
-/** Fetch the leaderboard of top-rated players. */
-export function getLeaderboard(limit: number = 20): Promise<LeaderboardData> {
-  return request<LeaderboardData>(`/api/leaderboard?limit=${limit}`);
+/** Fetch the leaderboard sorted by the chosen metric. */
+export function getLeaderboard(
+  metric: "wins" | "win_rate" | "rating" = "wins",
+  limit: number = 100,
+  offset: number = 0,
+): Promise<LeaderboardData> {
+  return request<LeaderboardData>(
+    `/api/leaderboard?metric=${metric}&limit=${limit}&offset=${offset}`,
+  );
 }
 
 // ---------------------------------------------------------------------------
