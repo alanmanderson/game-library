@@ -140,14 +140,16 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
       resetInactivityTimer();
 
       try {
-        const parsed: WSMessage = JSON.parse(event.data);
+        const raw = JSON.parse(event.data) as { type: string; [key: string]: unknown };
 
         // Respond to server heartbeat pings with a pong
-        if (parsed.type === "ping") {
+        // (ping/pong are transport-level, not part of WSMessage)
+        if (raw.type === "ping") {
           ws.send(JSON.stringify({ type: "pong" }));
           return;
         }
 
+        const parsed = raw as unknown as WSMessage;
         setLastMessage(parsed);
         onMessageRef.current?.(parsed);
       } catch {

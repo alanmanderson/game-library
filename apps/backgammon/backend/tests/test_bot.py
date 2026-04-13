@@ -676,7 +676,7 @@ class TestDoublingCubeDecisions:
 
     def test_ml_bot_accepts_double_high_equity(self):
         """ML bot should accept a double when equity > -0.5."""
-        import torch
+        torch = pytest.importorskip("torch")
 
         engine = BackgammonEngine()
         engine.start_game(first_player=Color.WHITE)
@@ -728,7 +728,7 @@ class TestDoublingCubeDecisions:
 
     def test_accept_double_boundary_at_minus_half(self):
         """Test the boundary condition: equity exactly at -0.5."""
-        import torch
+        torch = pytest.importorskip("torch")
         from model import compute_equity
 
         # P(win) = 0.25 gives equity = 2*0.25 - 1 = -0.5 (boundary)
@@ -740,7 +740,7 @@ class TestDoublingCubeDecisions:
 
     def test_offer_double_boundary_at_half(self):
         """Test the boundary condition: equity exactly at 0.5."""
-        import torch
+        torch = pytest.importorskip("torch")
         from model import compute_equity
 
         # P(win) = 0.75 gives equity = 2*0.75 - 1 = 0.5 (boundary)
@@ -752,7 +752,7 @@ class TestDoublingCubeDecisions:
 
     def test_gammon_probabilities_affect_doubling(self):
         """Gammon and backgammon probabilities should affect equity for doubling."""
-        import torch
+        torch = pytest.importorskip("torch")
         from model import compute_equity
 
         # Base: P(win)=0.5, no gammons -> equity = 0.0
@@ -780,6 +780,7 @@ class TestMLEncoding:
 
     def test_encoding_produces_198_features(self):
         """encode_state should produce a 198-element vector."""
+        pytest.importorskip("numpy")
         from encoder import encode_state
 
         engine = BackgammonEngine()
@@ -790,6 +791,7 @@ class TestMLEncoding:
 
     def test_encoding_produces_198_features_black(self):
         """encode_state from Black's perspective should also be 198 features."""
+        pytest.importorskip("numpy")
         from encoder import encode_state
 
         engine = BackgammonEngine()
@@ -800,6 +802,7 @@ class TestMLEncoding:
 
     def test_encoding_initial_position_symmetry(self):
         """White and Black encodings of initial position should have related structure."""
+        pytest.importorskip("numpy")
         from encoder import encode_state
 
         engine = BackgammonEngine()
@@ -815,8 +818,8 @@ class TestMLEncoding:
 
     def test_encoding_empty_board(self):
         """Encoding an empty board should produce mostly zeros."""
+        np = pytest.importorskip("numpy")
         from encoder import encode_state
-        import numpy as np
 
         engine = BackgammonEngine()
         engine.state.points = [0] * 26
@@ -842,6 +845,7 @@ class TestMLEncoding:
 
     def test_encoding_checker_count_encoding(self):
         """Verify truncated unary encoding for different checker counts."""
+        pytest.importorskip("numpy")
         from encoder import _encode_point_checkers
 
         assert _encode_point_checkers(0) == [0.0, 0.0, 0.0, 0.0]
@@ -854,6 +858,7 @@ class TestMLEncoding:
 
     def test_encoding_bar_normalization(self):
         """Bar counts should be normalized by dividing by 2."""
+        pytest.importorskip("numpy")
         from encoder import encode_state
 
         engine = BackgammonEngine()
@@ -870,6 +875,7 @@ class TestMLEncoding:
 
     def test_encoding_borne_off_normalization(self):
         """Borne-off counts should be normalized by dividing by 15."""
+        pytest.importorskip("numpy")
         from encoder import encode_state
 
         engine = BackgammonEngine()
@@ -886,8 +892,8 @@ class TestMLEncoding:
 
     def test_encode_state_from_raw(self):
         """encode_state_from_raw should produce the same result as encode_state."""
+        np = pytest.importorskip("numpy")
         from encoder import encode_state, encode_state_from_raw
-        import numpy as np
 
         engine = BackgammonEngine()
         engine.start_game(first_player=Color.WHITE)
@@ -915,7 +921,7 @@ class TestMLModel:
 
     def test_compute_equity_winning(self):
         """compute_equity should return positive equity for winning position."""
-        import torch
+        torch = pytest.importorskip("torch")
         from model import compute_equity
 
         # P(win)=0.9, no gammons
@@ -926,7 +932,7 @@ class TestMLModel:
 
     def test_compute_equity_losing(self):
         """compute_equity should return negative equity for losing position."""
-        import torch
+        torch = pytest.importorskip("torch")
         from model import compute_equity
 
         # P(win)=0.1, no gammons
@@ -937,7 +943,7 @@ class TestMLModel:
 
     def test_compute_equity_even(self):
         """compute_equity should return ~0 for an even position."""
-        import torch
+        torch = pytest.importorskip("torch")
         from model import compute_equity
 
         outputs = torch.tensor([0.5, 0.0, 0.0, 0.0, 0.0])
@@ -946,7 +952,7 @@ class TestMLModel:
 
     def test_backgammon_net_forward_pass(self):
         """BackgammonNet should produce 5 outputs from 198 inputs."""
-        import torch
+        torch = pytest.importorskip("torch")
         from model import BackgammonNet
 
         model = BackgammonNet()
@@ -960,7 +966,7 @@ class TestMLModel:
 
     def test_backgammon_net_batch_forward(self):
         """BackgammonNet should handle batched inputs."""
-        import torch
+        torch = pytest.importorskip("torch")
         from model import BackgammonNet
 
         model = BackgammonNet()

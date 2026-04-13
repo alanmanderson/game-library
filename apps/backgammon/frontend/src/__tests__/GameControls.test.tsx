@@ -66,6 +66,8 @@ function renderControls(
       gameState={gameState}
       myColor={myColor}
       opponentName={opponentName}
+      onRequestHint={vi.fn()}
+      hintsRemaining={3}
       {...handlers}
     />,
   );
