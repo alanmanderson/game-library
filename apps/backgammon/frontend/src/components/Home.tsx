@@ -211,6 +211,12 @@ function Home({ player }: HomeProps) {
           </button>
         </div>
 
+        {/* Tournaments */}
+        <div className="action-card">
+          <h3>Tournaments</h3>
+          <p>Join or create single-elimination tournaments.</p>
+          <button onClick={() => navigate("/tournament")}>
+            View Tournaments
         {/* Leaderboard */}
         <div className="action-card">
           <h3>Leaderboard</h3>

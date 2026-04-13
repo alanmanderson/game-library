@@ -15,6 +15,8 @@ import type {
   DashboardData,
   AuthResponse,
   LeaderboardData,
+  Tournament,
+  TournamentBracket,
 } from "../types/game";
 import { TOKEN_KEY } from "../constants";
 
@@ -260,4 +262,47 @@ export function getLeaderboard(
   return request<LeaderboardData>(
     `/api/leaderboard?metric=${metric}&limit=${limit}&offset=${offset}`,
   );
+}
+
+// ---------------------------------------------------------------------------
+// Tournament endpoints
+// ---------------------------------------------------------------------------
+
+/** Fetch the list of all tournaments. */
+export function listTournaments(): Promise<Tournament[]> {
+  return request<Tournament[]>("/api/tournaments");
+}
+
+/** Create a new tournament. */
+export function createTournament(name: string, maxPlayers: number, matchPoints: number): Promise<Tournament> {
+  return request<Tournament>("/api/tournaments", {
+    method: "POST",
+    body: JSON.stringify({ name, max_players: maxPlayers, match_points: matchPoints }),
+  });
+}
+
+/** Get tournament details including bracket. */
+export function getTournament(tournamentId: string): Promise<TournamentBracket> {
+  return request<TournamentBracket>(`/api/tournaments/${tournamentId}`);
+}
+
+/** Register the current player for a tournament. */
+export function registerForTournament(tournamentId: string): Promise<TournamentBracket> {
+  return request<TournamentBracket>(`/api/tournaments/${tournamentId}/register`, {
+    method: "POST",
+  });
+}
+
+/** Start a tournament (creator only). */
+export function startTournament(tournamentId: string): Promise<TournamentBracket> {
+  return request<TournamentBracket>(`/api/tournaments/${tournamentId}/start`, {
+    method: "POST",
+  });
+}
+
+/** Start the game table for a pending tournament match. */
+export function startMatchTable(tournamentId: string, matchId: number): Promise<{ table_id: string }> {
+  return request<{ table_id: string }>(`/api/tournaments/${tournamentId}/matches/${matchId}/start-table`, {
+    method: "POST",
+  });
 }

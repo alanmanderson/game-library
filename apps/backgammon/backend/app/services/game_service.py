@@ -822,8 +822,27 @@ class GameManager:
             )
             await update_ratings(db, table.winner_id, loser_id)
 
+        # Advance tournament bracket if this table is part of a tournament match
+        if match_over and table.winner_id:
+            await self._process_tournament_advancement(db, table_id, table.winner_id)
+
         # NOTE: Engine cleanup is deferred to cleanup_finished_game() so that
         # the WebSocket handler can still broadcast the final game state.
+
+    async def _process_tournament_advancement(
+        self, db: AsyncSession, table_id: str, winner_id: str
+    ) -> None:
+        """If the table belongs to a tournament match, advance the winner."""
+        from app.models import TournamentMatch
+        from app.services.tournament_service import process_match_completion
+        from sqlalchemy import select as sa_select
+
+        result = await db.execute(
+            sa_select(TournamentMatch).where(TournamentMatch.table_id == table_id)
+        )
+        match = result.scalars().first()
+        if match:
+            await process_match_completion(db, match.tournament_id, table_id, winner_id)
 
     async def start_next_game(self, db: AsyncSession, table_id: str) -> Table:
         """Start the next game in a match after a game_over.

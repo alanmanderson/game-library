@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routes import router
 from app.api.auth_routes import auth_router
+from app.api.tournament_routes import tournament_router
 from app.api.websocket import manager as ws_manager, websocket_endpoint, websocket_spectator_endpoint
 from app.config import settings
 from app.database import async_session, get_db
@@ -126,6 +127,7 @@ async def log_requests(request: Request, call_next):
 
 app.include_router(router)
 app.include_router(auth_router)
+app.include_router(tournament_router)
 
 # Register the WebSocket endpoint for spectators watching live games (must be before player endpoint)
 app.websocket("/ws/{table_id}/spectate")(websocket_spectator_endpoint)
