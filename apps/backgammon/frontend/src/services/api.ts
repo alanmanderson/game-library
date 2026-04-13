@@ -245,7 +245,13 @@ export function quickMatch(): Promise<Table> {
 // Leaderboard endpoints
 // ---------------------------------------------------------------------------
 
-/** Fetch the leaderboard of top-rated players. */
-export function getLeaderboard(limit: number = 20): Promise<LeaderboardData> {
-  return request<LeaderboardData>(`/api/leaderboard?limit=${limit}`);
+/** Fetch the leaderboard sorted by the chosen metric. */
+export function getLeaderboard(
+  metric: "wins" | "win_rate" | "rating" = "wins",
+  limit: number = 100,
+  offset: number = 0,
+): Promise<LeaderboardData> {
+  return request<LeaderboardData>(
+    `/api/leaderboard?metric=${metric}&limit=${limit}&offset=${offset}`,
+  );
 }
