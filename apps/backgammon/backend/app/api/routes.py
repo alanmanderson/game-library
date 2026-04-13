@@ -21,6 +21,8 @@ from app.schemas import (
     ActiveGame,
     LeaderboardEntry,
     LeaderboardResponse,
+    ReplayMoveRecord,
+    ReplayResponse,
 )
 from app.services.game_service import game_manager
 from app.services.stats_service import get_player_stats
@@ -478,6 +480,78 @@ async def get_game_history(
         .order_by(MoveRecord.move_number)
     )
     return result.scalars().all()
+
+
+@router.get("/tables/{table_id}/replay", response_model=ReplayResponse)
+async def get_game_replay(
+    table_id: str, db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Retrieve full replay data for a game, including per-move board snapshots.
+
+    Returns the initial board state and all move records with their
+    ``game_state_after`` snapshots, enabling step-by-step game replay.
+    """
+    from app.game_engine import BackgammonEngine
+
+    table = await db.get(Table, table_id)
+    if not table:
+        raise HTTPException(status_code=404, detail="Table not found")
+
+    # Look up player nicknames
+    white_nickname: str | None = None
+    black_nickname: str | None = None
+    if table.white_player_id:
+        white_player = await db.get(Player, table.white_player_id)
+        white_nickname = white_player.nickname if white_player else None
+    if table.black_player_id:
+        black_player = await db.get(Player, table.black_player_id)
+        black_nickname = black_player.nickname if black_player else None
+
+    # Build the standard initial board state
+    initial_engine = BackgammonEngine()
+    initial_state = initial_engine.get_state_snapshot()
+
+    # Fetch all move records ordered by move number
+    result = await db.execute(
+        select(MoveRecord)
+        .where(MoveRecord.table_id == table_id)
+        .order_by(MoveRecord.move_number)
+    )
+    records = result.scalars().all()
+
+    # Batch-load player nicknames for move records
+    player_ids = {r.player_id for r in records if r.player_id}
+    if player_ids:
+        players_result = await db.execute(
+            select(Player).where(Player.id.in_(player_ids))
+        )
+        player_lookup = {p.id: p for p in players_result.scalars().all()}
+    else:
+        player_lookup = {}
+
+    moves = [
+        ReplayMoveRecord(
+            move_number=record.move_number,
+            player_nickname=(
+                player_lookup[record.player_id].nickname
+                if record.player_id and record.player_id in player_lookup
+                else None
+            ),
+            dice_roll=record.dice_roll,
+            moves_notation=record.moves_notation,
+            game_state_after=record.game_state_after,
+            created_at=record.created_at,
+        )
+        for record in records
+    ]
+
+    return ReplayResponse(
+        table_id=table_id,
+        white_player_nickname=white_nickname,
+        black_player_nickname=black_nickname,
+        initial_state=initial_state,
+        moves=moves,
+    )
 
 
 @router.get("/tables/{table_id}/export")

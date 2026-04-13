@@ -13,6 +13,7 @@ import { getMe, getStoredToken, clearStoredToken } from "./services/api";
 import { STORAGE_KEY } from "./constants";
 import Home from "./components/Home";
 import Game from "./components/Game";
+import GameReplay from "./components/GameReplay";
 import Spectator from "./components/Spectator";
 import AuthModal from "./components/AuthModal";
 import { TournamentList, TournamentDetail } from "./components/Tournament";
@@ -92,6 +93,7 @@ function App() {
           }
         />
         <Route path="/game/:tableId" element={<Game key={player?.id} />} />
+        <Route path="/replay/:tableId" element={<GameReplay />} />
         <Route
           path="/tournament"
           element={
