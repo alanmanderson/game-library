@@ -27,11 +27,11 @@ docker build --platform linux/amd64 -t backgammon-server:latest -f "$SCRIPT_DIR/
 
 # 3. Save Docker image as tarball
 echo "==> Saving Docker image..."
-docker save backgammon-server:latest | gzip > /tmp/backgammon-server.tar.gz
+docker save backgammon-server:latest | zstd -T0 -3 > /tmp/backgammon-server.tar.zst
 
 # 4. Transfer artifacts to VM
 echo "==> Transferring files to VM..."
-scp /tmp/backgammon-server.tar.gz "$REMOTE":/tmp/
+scp /tmp/backgammon-server.tar.zst "$REMOTE":/tmp/
 scp "$SCRIPT_DIR/docker-compose.prod.yml" "$REMOTE":/opt/backgammon/docker-compose.yml
 scp "$SCRIPT_DIR/Caddyfile" "$REMOTE":/opt/backgammon/
 
@@ -62,8 +62,9 @@ ENVFILE
 fi
 
 # Load Docker image
-docker load < /tmp/backgammon-server.tar.gz
-rm /tmp/backgammon-server.tar.gz
+zstd -d /tmp/backgammon-server.tar.zst -o /tmp/backgammon-server.tar
+docker load < /tmp/backgammon-server.tar
+rm /tmp/backgammon-server.tar.zst /tmp/backgammon-server.tar
 
 # Ensure backup directory exists
 mkdir -p /opt/backgammon/backups
@@ -105,5 +106,9 @@ for i in 1 2 3 4 5 6; do
         exit 1
     fi
 done
+
+# 8. Clean up old Docker images to prevent disk full
+echo "==> Cleaning up old Docker images..."
+ssh "$REMOTE" "docker image prune -f && docker builder prune -f --keep-storage=1g"
 
 echo "==> Done. Visit https://$(cd "$SCRIPT_DIR/infra" && terraform output -raw domain_name 2>/dev/null || echo '<your-domain>')"
