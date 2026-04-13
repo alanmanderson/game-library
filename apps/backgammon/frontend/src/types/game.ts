@@ -189,14 +189,20 @@ export interface DashboardData {
 
 /** A single entry in the leaderboard. */
 export interface LeaderboardEntry {
+  rank: number;
+  player_id: string;
   nickname: string;
   rating: number;
   rating_games: number;
+  total_wins: number;
+  total_games: number;
+  win_rate: number;
 }
 
 /** Response from the leaderboard endpoint. */
 export interface LeaderboardData {
   entries: LeaderboardEntry[];
+  total: number;
 }
 
 // ---------------------------------------------------------------------------

@@ -15,6 +15,7 @@ import {
   joinTable,
   getTable,
   getGameHistory,
+  exportGame,
 } from "../services/api";
 
 // Allow assigning to global.fetch in tests
@@ -284,5 +285,35 @@ describe("getGameHistory", () => {
     } as unknown as Response);
 
     await expect(getGameHistory("BAD")).rejects.toThrow("Unknown error");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// exportGame
+// ---------------------------------------------------------------------------
+
+describe("exportGame", () => {
+  it("returns the plain-text content from the export endpoint", async () => {
+    const mockContent = "Player 1: Alice\nPlayer 2: Bob\nMatch to 5 points\n";
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve(mockContent),
+    } as unknown as Response);
+
+    const result = await exportGame("ABCD1234");
+
+    expect(result).toBe(mockContent);
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/tables/ABCD1234/export"),
+      expect.any(Object),
+    );
+  });
+
+  it("throws when the server returns an error", async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      mockError(404, "Table not found"),
+    );
+
+    await expect(exportGame("ZZZZZZZZ")).rejects.toThrow("Table not found");
   });
 });

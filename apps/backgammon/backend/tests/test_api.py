@@ -7,6 +7,7 @@ Each test is independent -- a fresh in-memory database is provisioned via the
 
 import pytest
 
+from app.models import Player, PlayerStats
 from tests.conftest import (
     auth_headers,
     create_test_player,
@@ -243,8 +244,75 @@ class TestGameHistory:
 
 
 # -----------------------------------------------------------------------
-# Player stats
+# Game export
 # -----------------------------------------------------------------------
+
+
+class TestGameExport:
+    async def test_export_not_found(self, client):
+        """GET /api/tables/{id}/export returns 404 for a nonexistent table."""
+        resp = await client.get("/api/tables/XXXXXXXX/export")
+        assert resp.status_code == 404
+
+    async def test_export_empty_game(self, client):
+        """Export of a newly-created table returns valid plain-text with headers."""
+        table, creator_auth, joiner_auth = await create_and_join_table(client, "Alice", "Bob")
+        table_id = table["id"]
+
+        resp = await client.get(f"/api/tables/{table_id}/export")
+        assert resp.status_code == 200
+        assert "text/plain" in resp.headers["content-type"]
+        content = resp.text
+        # Both player nicknames appear (order depends on white/black assignment).
+        assert "Alice" in content
+        assert "Bob" in content
+        assert "Match to" in content
+        assert "Game 1" in content
+
+    async def test_export_with_move_records(self, client, db_session):
+        """Export output includes dice and move notation from recorded moves."""
+        from app.models import MoveRecord
+
+        table, creator_auth, joiner_auth = await create_and_join_table(client, "WhitePlayer", "BlackPlayer")
+        table_id = table["id"]
+        white_id = table["white_player"]["id"]
+        black_id = table["black_player"]["id"]
+
+        # Insert synthetic move records directly into the test database.
+        rec1 = MoveRecord(
+            table_id=table_id,
+            player_id=white_id,
+            move_number=1,
+            dice_roll="3-1",
+            moves_notation="8/5 6/5",
+        )
+        rec2 = MoveRecord(
+            table_id=table_id,
+            player_id=black_id,
+            move_number=2,
+            dice_roll="4-2",
+            moves_notation="24/20 13/11",
+        )
+        db_session.add(rec1)
+        db_session.add(rec2)
+        await db_session.commit()
+
+        resp = await client.get(f"/api/tables/{table_id}/export")
+        assert resp.status_code == 200
+        content = resp.text
+        assert "31: 8/5 6/5" in content
+        assert "42: 24/20 13/11" in content
+        assert " 1)" in content
+
+    async def test_export_content_disposition_header(self, client):
+        """The response carries a Content-Disposition attachment header."""
+        table, _, _ = await create_and_join_table(client)
+        table_id = table["id"]
+        resp = await client.get(f"/api/tables/{table_id}/export")
+        assert resp.status_code == 200
+        cd = resp.headers.get("content-disposition", "")
+        assert "attachment" in cd
+        assert f"game_{table_id}.mat" in cd
 
 
 class TestPlayerStats:
@@ -369,3 +437,170 @@ class TestActiveGamesEndpoint:
         assert resp.status_code == 200
         # Private table should not show up
         assert all(g["id"] != table_id for g in resp.json())
+# Leaderboard endpoint
+# -----------------------------------------------------------------------
+
+
+class TestLeaderboardEndpoints:
+    async def test_leaderboard_empty(self, client):
+        """GET /api/leaderboard returns an empty list when no games have been played."""
+        resp = await client.get("/api/leaderboard")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["entries"] == []
+        assert data["total"] == 0
+
+    async def test_leaderboard_default_metric_is_wins(self, client, db_session):
+        """Default metric is wins; players with wins appear in the list."""
+        p = Player(nickname="Winner", is_guest=False)
+        db_session.add(p)
+        await db_session.flush()
+
+        stats = PlayerStats(
+            player_id=p.id,
+            opponent_id=None,
+            games_played=5,
+            games_won=4,
+            games_lost=1,
+        )
+        db_session.add(stats)
+        await db_session.flush()
+
+        resp = await client.get("/api/leaderboard")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 1
+        entry = data["entries"][0]
+        assert entry["nickname"] == "Winner"
+        assert entry["total_wins"] == 4
+        assert entry["total_games"] == 5
+        assert entry["rank"] == 1
+
+    async def test_leaderboard_excludes_guests(self, client, db_session):
+        """Guest accounts are not included in the leaderboard."""
+        guest = Player(nickname="GuestUser", is_guest=True)
+        db_session.add(guest)
+        await db_session.flush()
+
+        stats = PlayerStats(
+            player_id=guest.id,
+            opponent_id=None,
+            games_played=10,
+            games_won=8,
+            games_lost=2,
+        )
+        db_session.add(stats)
+        await db_session.flush()
+
+        resp = await client.get("/api/leaderboard?metric=wins")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert all(e["nickname"] != "GuestUser" for e in data["entries"])
+
+    async def test_leaderboard_excludes_bot(self, client, db_session):
+        """The BOT player is excluded from the leaderboard."""
+        bot = Player(id="BOT", nickname="Bot", is_guest=False)
+        db_session.add(bot)
+        await db_session.flush()
+
+        stats = PlayerStats(
+            player_id="BOT",
+            opponent_id=None,
+            games_played=100,
+            games_won=90,
+            games_lost=10,
+        )
+        db_session.add(stats)
+        await db_session.flush()
+
+        resp = await client.get("/api/leaderboard?metric=wins")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert all(e["nickname"] != "Bot" for e in data["entries"])
+
+    async def test_leaderboard_wins_ordering(self, client, db_session):
+        """Players with more wins appear earlier in the wins leaderboard."""
+        p1 = Player(nickname="Alice", is_guest=False)
+        p2 = Player(nickname="Bob", is_guest=False)
+        db_session.add_all([p1, p2])
+        await db_session.flush()
+
+        db_session.add_all([
+            PlayerStats(player_id=p1.id, opponent_id=None, games_played=10, games_won=3, games_lost=7),
+            PlayerStats(player_id=p2.id, opponent_id=None, games_played=10, games_won=8, games_lost=2),
+        ])
+        await db_session.flush()
+
+        resp = await client.get("/api/leaderboard?metric=wins")
+        assert resp.status_code == 200
+        entries = resp.json()["entries"]
+        assert entries[0]["nickname"] == "Bob"
+        assert entries[1]["nickname"] == "Alice"
+
+    async def test_leaderboard_win_rate_min_10_games(self, client, db_session):
+        """win_rate metric excludes players with fewer than 10 games."""
+        low = Player(nickname="FewGames", is_guest=False)
+        high = Player(nickname="ManyGames", is_guest=False)
+        db_session.add_all([low, high])
+        await db_session.flush()
+
+        db_session.add_all([
+            PlayerStats(player_id=low.id, opponent_id=None, games_played=5, games_won=5, games_lost=0),
+            PlayerStats(player_id=high.id, opponent_id=None, games_played=10, games_won=8, games_lost=2),
+        ])
+        await db_session.flush()
+
+        resp = await client.get("/api/leaderboard?metric=win_rate")
+        assert resp.status_code == 200
+        entries = resp.json()["entries"]
+        nicknames = [e["nickname"] for e in entries]
+        assert "FewGames" not in nicknames
+        assert "ManyGames" in nicknames
+
+    async def test_leaderboard_rating_min_5_games(self, client, db_session):
+        """rating metric excludes players with fewer than 5 rated games."""
+        few = Player(nickname="FewRated", is_guest=False, rating=2000, rating_games=3)
+        many = Player(nickname="ManyRated", is_guest=False, rating=1600, rating_games=10)
+        db_session.add_all([few, many])
+        await db_session.flush()
+
+        resp = await client.get("/api/leaderboard?metric=rating")
+        assert resp.status_code == 200
+        entries = resp.json()["entries"]
+        nicknames = [e["nickname"] for e in entries]
+        assert "FewRated" not in nicknames
+        assert "ManyRated" in nicknames
+
+    async def test_leaderboard_pagination(self, client, db_session):
+        """offset parameter correctly paginates results."""
+        players = [Player(nickname=f"Player{i}", is_guest=False) for i in range(5)]
+        db_session.add_all(players)
+        await db_session.flush()
+
+        for i, p in enumerate(players):
+            db_session.add(PlayerStats(
+                player_id=p.id,
+                opponent_id=None,
+                games_played=10,
+                games_won=i,
+                games_lost=10 - i,
+            ))
+        await db_session.flush()
+
+        resp1 = await client.get("/api/leaderboard?metric=wins&limit=3&offset=0")
+        assert resp1.status_code == 200
+        data1 = resp1.json()
+        assert len(data1["entries"]) == 3
+        assert data1["total"] == 5
+        assert data1["entries"][0]["rank"] == 1
+
+        resp2 = await client.get("/api/leaderboard?metric=wins&limit=3&offset=3")
+        assert resp2.status_code == 200
+        data2 = resp2.json()
+        assert len(data2["entries"]) == 2
+        assert data2["entries"][0]["rank"] == 4
+
+    async def test_leaderboard_invalid_metric(self, client):
+        """An invalid metric value returns a 422 validation error."""
+        resp = await client.get("/api/leaderboard?metric=invalid")
+        assert resp.status_code == 422

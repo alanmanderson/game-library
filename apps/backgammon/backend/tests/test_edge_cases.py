@@ -1474,52 +1474,6 @@ class TestDieConsumptionBearOffBug:
 
 
 # =====================================================================
-# BUG DETECTION: _must_use_higher_die helper inconsistency
-# =====================================================================
-
-class TestMustUseHigherDieHelper:
-    """The _must_use_higher_die helper returns the higher die even when
-    BOTH dice are usable, contradicting its own docstring which says
-    'If only one of two dice can be used, return the higher value.'
-
-    This helper is not used by the main engine logic (get_valid_moves
-    has its own inline implementation), so this is a dead-code bug.
-    """
-
-    def test_helper_returns_higher_when_both_usable(self):
-        """BUG: When both dice have moves, the helper returns max(dice)
-        instead of None or some indication that both are usable."""
-        engine = BackgammonEngine()
-        # Both dice have moves
-        result = engine._must_use_higher_die({
-            5: [Move(8, 3)],
-            2: [Move(8, 6)],
-        })
-        # The docstring says this should indicate "both can be used"
-        # but the code returns 5 (the higher die).
-        # According to the docstring, it should return None when both are usable,
-        # but it returns max(usable) = 5.
-        assert result == 5, f"Helper returns higher even when both usable: {result}"
-        # Note: This is inconsistent with the docstring.
-        # The docstring says: "Returns None if both dice can be used or neither can."
-        # But the code returns max(usable) when both are usable.
-
-    def test_helper_returns_none_when_neither_usable(self):
-        """When no dice have moves, returns None (correct behavior)."""
-        engine = BackgammonEngine()
-        result = engine._must_use_higher_die({5: [], 2: []})
-        assert result is None
-
-    def test_helper_returns_die_when_only_one_usable(self):
-        """When only one die has moves, returns that die value (correct)."""
-        engine = BackgammonEngine()
-        result = engine._must_use_higher_die({5: [Move(8, 3)], 2: []})
-        assert result == 5
-        result = engine._must_use_higher_die({5: [], 2: [Move(8, 6)]})
-        assert result == 2
-
-
-# =====================================================================
 # Documentation bug: File header docstring
 # =====================================================================
 

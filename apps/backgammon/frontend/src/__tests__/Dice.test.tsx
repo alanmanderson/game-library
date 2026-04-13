@@ -5,8 +5,8 @@
  * used/unused visual state, doubles handling, and empty dice handling.
  */
 
-import { render, screen } from "@testing-library/react";
-import { describe, it, expect } from "vitest";
+import { render, act } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import Dice from "../components/Dice";
 import type { Color, DiceRoll } from "../types/game";
 
@@ -27,13 +27,22 @@ const DOT_PATTERNS: Record<number, number[]> = {
   6: [0, 2, 3, 5, 6, 8],
 };
 
+// Use fake timers to advance past the 500ms dice rolling animation
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 function renderDice(
   dice: DiceRoll | null,
   remainingDice: number[] = [],
   currentTurn: Color = "white",
   openingRoll: { white: number; black: number } | null = null,
 ) {
-  return render(
+  const result = render(
     <Dice
       dice={dice}
       remainingDice={remainingDice}
@@ -41,6 +50,13 @@ function renderDice(
       openingRoll={openingRoll}
     />,
   );
+  // Advance past the rolling animation (500ms) so tests see final values
+  if (dice) {
+    act(() => {
+      vi.advanceTimersByTime(600);
+    });
+  }
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -226,5 +242,33 @@ describe("Dice – opening roll", () => {
     // die1 (4) was white's roll, die2 (2) was black's roll
     expect(dieElements[0].classList.contains("die-white")).toBe(true);
     expect(dieElements[1].classList.contains("die-black")).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Rolling animation
+// ---------------------------------------------------------------------------
+
+describe("Dice – rolling animation", () => {
+  it("shows rolling class during animation", () => {
+    const result = render(
+      <Dice
+        dice={{ die1: 3, die2: 5 }}
+        remainingDice={[3, 5]}
+        currentTurn="white"
+      />,
+    );
+    // Before advancing timers, dice should be rolling
+    const dieElements = result.container.querySelectorAll(".die");
+    expect(dieElements.length).toBe(2);
+    expect(dieElements[0].classList.contains("rolling")).toBe(true);
+    expect(dieElements[1].classList.contains("rolling")).toBe(true);
+
+    // After animation completes
+    act(() => {
+      vi.advanceTimersByTime(600);
+    });
+    const dieElementsAfter = result.container.querySelectorAll(".die");
+    expect(dieElementsAfter[0].classList.contains("rolling")).toBe(false);
   });
 });

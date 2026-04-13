@@ -203,12 +203,16 @@ class DashboardResponse(BaseModel):
 
 
 class LeaderboardEntry(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+    rank: int
+    player_id: str
     nickname: str
     rating: int
     rating_games: int
+    total_wins: int
+    total_games: int
+    win_rate: float
 
 
 class LeaderboardResponse(BaseModel):
     entries: list[LeaderboardEntry]
+    total: int
