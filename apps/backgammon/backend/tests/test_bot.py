@@ -1017,3 +1017,141 @@ class TestSelectBotMoveIntegration:
         with patch("app.services.bot_service._load_ml_bot", return_value=None):
             chosen = _select_bot_move(engine, valid_moves, "TEST_hard")
             assert chosen in valid_moves
+
+
+# -----------------------------------------------------------------------
+# No-contact Bearoff Heuristic Tests
+# -----------------------------------------------------------------------
+
+from app.services.bot_service import _is_no_contact_bearoff, _score_bearoff_move
+
+
+def _make_no_contact_bearoff_engine(color: Color) -> BackgammonEngine:
+    """Create an engine where both sides are bearing off with no contact."""
+    engine = BackgammonEngine()
+    engine.state.points = [0] * 26
+    if color == Color.BLACK:
+        # Black home: 19-24
+        engine.state.points[19] = -2
+        engine.state.points[20] = -3
+        engine.state.points[21] = -2
+        engine.state.points[22] = -3
+        engine.state.points[23] = -2
+        engine.state.points[24] = -1
+        engine.state.off_black = 2
+        # White in their home (1-6), no contact
+        engine.state.points[1] = 3
+        engine.state.points[2] = 2
+        engine.state.points[3] = 3
+        engine.state.points[4] = 2
+        engine.state.points[5] = 3
+        engine.state.off_white = 2
+    else:
+        # White home: 1-6
+        engine.state.points[1] = 2
+        engine.state.points[2] = 3
+        engine.state.points[3] = 2
+        engine.state.points[4] = 3
+        engine.state.points[5] = 2
+        engine.state.points[6] = 1
+        engine.state.off_white = 2
+        # Black in their home (19-24), no contact
+        engine.state.points[19] = -3
+        engine.state.points[20] = -2
+        engine.state.points[21] = -3
+        engine.state.points[22] = -2
+        engine.state.points[23] = -3
+        engine.state.off_black = 2
+    engine.state.current_turn = color
+    engine.state.status = GameStatus.MOVING
+    return engine
+
+
+class TestNoContactBearoff:
+    """Tests for the no-contact bearoff detection and heuristic."""
+
+    def test_detects_no_contact_bearoff_black(self):
+        engine = _make_no_contact_bearoff_engine(Color.BLACK)
+        assert _is_no_contact_bearoff(engine) is True
+
+    def test_detects_no_contact_bearoff_white(self):
+        engine = _make_no_contact_bearoff_engine(Color.WHITE)
+        assert _is_no_contact_bearoff(engine) is True
+
+    def test_not_no_contact_when_opponent_in_home(self):
+        """If opponent has a checker in our home board, it's not no-contact."""
+        engine = _make_no_contact_bearoff_engine(Color.BLACK)
+        # Place a white checker in black's home
+        engine.state.points[20] = 1  # White checker at point 20 (black's home)
+        engine.state.points[1] -= 1  # Remove from white's home to keep count
+        assert _is_no_contact_bearoff(engine) is False
+
+    def test_not_no_contact_when_opponent_on_bar(self):
+        """If opponent is on the bar, they could re-enter our home."""
+        engine = _make_no_contact_bearoff_engine(Color.BLACK)
+        engine.state.bar_white = 1
+        engine.state.points[1] -= 1
+        assert _is_no_contact_bearoff(engine) is False
+
+    def test_not_no_contact_when_not_all_in_home(self):
+        """If we have checkers outside home, we can't bear off."""
+        engine = _make_no_contact_bearoff_engine(Color.BLACK)
+        # Move a black checker outside home
+        engine.state.points[10] = -1
+        engine.state.points[19] += 1  # Remove one from home
+        assert _is_no_contact_bearoff(engine) is False
+
+    def test_bearoff_move_scored_higher_than_home_move(self):
+        """Bearing off should always be preferred over moving within home."""
+        bearoff_move = Move(from_point=22, to_point=25, is_hit=False)
+        home_move = Move(from_point=19, to_point=22, is_hit=False)
+        assert _score_bearoff_move(bearoff_move, Color.BLACK) > \
+               _score_bearoff_move(home_move, Color.BLACK)
+
+    def test_bearoff_from_farther_point_preferred(self):
+        """When both moves bear off, prefer the one from the farther point."""
+        far_bearoff = Move(from_point=19, to_point=25, is_hit=False)
+        near_bearoff = Move(from_point=23, to_point=25, is_hit=False)
+        assert _score_bearoff_move(far_bearoff, Color.BLACK) > \
+               _score_bearoff_move(near_bearoff, Color.BLACK)
+
+    def test_home_move_from_farther_point_preferred(self):
+        """When moving within home, prefer moving the farthest checker."""
+        far_move = Move(from_point=19, to_point=21, is_hit=False)
+        near_move = Move(from_point=23, to_point=24, is_hit=False)
+        assert _score_bearoff_move(far_move, Color.BLACK) > \
+               _score_bearoff_move(near_move, Color.BLACK)
+
+    def test_white_bearoff_scoring(self):
+        """Verify scoring works for white (bears off to point 0)."""
+        bearoff = Move(from_point=5, to_point=0, is_hit=False)
+        home_move = Move(from_point=6, to_point=3, is_hit=False)
+        assert _score_bearoff_move(bearoff, Color.WHITE) > \
+               _score_bearoff_move(home_move, Color.WHITE)
+
+        # Farther bearoff preferred
+        far_bearoff = Move(from_point=6, to_point=0, is_hit=False)
+        near_bearoff = Move(from_point=2, to_point=0, is_hit=False)
+        assert _score_bearoff_move(far_bearoff, Color.WHITE) > \
+               _score_bearoff_move(near_bearoff, Color.WHITE)
+
+    def test_select_bot_move_uses_bearoff_heuristic(self):
+        """_select_bot_move should use the bearoff heuristic in no-contact positions."""
+        engine = _make_no_contact_bearoff_engine(Color.BLACK)
+        engine.state.dice = [3, 5]
+        engine.state.remaining_dice = [3, 5]
+        engine.state.status = GameStatus.MOVING
+
+        valid_moves = engine.get_valid_moves()
+        assert len(valid_moves) > 0
+
+        # With bearoff heuristic, should prefer bearing off over moving
+        set_bot_difficulty("BEAROFF_TEST", "hard")
+        with patch("app.services.bot_service._load_ml_bot", return_value=None):
+            chosen = _select_bot_move(engine, valid_moves, "BEAROFF_TEST")
+
+        # The chosen move should be a bearoff if any bearoff move exists
+        bearoff_moves = [m for m in valid_moves if m.to_point == 25]
+        if bearoff_moves:
+            assert chosen.to_point == 25, \
+                f"Expected bearoff move but got {chosen.from_point}->{chosen.to_point}"

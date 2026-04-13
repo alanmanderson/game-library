@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.models import Player
-from app.game_engine import GameStatus
+from app.game_engine import Color, GameStatus, _home_range, _off_point, _opponent
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +159,60 @@ def _heuristic_score_move(engine, move):
     return score
 
 
+def _is_no_contact_bearoff(engine) -> bool:
+    """Check if the current player is in a no-contact bearing off position.
+
+    Returns True when the current player can bear off AND the opponent has
+    no checkers in the current player's home board (and none on the bar
+    that could re-enter into it).  In this situation the game is a pure
+    race and a simple heuristic beats the neural network.
+    """
+    color = engine.state.current_turn
+    if not engine._check_can_bear_off(color):
+        return False
+
+    opp = _opponent(color)
+    # Opponent on the bar could re-enter into our home board
+    if opp == Color.WHITE and engine.state.bar_white > 0:
+        return False
+    if opp == Color.BLACK and engine.state.bar_black > 0:
+        return False
+
+    # Any opponent checker sitting in our home board means contact
+    home = _home_range(color)
+    for pt in home:
+        val = engine.state.points[pt]
+        if color == Color.WHITE and val < 0:
+            return False
+        if color == Color.BLACK and val > 0:
+            return False
+
+    return True
+
+
+def _score_bearoff_move(move, color) -> float:
+    """Score a move for optimal no-contact bearing off play.
+
+    Always prefer bearing off over moving within the home board.
+    When bearing off, prefer the checker farthest from the off point
+    (most efficient use of the die).  When moving, prefer moving the
+    farthest checker closer to the off point.
+    """
+    off = _off_point(color)
+    is_bearoff = move.to_point == off
+
+    # Distance from the off point (higher = farther away)
+    if color == Color.WHITE:
+        distance = move.from_point        # off point is 0
+    else:
+        distance = 25 - move.from_point   # off point is 25
+
+    if is_bearoff:
+        return 1000.0 + distance
+    else:
+        return float(distance)
+
+
 def _select_bot_move(engine, valid_moves, table_id: str = ""):
     """Select a move based on the table's difficulty setting."""
     difficulty = get_bot_difficulty(table_id)
@@ -166,9 +220,8 @@ def _select_bot_move(engine, valid_moves, table_id: str = ""):
     if difficulty == "easy":
         return random.choice(valid_moves)
 
-    if difficulty == "medium":
-        return max(valid_moves, key=lambda m: _heuristic_score_move(engine, m))
-
+    # Expert difficulty: let the V2 bot handle it first — its bearoff DB
+    # has exact equity lookups that beat any heuristic.
     if difficulty == "expert":
         v2_bot = _load_v2_bot()
         if v2_bot is not None:
@@ -178,7 +231,17 @@ def _select_bot_move(engine, valid_moves, table_id: str = ""):
                     return move
             except (ValueError, IndexError, KeyError) as e:
                 logger.warning("V2 expert move selection failed: %s", e)
-        # Fall through to hard if V2 unavailable
+        # Fall through — V2 unavailable, bearoff heuristic or hard ML below
+
+    # In a no-contact bearoff, use a deterministic heuristic instead of the
+    # base ML model.  The neural network is weak at pure bearing-off races;
+    # a simple "always bear off, move farthest checker" rule is near-optimal.
+    if _is_no_contact_bearoff(engine):
+        color = engine.state.current_turn
+        return max(valid_moves, key=lambda m: _score_bearoff_move(m, color))
+
+    if difficulty == "medium":
+        return max(valid_moves, key=lambda m: _heuristic_score_move(engine, m))
 
     # Default: hard (ML model)
     ml_bot = _load_ml_bot()
