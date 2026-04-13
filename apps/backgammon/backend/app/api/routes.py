@@ -1,6 +1,7 @@
 """REST API routes for the backgammon application."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, func
 
@@ -425,6 +426,90 @@ async def get_game_history(
         .order_by(MoveRecord.move_number)
     )
     return result.scalars().all()
+
+
+@router.get("/tables/{table_id}/export")
+async def export_game(
+    table_id: str, db: AsyncSession = Depends(get_db)
+) -> PlainTextResponse:
+    """Export a completed game as a standard backgammon notation (.mat) file.
+
+    Returns plain text in the widely-recognised match format::
+
+        Player 1: WhitePlayer
+        Player 2: BlackPlayer
+        Match to 5 points
+
+        Game 1
+         1) 31: 8/5 6/5                     42: 24/20 13/11
+         2) 64: 13/7 13/9                   53: 20/15 11/8
+        ...
+        WhitePlayer wins 2 points
+    """
+    table = await db.get(Table, table_id)
+    if not table:
+        raise HTTPException(status_code=404, detail="Table not found")
+
+    white_player = await db.get(Player, table.white_player_id) if table.white_player_id else None
+    black_player = await db.get(Player, table.black_player_id) if table.black_player_id else None
+
+    records_result = await db.execute(
+        select(MoveRecord)
+        .where(MoveRecord.table_id == table_id)
+        .order_by(MoveRecord.move_number)
+    )
+    records = records_result.scalars().all()
+
+    white_name = white_player.nickname if white_player else "White"
+    black_name = black_player.nickname if black_player else "Black"
+    white_id = table.white_player_id
+    black_id = table.black_player_id
+
+    # Separate records by player colour while preserving chronological order.
+    white_records = [r for r in records if r.player_id == white_id]
+    black_records = [r for r in records if r.player_id == black_id]
+
+    lines: list[str] = [
+        f"Player 1: {white_name}",
+        f"Player 2: {black_name}",
+        f"Match to {table.match_points} points",
+        "",
+        "Game 1",
+    ]
+
+    max_turns = max(len(white_records), len(black_records))
+    for i in range(max_turns):
+        turn_num = i + 1
+        white_rec = white_records[i] if i < len(white_records) else None
+        black_rec = black_records[i] if i < len(black_records) else None
+
+        white_part = ""
+        if white_rec:
+            dice = white_rec.dice_roll.replace("-", "")
+            white_part = f"{dice}: {white_rec.moves_notation}"
+
+        black_part = ""
+        if black_rec:
+            dice = black_rec.dice_roll.replace("-", "")
+            black_part = f"{dice}: {black_rec.moves_notation}"
+
+        # Left column is fixed-width so left/right turns are aligned.
+        line = f" {turn_num}) {white_part:<34} {black_part}"
+        lines.append(line.rstrip())
+
+    if table.status == "finished" and table.winner_id:
+        winner_name = white_name if table.winner_id == white_id else black_name
+        score = table.final_score or 1
+        point_word = "point" if score == 1 else "points"
+        lines.append(f"{winner_name} wins {score} {point_word}")
+
+    content = "\n".join(lines) + "\n"
+    return PlainTextResponse(
+        content=content,
+        headers={
+            "Content-Disposition": f'attachment; filename="game_{table_id}.mat"',
+        },
+    )
 
 
 # ------------------------------------------------------------------
