@@ -1,8 +1,10 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
-import type { GameState, Color, Table, WSMessage } from "../types/game";
+import type { GameState, Color, Table, WSMessage, HintMove, ChatMessage } from "../types/game";
 import type { AnimatingMove } from "../components/Board";
 import { useWebSocket } from "./useWebSocket";
 import { STORAGE_KEY } from "../constants";
+
+const MAX_HINTS_PER_GAME = 3;
 
 /**
  * Detect a single checker move by comparing previous and new game states.
@@ -48,6 +50,8 @@ export interface GameActions {
   declineDouble: () => void;
   nextGame: () => void;
   makeMove: (fromPoint: number, toPoint: number) => void;
+  requestHint: () => void;
+  sendChat: (message: string) => void;
 }
 
 export interface GameStateHook {
@@ -67,6 +71,9 @@ export interface GameStateHook {
   blackTimeMs: number | null;
   timeControl: string;
   actions: GameActions;
+  hintMoves: HintMove[];
+  hintsRemaining: number;
+  chatMessages: ChatMessage[];
 }
 
 export function useGameState(tableId: string | undefined): GameStateHook {
@@ -79,9 +86,13 @@ export function useGameState(tableId: string | undefined): GameStateHook {
   const [opponentConnected, setOpponentConnected] = useState(true);
   const [opponentReconnected, setOpponentReconnected] = useState(false);
   const [animatingMove, setAnimatingMove] = useState<AnimatingMove | null>(null);
+  const [hintMoves, setHintMoves] = useState<HintMove[]>([]);
+  const [hintsRemaining, setHintsRemaining] = useState(MAX_HINTS_PER_GAME);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const prevGameStateRef = useRef<GameState | null>(null);
   const myColorRef = useRef<Color | null>(null);
   const animTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const hintTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   const [whiteTimeMs, setWhiteTimeMs] = useState<number | null>(null);
   const [blackTimeMs, setBlackTimeMs] = useState<number | null>(null);
@@ -141,6 +152,22 @@ export function useGameState(tableId: string | undefined): GameStateHook {
         setWaitingForOpponent(false);
         setError(null);
         setSelectedPoint(null);
+        // Clear hint highlights on any game state update (move made, turn ended, etc.)
+        setHintMoves([]);
+        break;
+      case "hint":
+        if (message.data.suggested_moves) {
+          setHintMoves(message.data.suggested_moves as HintMove[]);
+          setHintsRemaining(message.data.hints_remaining as number);
+          // Auto-clear hint highlight after 5 seconds
+          if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
+          hintTimerRef.current = setTimeout(() => setHintMoves([]), 5000);
+        }
+        break;
+      case "chat_message":
+        if (message.data.player_id && message.data.message) {
+          setChatMessages((prev) => [...prev, message.data as ChatMessage]);
+        }
         break;
       case "dice_rolled": break;
       case "game_over": setSelectedPoint(null); break;
@@ -178,6 +205,7 @@ export function useGameState(tableId: string | undefined): GameStateHook {
       if (reconnectedTimeoutRef.current) clearTimeout(reconnectedTimeoutRef.current);
       if (clockIntervalRef.current) clearInterval(clockIntervalRef.current);
       if (animTimerRef.current) clearTimeout(animTimerRef.current);
+      if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
     };
   }, []);
 
@@ -209,6 +237,8 @@ export function useGameState(tableId: string | undefined): GameStateHook {
   const acceptDouble = useCallback(() => { sendMessage({ action: "accept_double" }); }, [sendMessage]);
   const declineDouble = useCallback(() => { sendMessage({ action: "decline_double" }); }, [sendMessage]);
   const nextGame = useCallback(() => { sendMessage({ action: "next_game" }); }, [sendMessage]);
+  const requestHint = useCallback(() => { sendMessage({ action: "request_hint" }); }, [sendMessage]);
+  const sendChat = useCallback((text: string) => { sendMessage({ action: "chat", message: text }); }, [sendMessage]);
 
   const makeMove = useCallback(
     (fromPoint: number, toPoint: number) => {
@@ -224,13 +254,14 @@ export function useGameState(tableId: string | undefined): GameStateHook {
   );
 
   const actions = useMemo(
-    () => ({ rollDice, endTurn, undoTurn, offerDouble, acceptDouble, declineDouble, nextGame, makeMove }),
-    [rollDice, endTurn, undoTurn, offerDouble, acceptDouble, declineDouble, nextGame, makeMove],
+    () => ({ rollDice, endTurn, undoTurn, offerDouble, acceptDouble, declineDouble, nextGame, makeMove, requestHint, sendChat }),
+    [rollDice, endTurn, undoTurn, offerDouble, acceptDouble, declineDouble, nextGame, makeMove, requestHint, sendChat],
   );
 
   return {
     playerId, gameState, myColor, table, selectedPoint, setSelectedPoint,
     error, waitingForOpponent, opponentConnected, opponentReconnected,
     isConnected, animatingMove, whiteTimeMs, blackTimeMs, timeControl, actions,
+    hintMoves, hintsRemaining, chatMessages,
   };
 }

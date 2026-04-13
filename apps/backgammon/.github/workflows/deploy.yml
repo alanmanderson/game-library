@@ -21,11 +21,11 @@ jobs:
         working-directory: backend
         run: pip install -r requirements.txt -r requirements-dev.txt
 
-      - name: Run backend tests
+      - name: Run backend tests with coverage
         working-directory: backend
         env:
           JWT_SECRET: test-secret-for-ci
-        run: pytest
+        run: pytest --cov=app --cov-report=term-missing --cov-fail-under=60
 
   test-frontend:
     runs-on: ubuntu-latest
@@ -43,9 +43,9 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Run frontend tests
+      - name: Run frontend tests with coverage
         working-directory: frontend
-        run: npm run test:run
+        run: npm run test:coverage
 
       - name: Build frontend
         working-directory: frontend

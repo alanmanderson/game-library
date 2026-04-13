@@ -1,5 +1,5 @@
 import { useMemo, useCallback, useState, useEffect, useRef } from "react";
-import type { GameState, Color, Move } from "../types/game";
+import type { GameState, Color, Move, HintMove } from "../types/game";
 import "./styles/Board.css";
 
 export interface AnimatingMove {
@@ -19,6 +19,7 @@ interface BoardProps {
   cubeValue: number;
   cubeOwner: Color | null;
   animatingMove?: AnimatingMove | null;
+  hintMoves?: HintMove[];
 }
 
 // ----- Layout constants -----
@@ -43,6 +44,7 @@ const BORDER_COLOR = "#2a1a0e";
 const HIGHLIGHT_SOURCE = "rgba(212, 168, 67, 0.35)";
 const HIGHLIGHT_SELECTED = "rgba(255, 215, 0, 0.6)";
 const HIGHLIGHT_DEST = "rgba(46, 204, 113, 0.5)";
+const HIGHLIGHT_HINT = "rgba(52, 152, 219, 0.5)";
 const WHITE_CHECKER_FILL = "#f0e6d3";
 const WHITE_CHECKER_STROKE = "#b8a88a";
 const BLACK_CHECKER_FILL = "#2b2b2b";
@@ -62,6 +64,7 @@ function Board({
   cubeValue,
   cubeOwner,
   animatingMove,
+  hintMoves = [],
 }: BoardProps) {
   // Hover state for ghost checker preview
   const [hoveredPoint, setHoveredPoint] = useState<number | null>(null);
@@ -194,6 +197,19 @@ function Board({
     }
     return dests;
   }, [selectedPoint, validMoves]);
+
+  // Determine hint-highlighted points (from and to of the top suggestion)
+  const hintFromPoints = useMemo(() => {
+    const points = new Set<number>();
+    for (const h of hintMoves) points.add(h.from);
+    return points;
+  }, [hintMoves]);
+
+  const hintToPoints = useMemo(() => {
+    const points = new Set<number>();
+    for (const h of hintMoves) points.add(h.to);
+    return points;
+  }, [hintMoves]);
 
   // Check if the bar is a valid source
   const barIsSource = useMemo(() => {
@@ -558,10 +574,13 @@ function Board({
     if (!pos) return null;
 
     let fillColor: string | null = null;
+    const isHintPoint = hintFromPoints.has(point) || hintToPoints.has(point);
     if (selectedPoint === point) {
       fillColor = HIGHLIGHT_SELECTED;
     } else if (validDestinations.has(point)) {
       fillColor = HIGHLIGHT_DEST;
+    } else if (isHintPoint) {
+      fillColor = HIGHLIGHT_HINT;
     } else if (selectedPoint === null && validSourcePoints.has(point)) {
       fillColor = HIGHLIGHT_SOURCE;
     }
@@ -570,11 +589,13 @@ function Board({
 
     const cx = columnX(pos.col);
     const halfWidth = POINT_WIDTH / 2 - 2;
+    const cssClass = isHintPoint && !validDestinations.has(point) && selectedPoint !== point ? "hint-highlight" : "";
 
     if (pos.isTop) {
       return (
         <polygon
           key={`hl-${point}`}
+          className={cssClass}
           points={`${cx - halfWidth},${MARGIN} ${cx + halfWidth},${MARGIN} ${cx},${MARGIN + TRIANGLE_HEIGHT}`}
           fill={fillColor}
           pointerEvents="none"
@@ -584,6 +605,7 @@ function Board({
     return (
       <polygon
         key={`hl-${point}`}
+        className={cssClass}
         points={`${cx - halfWidth},${BOARD_HEIGHT - MARGIN} ${cx + halfWidth},${BOARD_HEIGHT - MARGIN} ${cx},${BOARD_HEIGHT - MARGIN - TRIANGLE_HEIGHT}`}
         fill={fillColor}
         pointerEvents="none"

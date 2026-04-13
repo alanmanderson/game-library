@@ -147,6 +147,13 @@ class MoveRecordResponse(BaseModel):
     created_at: datetime
 
 
+class PaginatedMoveHistoryResponse(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    records: list[MoveRecordResponse]
+
+
 # ── Stats Schemas ────────────────────────────────────────────────────────────
 
 

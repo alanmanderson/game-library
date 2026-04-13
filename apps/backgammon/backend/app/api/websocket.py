@@ -1,7 +1,12 @@
 """WebSocket handler for real-time backgammon game play."""
 
+import asyncio
+import html
 import json
 import logging
+import re
+import time
+from datetime import datetime, timezone
 from typing import Optional
 
 import jwt
@@ -15,6 +20,7 @@ from app.services.game_service import game_manager
 from app.services.bot_service import (
     is_bot_game, is_bot_player, schedule_bot_turn_if_needed,
     schedule_bot_double_response_if_needed, restore_bot_difficulty,
+    evaluate_hint_moves,
 )
 
 logger = logging.getLogger(__name__)
@@ -178,6 +184,44 @@ class ConnectionManager:
 
 # Global singleton connection manager
 manager = ConnectionManager()
+
+# Heartbeat interval in seconds for WebSocket ping/pong
+PING_INTERVAL = 30
+
+# Maximum hints per player per game
+MAX_HINTS_PER_GAME = 3
+
+# Hint usage tracker: table_id -> {player_id: hints_used_count}
+_hint_usage: dict[str, dict[str, int]] = {}
+
+# Chat rate-limit: player_id -> list of timestamps (last N messages)
+CHAT_RATE_LIMIT_MESSAGES = 5
+CHAT_RATE_LIMIT_WINDOW = 10  # seconds
+CHAT_MAX_LENGTH = 200
+_chat_timestamps: dict[str, list[float]] = {}
+
+# Simple regex to strip HTML tags
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+
+
+async def _ping_loop(ws: WebSocket) -> None:
+    """Periodically send a ping message to the client.
+
+    Runs as a background task alongside the main receive loop.
+    Raises an exception (cancelling the task) if the send fails,
+    which signals a dead connection.
+    """
+    try:
+        while True:
+            await asyncio.sleep(PING_INTERVAL)
+            await ws.send_json({"type": "ping"})
+    except (ConnectionError, RuntimeError, WebSocketDisconnect):
+        # Connection is dead — the exception will propagate when the
+        # task is awaited/cancelled, triggering cleanup in the caller.
+        raise
+    except asyncio.CancelledError:
+        # Normal cancellation when the connection closes cleanly.
+        return
 
 
 async def _build_full_message(table_id: str, player_id: str, msg_type: str = "game_state", db=None) -> dict:
@@ -424,125 +468,156 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, player_id: str
                     "data": {"table_id": table_id, "status": table.status if table else "unknown"},
                 })
 
+        # Start a background ping task to detect stale connections
+        ping_task = asyncio.create_task(_ping_loop(websocket))
+
         # Main message loop
-        while True:
-            raw = await websocket.receive_text()
-            try:
-                message = json.loads(raw)
-            except json.JSONDecodeError:
-                await _send_error(websocket, "Invalid JSON")
-                continue
+        try:
+            while True:
+                raw = await websocket.receive_text()
+                try:
+                    message = json.loads(raw)
+                except json.JSONDecodeError:
+                    await _send_error(websocket, "Invalid JSON")
+                    continue
 
-            action = message.get("action")
-            if not action:
-                await _send_error(websocket, "Missing 'action' field")
-                continue
+                action = message.get("action")
 
-            # All game actions require a database session and per-table lock
-            trigger_bot = False
-            trigger_bot_double = False
+                # Handle pong responses from client heartbeat (no-op)
+                if message.get("type") == "pong":
+                    continue
 
-            async with game_manager._get_lock(table_id):
-                # Check for timeout before processing any action
-                engine = game_manager.get_engine(table_id)
-                if engine and engine.state.status != GameStatus.FINISHED:
-                    timed_out_color = game_manager.check_timeout(table_id)
-                    if timed_out_color is not None:
-                        async with async_session() as db:
-                            await game_manager.handle_timeout(db, table_id)
-                            await db.commit()
-                            await _send_game_state_to_all(table_id, db=db)
-                            # Send time_expired game over
-                            table = await db.get(Table, table_id)
-                            if table:
-                                game_over_data = {
-                                    "winner_id": table.winner_id,
-                                    "win_type": "timeout",
-                                    "final_score": table.final_score,
-                                    "match_over": table.status == "finished",
-                                    "white_match_score": table.white_match_score,
-                                    "black_match_score": table.black_match_score,
-                                }
-                                await _broadcast_game_over(table_id, game_over_data)
-                                if table.status == "finished":
-                                    game_manager.cleanup_finished_game(table_id)
-                        continue
+                if not action:
+                    await _send_error(websocket, "Missing 'action' field")
+                    continue
 
-                # Snapshot engine state before action so we can restore on DB failure
-                state_snapshot = engine.get_state_snapshot() if engine else None
+                # Chat messages are handled outside the game lock
+                if action == "chat":
+                    await _handle_chat(websocket, table_id, player_id, message)
+                    continue
 
-                async with async_session() as db:
-                    try:
-                        if action == "roll_dice":
-                            await _handle_roll_dice(db, websocket, table_id, player_id)
+                # All game actions require a database session and per-table lock
+                trigger_bot = False
+                trigger_bot_double = False
 
-                        elif action == "make_move":
-                            from_point = message.get("from_point")
-                            to_point = message.get("to_point")
-                            if from_point is None or to_point is None:
-                                await _send_error(
-                                    websocket,
-                                    "make_move requires 'from_point' and 'to_point'",
+                async with game_manager._get_lock(table_id):
+                    # Check for timeout before processing any action
+                    engine = game_manager.get_engine(table_id)
+                    if engine and engine.state.status != GameStatus.FINISHED:
+                        timed_out_color = game_manager.check_timeout(table_id)
+                        if timed_out_color is not None:
+                            async with async_session() as db:
+                                await game_manager.handle_timeout(db, table_id)
+                                await db.commit()
+                                await _send_game_state_to_all(table_id, db=db)
+                                # Send time_expired game over
+                                table = await db.get(Table, table_id)
+                                if table:
+                                    game_over_data = {
+                                        "winner_id": table.winner_id,
+                                        "win_type": "timeout",
+                                        "final_score": table.final_score,
+                                        "match_over": table.status == "finished",
+                                        "white_match_score": table.white_match_score,
+                                        "black_match_score": table.black_match_score,
+                                    }
+                                    await _broadcast_game_over(table_id, game_over_data)
+                                    if table.status == "finished":
+                                        game_manager.cleanup_finished_game(table_id)
+                                        _hint_usage.pop(table_id, None)
+                            continue
+
+                    # Snapshot engine state before action so we can restore on DB failure
+                    state_snapshot = engine.get_state_snapshot() if engine else None
+
+                    async with async_session() as db:
+                        try:
+                            if action == "roll_dice":
+                                await _handle_roll_dice(db, websocket, table_id, player_id)
+
+                            elif action == "make_move":
+                                from_point = message.get("from_point")
+                                to_point = message.get("to_point")
+                                if from_point is None or to_point is None:
+                                    await _send_error(
+                                        websocket,
+                                        "make_move requires 'from_point' and 'to_point'",
+                                    )
+                                    continue
+                                if not isinstance(from_point, int) or not isinstance(to_point, int):
+                                    await manager.send_to_player(table_id, player_id, {
+                                        "type": "error",
+                                        "data": {"message": "from_point and to_point must be integers"}
+                                    })
+                                    continue
+                                if not (0 <= from_point <= 25) or not (0 <= to_point <= 25):
+                                    await _send_error(
+                                        websocket,
+                                        "from_point and to_point must be between 0 and 25",
+                                    )
+                                    continue
+                                await _handle_make_move(
+                                    db, websocket, table_id, player_id, from_point, to_point
                                 )
-                                continue
-                            if not isinstance(from_point, int) or not isinstance(to_point, int):
-                                await manager.send_to_player(table_id, player_id, {
-                                    "type": "error",
-                                    "data": {"message": "from_point and to_point must be integers"}
-                                })
-                                continue
-                            await _handle_make_move(
-                                db, websocket, table_id, player_id, from_point, to_point
+
+                            elif action == "end_turn":
+                                await _handle_end_turn(db, websocket, table_id, player_id)
+
+                            elif action == "undo_turn":
+                                await _handle_undo_turn(db, websocket, table_id, player_id)
+
+                            elif action == "offer_double":
+                                await _handle_offer_double(db, websocket, table_id, player_id)
+                                trigger_bot_double = True
+
+                            elif action == "accept_double":
+                                await _handle_accept_double(db, websocket, table_id, player_id)
+
+                            elif action == "decline_double":
+                                await _handle_decline_double(db, websocket, table_id, player_id)
+
+                            elif action == "next_game":
+                                await _handle_next_game(db, websocket, table_id, player_id)
+
+                            elif action == "request_hint":
+                                await _handle_request_hint(websocket, table_id, player_id)
+
+                            else:
+                                await _send_error(websocket, f"Unknown action: {action}")
+
+                            await db.commit()
+                            trigger_bot = True
+
+                        except ValueError as e:
+                            await db.rollback()
+                            # Restore engine state on DB failure
+                            if engine and state_snapshot:
+                                await game_manager.restore_engine_from_snapshot(table_id, engine, state_snapshot)
+                            await _send_error(websocket, str(e))
+                        except Exception:  # Broad catch intentional: safety net to keep WS loop alive and rollback DB
+                            await db.rollback()
+                            # Restore engine state on DB failure
+                            if engine and state_snapshot:
+                                await game_manager.restore_engine_from_snapshot(table_id, engine, state_snapshot)
+                            logger.exception(
+                                "Unexpected error handling action '%s' for player %s at table %s",
+                                action, player_id, table_id,
                             )
+                            await _send_error(websocket, "Internal server error")
 
-                        elif action == "end_turn":
-                            await _handle_end_turn(db, websocket, table_id, player_id)
-
-                        elif action == "undo_turn":
-                            await _handle_undo_turn(db, websocket, table_id, player_id)
-
-                        elif action == "offer_double":
-                            await _handle_offer_double(db, websocket, table_id, player_id)
-                            trigger_bot_double = True
-
-                        elif action == "accept_double":
-                            await _handle_accept_double(db, websocket, table_id, player_id)
-
-                        elif action == "decline_double":
-                            await _handle_decline_double(db, websocket, table_id, player_id)
-
-                        elif action == "next_game":
-                            await _handle_next_game(db, websocket, table_id, player_id)
-
-                        else:
-                            await _send_error(websocket, f"Unknown action: {action}")
-
-                        await db.commit()
-                        trigger_bot = True
-
-                    except ValueError as e:
-                        await db.rollback()
-                        # Restore engine state on DB failure
-                        if engine and state_snapshot:
-                            await game_manager.restore_engine_from_snapshot(table_id, engine, state_snapshot)
-                        await _send_error(websocket, str(e))
-                    except Exception:  # Broad catch intentional: safety net to keep WS loop alive and rollback DB
-                        await db.rollback()
-                        # Restore engine state on DB failure
-                        if engine and state_snapshot:
-                            await game_manager.restore_engine_from_snapshot(table_id, engine, state_snapshot)
-                        logger.exception(
-                            "Unexpected error handling action '%s' for player %s at table %s",
-                            action, player_id, table_id,
-                        )
-                        await _send_error(websocket, "Internal server error")
-
-            # Schedule bot turn outside the lock to avoid deadlocks
-            if trigger_bot and is_bot_game(table_id):
-                if trigger_bot_double:
-                    schedule_bot_double_response_if_needed(table_id)
-                else:
-                    schedule_bot_turn_if_needed(table_id)
+                # Schedule bot turn outside the lock to avoid deadlocks
+                if trigger_bot and is_bot_game(table_id):
+                    if trigger_bot_double:
+                        schedule_bot_double_response_if_needed(table_id)
+                    else:
+                        schedule_bot_turn_if_needed(table_id)
+        finally:
+            ping_task.cancel()
+            try:
+                await ping_task
+            except (asyncio.CancelledError, ConnectionError, RuntimeError,
+                    WebSocketDisconnect):
+                pass
 
     except WebSocketDisconnect:
         logger.info("Player %s disconnected from table %s", player_id, table_id)
@@ -596,6 +671,7 @@ async def _handle_make_move(
         # Only clean up engine when match is truly over
         if table and table.status == "finished":
             game_manager.cleanup_finished_game(table_id)
+            _hint_usage.pop(table_id, None)
 
 
 async def _handle_end_turn(
@@ -659,14 +735,121 @@ async def _handle_decline_double(
             await _broadcast_game_over(table_id, game_over_data)
         if table and table.status == "finished":
             game_manager.cleanup_finished_game(table_id)
+            _hint_usage.pop(table_id, None)
 
 
 async def _handle_next_game(
     db, websocket: WebSocket, table_id: str, player_id: str
 ) -> None:
     """Handle a next_game action: start the next game in a match."""
+    # Reset hint usage for the new game
+    _hint_usage.pop(table_id, None)
     await game_manager.start_next_game(db, table_id)
     await _send_game_state_to_all(table_id, db=db)
+
+
+async def _handle_request_hint(
+    websocket: WebSocket, table_id: str, player_id: str
+) -> None:
+    """Handle a request_hint action: evaluate moves and suggest the best one.
+
+    Uses the ML model to evaluate all valid moves and returns the top
+    suggestions ranked by equity. Limited to MAX_HINTS_PER_GAME per player
+    per game. Only available during the MOVING phase for the current turn player.
+    """
+    engine = game_manager.get_engine(table_id)
+    if not engine:
+        await _send_error(websocket, "Game engine not active")
+        return
+
+    # Check game is in MOVING state
+    if engine.state.status != GameStatus.MOVING:
+        await _send_error(websocket, "Hints are only available during the moving phase")
+        return
+
+    # Check it's the requesting player's turn
+    color = game_manager.get_player_color(table_id, player_id)
+    if not color or engine.state.current_turn != color:
+        await _send_error(websocket, "Hints are only available on your turn")
+        return
+
+    # Check hint usage limit
+    table_hints = _hint_usage.get(table_id, {})
+    hints_used = table_hints.get(player_id, 0)
+    if hints_used >= MAX_HINTS_PER_GAME:
+        await _send_error(websocket, "No hints remaining (limit: 3 per game)")
+        return
+
+    # Evaluate moves using the ML model
+    suggested = evaluate_hint_moves(table_id, engine)
+    if suggested is None:
+        await _send_error(websocket, "Hints are unavailable (ML model not loaded)")
+        return
+
+    # Increment hint usage
+    if table_id not in _hint_usage:
+        _hint_usage[table_id] = {}
+    _hint_usage[table_id][player_id] = hints_used + 1
+    hints_remaining = MAX_HINTS_PER_GAME - (hints_used + 1)
+
+    await websocket.send_json({
+        "type": "hint",
+        "data": {
+            "suggested_moves": suggested,
+            "hints_remaining": hints_remaining,
+        },
+    })
+
+
+async def _handle_chat(
+    websocket: WebSocket, table_id: str, player_id: str, message: dict
+) -> None:
+    """Handle a chat message: validate, sanitize, rate-limit, and broadcast."""
+    text = message.get("message", "")
+    if not isinstance(text, str):
+        await _send_error(websocket, "Chat message must be a string")
+        return
+
+    # Strip and validate length
+    text = text.strip()
+    if not text:
+        await _send_error(websocket, "Chat message cannot be empty")
+        return
+    if len(text) > CHAT_MAX_LENGTH:
+        await _send_error(websocket, f"Chat message too long (max {CHAT_MAX_LENGTH} characters)")
+        return
+
+    # Rate limit: max CHAT_RATE_LIMIT_MESSAGES messages per CHAT_RATE_LIMIT_WINDOW seconds
+    now = time.monotonic()
+    timestamps = _chat_timestamps.get(player_id, [])
+    # Keep only timestamps within the window
+    timestamps = [t for t in timestamps if now - t < CHAT_RATE_LIMIT_WINDOW]
+    if len(timestamps) >= CHAT_RATE_LIMIT_MESSAGES:
+        await _send_error(websocket, "Too many messages. Please wait a moment.")
+        return
+    timestamps.append(now)
+    _chat_timestamps[player_id] = timestamps
+
+    # Sanitize: strip HTML tags, then escape remaining HTML entities
+    text = _HTML_TAG_RE.sub("", text)
+    text = html.escape(text)
+
+    # Look up the player's nickname
+    async with async_session() as db:
+        player = await db.get(Player, player_id)
+    nickname = player.nickname if player else "Unknown"
+
+    # Broadcast to all players at the table (NOT spectators)
+    chat_msg = {
+        "type": "chat_message",
+        "data": {
+            "player_id": player_id,
+            "nickname": nickname,
+            "message": text,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+    }
+    await manager.broadcast_to_table(table_id, chat_msg)
 
 
 async def websocket_spectator_endpoint(websocket: WebSocket, table_id: str) -> None:
@@ -718,9 +901,20 @@ async def websocket_spectator_endpoint(websocket: WebSocket, table_id: str) -> N
                 "data": {"table_id": table_id, "status": table.status if table else "unknown"},
             })
 
+        # Start a background ping task to detect stale connections
+        ping_task = asyncio.create_task(_ping_loop(websocket))
+
         # Spectators only receive messages; any data they send is ignored
-        while True:
-            await websocket.receive_text()
+        try:
+            while True:
+                await websocket.receive_text()
+        finally:
+            ping_task.cancel()
+            try:
+                await ping_task
+            except (asyncio.CancelledError, ConnectionError, RuntimeError,
+                    WebSocketDisconnect):
+                pass
 
     except WebSocketDisconnect:
         logger.info("Spectator disconnected from table %s", table_id)

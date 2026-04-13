@@ -11,7 +11,9 @@ interface GameControlsProps {
   onOfferDouble: () => void;
   onAcceptDouble: () => void;
   onDeclineDouble: () => void;
+  onRequestHint: () => void;
   opponentName: string;
+  hintsRemaining: number;
 }
 
 function GameControls({
@@ -23,7 +25,9 @@ function GameControls({
   onOfferDouble,
   onAcceptDouble,
   onDeclineDouble,
+  onRequestHint,
   opponentName,
+  hintsRemaining,
 }: GameControlsProps) {
   const isMyTurn = gameState.current_turn === myColor;
 
@@ -72,6 +76,11 @@ function GameControls({
     gameState.remaining_dice.length > 0 &&
     gameState.turn_moves_count === 0;
 
+  const showHintButton =
+    isMyTurn &&
+    gameState.status === "moving" &&
+    gameState.valid_moves.length > 0;
+
   return (
     <div className="game-controls">
       <div className="controls-row">
@@ -108,6 +117,16 @@ function GameControls({
         {showEndTurnButton && (
           <button className="end-turn-btn" onClick={onEndTurn} title="End turn (E)">
             End Turn
+          </button>
+        )}
+        {showHintButton && (
+          <button
+            className="hint-btn"
+            onClick={onRequestHint}
+            disabled={hintsRemaining <= 0}
+            title={hintsRemaining > 0 ? `Get a move suggestion (H) - ${hintsRemaining} left` : "No hints remaining"}
+          >
+            Hint ({hintsRemaining})
           </button>
         )}
       </div>

@@ -144,6 +144,14 @@ export interface MoveRecord {
   created_at: string;
 }
 
+/** Paginated response for move history. */
+export interface PaginatedMoveHistory {
+  total: number;
+  limit: number;
+  offset: number;
+  records: MoveRecord[];
+}
+
 /** Extended move record for replay with full board snapshot. */
 export interface ReplayMoveRecord {
   move_number: number;
@@ -276,9 +284,24 @@ export interface TournamentBracket {
   total_rounds: number;
 }
 
+/** A chat message exchanged between players. */
+export interface ChatMessage {
+  player_id: string;
+  nickname: string;
+  message: string;
+  timestamp: string;
+}
+
 // ---------------------------------------------------------------------------
 // WebSocket message types
 // ---------------------------------------------------------------------------
+
+/** A suggested move from the hint system. */
+export interface HintMove {
+  from: number;
+  to: number;
+  equity: number;
+}
 
 /** Discriminator values for WebSocket messages. */
 export type WSMessageType =
@@ -291,7 +314,9 @@ export type WSMessageType =
   | "waiting"
   | "error"
   | "opponent_disconnected"
-  | "opponent_reconnected";
+  | "opponent_reconnected"
+  | "hint"
+  | "chat_message";
 
 /** Sent when the full game state needs to be (re)synchronised. */
 export interface WSGameStateMessage {
@@ -311,6 +336,21 @@ export interface WSErrorMessage {
   };
 }
 
+/** Sent when a hint response arrives from the server. */
+export interface WSHintMessage {
+  type: "hint";
+  data: {
+    suggested_moves: HintMove[];
+    hints_remaining: number;
+  };
+}
+
+/** Sent when a chat message arrives from another player. */
+export interface WSChatMessage {
+  type: "chat_message";
+  data: ChatMessage;
+}
+
 /** Sent for simple signal messages with no meaningful payload. */
 export interface WSSignalMessage {
   type: "player_joined" | "dice_rolled" | "move_made" | "turn_ended" | "game_over" | "waiting" | "opponent_disconnected" | "opponent_reconnected";
@@ -318,4 +358,4 @@ export interface WSSignalMessage {
 }
 
 /** Discriminated union of all WebSocket messages. */
-export type WSMessage = WSGameStateMessage | WSErrorMessage | WSSignalMessage;
+export type WSMessage = WSGameStateMessage | WSErrorMessage | WSHintMessage | WSChatMessage | WSSignalMessage;

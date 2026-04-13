@@ -72,6 +72,11 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
   const messageQueueRef = useRef<WSAction[]>([]);
   /** Track whether the hook has been unmounted so we never reconnect after cleanup. */
   const unmountedRef = useRef(false);
+  /** Timer for detecting server inactivity (no messages within timeout). */
+  const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /** Timeout in ms: if no message received within this window, assume dead connection. */
+  const INACTIVITY_TIMEOUT = 45_000;
 
   // Keep the latest callbacks in refs so the WebSocket event handlers always
   // call the most recent versions without needing to tear down / re-create
@@ -85,6 +90,22 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
   useEffect(() => { onOpenRef.current = onOpen; }, [onOpen]);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
   useEffect(() => { onErrorRef.current = onError; }, [onError]);
+
+  // -- Inactivity detection -------------------------------------------------
+
+  /** Reset the inactivity timer. Called whenever a message is received. */
+  const resetInactivityTimer = useCallback(() => {
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current);
+    }
+    inactivityTimerRef.current = setTimeout(() => {
+      // No message received within the timeout — assume stale connection.
+      if (wsRef.current) {
+        console.warn("[useWebSocket] Inactivity timeout — closing connection");
+        wsRef.current.close();
+      }
+    }, INACTIVITY_TIMEOUT);
+  }, []);
 
   // -- Connection logic ----------------------------------------------------
 
@@ -103,6 +124,9 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
       setReconnectAttempts(0);
       onOpenRef.current?.();
 
+      // Start inactivity timer on connection open
+      resetInactivityTimer();
+
       // Flush any messages that were queued while disconnected.
       const queue = messageQueueRef.current;
       messageQueueRef.current = [];
@@ -112,8 +136,18 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
     };
 
     ws.onmessage = (event: MessageEvent) => {
+      // Reset inactivity timer on every received message
+      resetInactivityTimer();
+
       try {
         const parsed: WSMessage = JSON.parse(event.data);
+
+        // Respond to server heartbeat pings with a pong
+        if (parsed.type === "ping") {
+          ws.send(JSON.stringify({ type: "pong" }));
+          return;
+        }
+
         setLastMessage(parsed);
         onMessageRef.current?.(parsed);
       } catch {
@@ -126,6 +160,12 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
       setIsConnected(false);
       wsRef.current = null;
       onCloseRef.current?.();
+
+      // Clear inactivity timer on close
+      if (inactivityTimerRef.current) {
+        clearTimeout(inactivityTimerRef.current);
+        inactivityTimerRef.current = null;
+      }
 
       // Attempt to reconnect unless we've exceeded the limit or unmounted.
       if (unmountedRef.current) return;
@@ -143,7 +183,7 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
     ws.onerror = (event: Event) => {
       onErrorRef.current?.(event);
     };
-  }, [url, reconnectInterval, maxReconnectAttempts]);
+  }, [url, reconnectInterval, maxReconnectAttempts, resetInactivityTimer]);
 
   // -- Lifecycle: connect on mount, clean up on unmount --------------------
 
@@ -158,6 +198,12 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current);
         reconnectTimerRef.current = null;
+      }
+
+      // Clear inactivity timer.
+      if (inactivityTimerRef.current) {
+        clearTimeout(inactivityTimerRef.current);
+        inactivityTimerRef.current = null;
       }
 
       // Close the socket if it's still alive.

@@ -10,7 +10,7 @@ import type {
   Table,
   LobbyTable,
   ActiveGame,
-  MoveRecord,
+  PaginatedMoveHistory,
   StatsOverview,
   DashboardData,
   AuthResponse,
@@ -197,9 +197,15 @@ export function getTable(tableId: string): Promise<Table> {
   return request<Table>(`/api/tables/${tableId}`);
 }
 
-/** Retrieve the full move-history log for a game played at `tableId`. */
-export function getGameHistory(tableId: string): Promise<MoveRecord[]> {
-  return request<MoveRecord[]>(`/api/tables/${tableId}/history`);
+/** Retrieve the paginated move-history log for a game played at `tableId`. */
+export function getGameHistory(
+  tableId: string,
+  limit: number = 50,
+  offset: number = 0,
+): Promise<PaginatedMoveHistory> {
+  return request<PaginatedMoveHistory>(
+    `/api/tables/${tableId}/history?limit=${limit}&offset=${offset}`,
+  );
 }
 
 /** Retrieve full replay data (initial state + per-move snapshots) for a game. */

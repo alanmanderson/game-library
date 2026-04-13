@@ -13,6 +13,7 @@ import GameOverBanner from "./GameOverBanner";
 import PlayerInfoRow from "./PlayerInfoRow";
 import ConnectionBanners from "./ConnectionBanners";
 import ShortcutHelpModal from "./ShortcutHelpModal";
+import ChatPanel from "./ChatPanel";
 import "./styles/Game.css";
 
 function Game() {
@@ -26,6 +27,7 @@ function Game() {
     playerId, gameState, myColor, table, selectedPoint, setSelectedPoint,
     error, waitingForOpponent, opponentConnected, opponentReconnected,
     isConnected, animatingMove, whiteTimeMs, blackTimeMs, timeControl, actions,
+    hintMoves, hintsRemaining, chatMessages,
   } = useGameState(tableId);
 
   useGameKeyboard({
@@ -33,6 +35,7 @@ function Game() {
     setSelectedPoint, setMoveHistoryOpen, setShowShortcutHelp,
     rollDice: actions.rollDice, endTurn: actions.endTurn,
     undoTurn: actions.undoTurn, offerDouble: actions.offerDouble,
+    requestHint: actions.requestHint,
   });
 
   const isMyTurn = gameState?.current_turn === myColor;
@@ -222,10 +225,10 @@ function Game() {
           <PlayerInfoRow name={opponentName} player={opponentPlayer} pips={opponentPips} isOpponent={true} isConnected={opponentConnected} isBotGame={isBotGame} botDifficulty={table.bot_difficulty} isTimed={isTimed} timeMs={opponentTimeMs} isClockActive={!isMyTurn && gameState.status !== "finished"} matchPoints={table.match_points} matchScore={opponentScore} isCrawfordGame={gameState.is_crawford_game} formatClock={formatClock} getClockClass={getClockClass} />
 
           <div className={`board-area perspective-${myColor}`}>
-            <Board gameState={gameState} myColor={myColor} selectedPoint={selectedPoint} validMoves={isMyTurn ? validMoves : []} onPointClick={handlePointClick} onBarClick={handleBarClick} onBearOffClick={handleBearOffClick} cubeValue={gameState.cube_value} cubeOwner={gameState.cube_owner} animatingMove={animatingMove} />
+            <Board gameState={gameState} myColor={myColor} selectedPoint={selectedPoint} validMoves={isMyTurn ? validMoves : []} onPointClick={handlePointClick} onBarClick={handleBarClick} onBearOffClick={handleBearOffClick} cubeValue={gameState.cube_value} cubeOwner={gameState.cube_owner} animatingMove={animatingMove} hintMoves={hintMoves} />
             <div className="board-overlay">
               <Dice dice={gameState.dice} remainingDice={gameState.remaining_dice} currentTurn={diceColor} openingRoll={gameState.opening_roll} />
-              <GameControls gameState={gameState} myColor={myColor} opponentName={opponentName} onRollDice={actions.rollDice} onEndTurn={actions.endTurn} onUndoTurn={actions.undoTurn} onOfferDouble={actions.offerDouble} onAcceptDouble={actions.acceptDouble} onDeclineDouble={actions.declineDouble} />
+              <GameControls gameState={gameState} myColor={myColor} opponentName={opponentName} onRollDice={actions.rollDice} onEndTurn={actions.endTurn} onUndoTurn={actions.undoTurn} onOfferDouble={actions.offerDouble} onAcceptDouble={actions.acceptDouble} onDeclineDouble={actions.declineDouble} onRequestHint={actions.requestHint} hintsRemaining={hintsRemaining} />
             </div>
             {(gameState.status === "finished" || table.status === "game_over") && (
               <GameOverBanner gameState={gameState} table={table} myColor={myColor} myName={myName} opponentName={opponentName} myScore={myScore} opponentScore={opponentScore} onNextGame={actions.nextGame} />
@@ -239,6 +242,8 @@ function Game() {
       </div>
 
       {showShortcutHelp && <ShortcutHelpModal onClose={() => setShowShortcutHelp(false)} />}
+
+      <ChatPanel chatMessages={chatMessages} onSendChat={actions.sendChat} playerId={playerId} />
     </div>
   );
 }

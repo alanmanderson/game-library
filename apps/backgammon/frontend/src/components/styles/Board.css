@@ -30,6 +30,16 @@
   pointer-events: none;
 }
 
+/* Hint highlight pulsing glow */
+.board-svg .hint-highlight {
+  animation: hint-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes hint-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.7; }
+}
+
 /* Clickable areas */
 .board-svg .point-area {
   cursor: pointer;

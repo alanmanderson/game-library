@@ -250,31 +250,53 @@ describe("getTable", () => {
 // ---------------------------------------------------------------------------
 
 describe("getGameHistory", () => {
-  it("fetches move history for a table", async () => {
-    const mockHistory = [
-      {
-        move_number: 1,
-        dice_roll: "3-1",
-        moves_notation: "8/5 6/5",
-        created_at: "2025-01-01T00:00:00",
-      },
-    ];
-    global.fetch = vi.fn().mockResolvedValue(mockOk(mockHistory));
+  it("fetches paginated move history for a table", async () => {
+    const mockResponse = {
+      total: 1,
+      limit: 50,
+      offset: 0,
+      records: [
+        {
+          move_number: 1,
+          dice_roll: "3-1",
+          moves_notation: "8/5 6/5",
+          created_at: "2025-01-01T00:00:00",
+        },
+      ],
+    };
+    global.fetch = vi.fn().mockResolvedValue(mockOk(mockResponse));
 
     const result = await getGameHistory("ABCD12");
 
-    expect(result).toEqual(mockHistory);
+    expect(result).toEqual(mockResponse);
+    expect(result.total).toBe(1);
+    expect(result.records).toHaveLength(1);
     expect(fetch).toHaveBeenCalledWith(
-      expect.stringContaining("/api/tables/ABCD12/history"),
+      expect.stringContaining("/api/tables/ABCD12/history?limit=50&offset=0"),
       expect.any(Object),
     );
   });
 
-  it("returns empty array when no history exists", async () => {
-    global.fetch = vi.fn().mockResolvedValue(mockOk([]));
+  it("returns empty records when no history exists", async () => {
+    const mockResponse = { total: 0, limit: 50, offset: 0, records: [] };
+    global.fetch = vi.fn().mockResolvedValue(mockOk(mockResponse));
 
     const result = await getGameHistory("NEW123");
-    expect(result).toEqual([]);
+    expect(result.total).toBe(0);
+    expect(result.records).toEqual([]);
+  });
+
+  it("passes custom limit and offset parameters", async () => {
+    const mockResponse = { total: 100, limit: 10, offset: 20, records: [] };
+    global.fetch = vi.fn().mockResolvedValue(mockOk(mockResponse));
+
+    const result = await getGameHistory("TBL123", 10, 20);
+    expect(result.limit).toBe(10);
+    expect(result.offset).toBe(20);
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/tables/TBL123/history?limit=10&offset=20"),
+      expect.any(Object),
+    );
   });
 
   it("handles unknown error gracefully", async () => {

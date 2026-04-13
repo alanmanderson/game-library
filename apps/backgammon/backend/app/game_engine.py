@@ -240,6 +240,7 @@ class BackgammonEngine:
 
     def __init__(self) -> None:
         self.state = GameState()
+        self._cached_valid_moves: Optional[list[Move]] = None
         self._setup_initial_position()
 
     # ------------------------------------------------------------------
@@ -285,6 +286,7 @@ class BackgammonEngine:
             first_player, dice, opening_roll = self.determine_first_player()
         self.state.current_turn = first_player
         self.state.opening_roll = opening_roll
+        self._cached_valid_moves = None
         if dice is not None:
             self.state.dice = dice
             self.state.remaining_dice = list(dice.values)
@@ -326,6 +328,7 @@ class BackgammonEngine:
         self.state.remaining_dice = list(roll.values)
         self.state.turn_moves = []
         self.state.status = GameStatus.MOVING
+        self._cached_valid_moves = None
 
         # Save snapshot for undo (before auto-skip check)
         self._turn_snapshot = self._snapshot_internals()
@@ -424,6 +427,9 @@ class BackgammonEngine:
         if not self.state.remaining_dice:
             return []
 
+        if self._cached_valid_moves is not None:
+            return list(self._cached_valid_moves)
+
         color = self.state.current_turn
         remaining = list(self.state.remaining_dice)
 
@@ -497,7 +503,9 @@ class BackgammonEngine:
                 valid_moves = {m for m in valid_moves
                                if m in set(higher_moves)}
 
-        return sorted(valid_moves, key=lambda m: (m.from_point, m.to_point))
+        result = sorted(valid_moves, key=lambda m: (m.from_point, m.to_point))
+        self._cached_valid_moves = result
+        return list(result)
 
     def _legal_moves_for_die(self, color: Color, die: int) -> list[Move]:
         """Generate raw legal moves for *color* using a single *die* value.
@@ -941,6 +949,8 @@ class BackgammonEngine:
                 self.state.remaining_dice.remove(die_val)
             self.state.turn_moves.append(move)
 
+        self._cached_valid_moves = None
+
         # Check for winner.
         winner = self._check_winner()
         if winner is not None:
@@ -1054,6 +1064,7 @@ class BackgammonEngine:
         self._restore_internals(self._turn_snapshot)
         self.state.remaining_dice = list(self._turn_snapshot["remaining_dice"])
         self.state.turn_moves = []
+        self._cached_valid_moves = None
         return True
 
     def _auto_skip_if_no_moves(self) -> None:
@@ -1096,6 +1107,7 @@ class BackgammonEngine:
         self.state.turn_moves = []
         self.state.opening_roll = None
         self.state.status = GameStatus.ROLLING
+        self._cached_valid_moves = None
 
     def _record_turn(self) -> None:
         """Append the current turn's moves to history."""

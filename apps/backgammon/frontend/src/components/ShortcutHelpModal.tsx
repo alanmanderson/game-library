@@ -32,6 +32,10 @@ function ShortcutHelpModal({ onClose }: ShortcutHelpModalProps) {
               <td>Offer double</td>
             </tr>
             <tr>
+              <td><kbd>H</kbd></td>
+              <td>Request move hint</td>
+            </tr>
+            <tr>
               <td><kbd>Esc</kbd></td>
               <td>Deselect checker</td>
             </tr>

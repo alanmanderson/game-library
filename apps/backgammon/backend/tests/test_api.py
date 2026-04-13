@@ -233,14 +233,34 @@ class TestGameHistory:
         table = await create_test_table(client, auth["token"], auth["player"]["id"])
         resp = await client.get(f"/api/tables/{table['id']}/history")
         assert resp.status_code == 200
-        assert resp.json() == []
+        data = resp.json()
+        assert data["total"] == 0
+        assert data["limit"] == 50
+        assert data["offset"] == 0
+        assert data["records"] == []
 
     async def test_history_after_join(self, client):
         """After join (no moves played yet) the history is still empty."""
         table, _, _ = await create_and_join_table(client)
         resp = await client.get(f"/api/tables/{table['id']}/history")
         assert resp.status_code == 200
-        assert resp.json() == []
+        data = resp.json()
+        assert data["total"] == 0
+        assert data["records"] == []
+
+    async def test_history_pagination_params(self, client):
+        """Custom limit and offset are reflected in the response."""
+        auth = await create_test_player(client)
+        table = await create_test_table(client, auth["token"], auth["player"]["id"])
+        resp = await client.get(
+            f"/api/tables/{table['id']}/history?limit=10&offset=5"
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["limit"] == 10
+        assert data["offset"] == 5
+        assert data["total"] == 0
+        assert data["records"] == []
 
 
 # -----------------------------------------------------------------------

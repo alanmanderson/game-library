@@ -14,6 +14,7 @@ from app.schemas import (
     JoinTableRequest,
     InviteBotRequest,
     MoveRecordResponse,
+    PaginatedMoveHistoryResponse,
     StatsOverview,
     DashboardResponse,
     GameHistoryItem,
@@ -469,17 +470,41 @@ async def quick_match(
 # ------------------------------------------------------------------
 
 
-@router.get("/tables/{table_id}/history", response_model=list[MoveRecordResponse])
+@router.get("/tables/{table_id}/history", response_model=PaginatedMoveHistoryResponse)
 async def get_game_history(
-    table_id: str, db: AsyncSession = Depends(get_db)
-) -> list[MoveRecord]:
-    """Retrieve the move history for a game, ordered by move number."""
+    table_id: str,
+    limit: int = Query(default=50, le=200),
+    offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Retrieve the move history for a game, ordered by move number.
+
+    Supports pagination via ``limit`` and ``offset`` query parameters.
+    Returns total record count alongside the page of records.
+    """
+    # Total count of move records for this table
+    count_result = await db.execute(
+        select(func.count(MoveRecord.id))
+        .where(MoveRecord.table_id == table_id)
+    )
+    total = count_result.scalar() or 0
+
+    # Fetch the requested page
     result = await db.execute(
         select(MoveRecord)
         .where(MoveRecord.table_id == table_id)
         .order_by(MoveRecord.move_number)
+        .limit(limit)
+        .offset(offset)
     )
-    return result.scalars().all()
+    records = result.scalars().all()
+
+    return PaginatedMoveHistoryResponse(
+        total=total,
+        limit=limit,
+        offset=offset,
+        records=records,
+    )
 
 
 @router.get("/tables/{table_id}/replay", response_model=ReplayResponse)

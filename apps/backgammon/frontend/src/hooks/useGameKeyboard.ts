@@ -13,6 +13,7 @@ interface UseGameKeyboardOptions {
   endTurn: () => void;
   undoTurn: () => void;
   offerDouble: () => void;
+  requestHint?: () => void;
 }
 
 export function useGameKeyboard({
@@ -27,6 +28,7 @@ export function useGameKeyboard({
   endTurn,
   undoTurn,
   offerDouble,
+  requestHint,
 }: UseGameKeyboardOptions) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -63,6 +65,9 @@ export function useGameKeyboard({
         case "d": case "D":
           if (gameState.can_double && !gameState.double_offered) { e.preventDefault(); offerDouble(); }
           break;
+        case "h": case "H":
+          if (isTurn && gameState.status === "moving" && gameState.valid_moves.length > 0 && requestHint) { e.preventDefault(); requestHint(); }
+          break;
         case "Escape":
           if (selectedPoint !== null) { e.preventDefault(); setSelectedPoint(null); }
           break;
@@ -76,5 +81,5 @@ export function useGameKeyboard({
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [showShortcutHelp, gameState, myColor, selectedPoint, rollDice, endTurn, undoTurn, offerDouble, setSelectedPoint, setMoveHistoryOpen, setShowShortcutHelp]);
+  }, [showShortcutHelp, gameState, myColor, selectedPoint, rollDice, endTurn, undoTurn, offerDouble, requestHint, setSelectedPoint, setMoveHistoryOpen, setShowShortcutHelp]);
 }

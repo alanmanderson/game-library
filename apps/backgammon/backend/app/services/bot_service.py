@@ -389,6 +389,62 @@ def schedule_bot_turn_if_needed(table_id: str) -> None:
         asyncio.create_task(execute_bot_turn(table_id))
 
 
+def evaluate_hint_moves(table_id: str, engine) -> list[dict] | None:
+    """Evaluate all valid moves and return the top 3 ranked by equity.
+
+    Returns a list of dicts with 'from', 'to', and 'equity' keys,
+    or None if the ML model is unavailable.
+    """
+    difficulty = get_bot_difficulty(table_id)
+
+    # Try V2 bot first if expert difficulty
+    bot = None
+    if difficulty == "expert":
+        bot = _load_v2_bot()
+    if bot is None:
+        bot = _load_ml_bot()
+    if bot is None:
+        return None
+
+    valid_moves = engine.get_valid_moves()
+    if not valid_moves:
+        return []
+
+    current_color = engine.state.current_turn
+    scored_moves = []
+
+    for move in valid_moves:
+        snapshot = engine._snapshot_internals()
+        engine._apply_move_internal(current_color, move)
+
+        try:
+            if hasattr(bot, '_evaluate_position'):
+                equity = bot._evaluate_position(engine, current_color)
+            else:
+                import torch
+                from encoder import encode_state
+                from model import compute_equity
+                with torch.no_grad():
+                    features = encode_state(engine, current_color)
+                    features_tensor = torch.from_numpy(features).to(bot.device)
+                    outputs = bot.model(features_tensor)
+                    equity = compute_equity(outputs).item()
+        except Exception:
+            engine._restore_internals(snapshot)
+            continue
+
+        engine._restore_internals(snapshot)
+        scored_moves.append({
+            "from": move.from_point,
+            "to": move.to_point,
+            "equity": round(equity, 4),
+        })
+
+    # Sort by equity descending (best moves first) and return top 3
+    scored_moves.sort(key=lambda m: m["equity"], reverse=True)
+    return scored_moves[:3]
+
+
 def schedule_bot_double_response_if_needed(table_id: str) -> None:
     """Schedule bot to respond to a double offer."""
     from app.services.game_service import game_manager
