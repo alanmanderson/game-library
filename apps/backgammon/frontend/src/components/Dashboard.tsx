@@ -193,12 +193,14 @@ function Dashboard({ playerId }: DashboardProps) {
               <th>Result</th>
               <th>Win Type</th>
               <th>Score</th>
+              <th>Replay</th>
               <th>Export</th>
             </tr>
           </thead>
           <tbody>
             {data.games.map((game) => {
               const resumable = isResumable(game);
+              const replayable = game.result !== "abandoned" && game.table_status === "finished";
               return (
                 <tr
                   key={game.table_id}
@@ -226,6 +228,21 @@ function Dashboard({ playerId }: DashboardProps) {
                   </td>
                   <td>{formatWinType(game)}</td>
                   <td>{game.score != null ? game.score : "-"}</td>
+                  <td>
+                    {replayable && (
+                      <button
+                        className="replay-link-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/replay/${game.table_id}`);
+                        }}
+                        title="Replay this game"
+                        aria-label={`Replay game against ${game.opponent_nickname}`}
+                      >
+                        ▶ Replay
+                      </button>
+                    )}
+                  </td>
                   <td>
                     {game.result !== "abandoned" && (
                       <button

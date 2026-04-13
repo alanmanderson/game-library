@@ -144,6 +144,25 @@ export interface MoveRecord {
   created_at: string;
 }
 
+/** Extended move record for replay with full board snapshot. */
+export interface ReplayMoveRecord {
+  move_number: number;
+  player_nickname: string | null;
+  dice_roll: string;
+  moves_notation: string;
+  game_state_after: GameState | null;
+  created_at: string;
+}
+
+/** Full replay data for a completed game. */
+export interface ReplayData {
+  table_id: string;
+  white_player_nickname: string | null;
+  black_player_nickname: string | null;
+  initial_state: GameState;
+  moves: ReplayMoveRecord[];
+}
+
 /** Win/loss record against a single opponent. */
 export interface PlayerStats {
   opponent_nickname: string;

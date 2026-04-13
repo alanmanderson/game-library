@@ -15,6 +15,7 @@ import {
   joinTable,
   getTable,
   getGameHistory,
+  getReplay,
   exportGame,
 } from "../services/api";
 
@@ -285,6 +286,36 @@ describe("getGameHistory", () => {
     } as unknown as Response);
 
     await expect(getGameHistory("BAD")).rejects.toThrow("Unknown error");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getReplay
+// ---------------------------------------------------------------------------
+
+describe("getReplay", () => {
+  it("fetches replay data for a table", async () => {
+    const mockReplay = {
+      table_id: "ABCD12",
+      white_player_nickname: "Alice",
+      black_player_nickname: "Bob",
+      initial_state: { points: new Array(26).fill(0), bar_white: 0, bar_black: 0, off_white: 0, off_black: 0 },
+      moves: [],
+    };
+    global.fetch = vi.fn().mockResolvedValue(mockOk(mockReplay));
+
+    const result = await getReplay("ABCD12");
+
+    expect(result).toEqual(mockReplay);
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/tables/ABCD12/replay"),
+      expect.any(Object),
+    );
+  });
+
+  it("throws when the table is not found", async () => {
+    global.fetch = vi.fn().mockResolvedValue(mockError(404, "Table not found"));
+    await expect(getReplay("ZZZZZZ")).rejects.toThrow("Table not found");
   });
 });
 
