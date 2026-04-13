@@ -200,3 +200,15 @@
   color: var(--accent);
   font-size: 0.75rem;
 }
+
+/* Embedded mode (inside tab panel) */
+
+.lobby--embedded {
+  padding: 0;
+  max-width: none;
+  align-items: stretch;
+}
+
+.lobby--embedded .lobby-table-item {
+  background: var(--bg-primary, #1a1a2e);
+}

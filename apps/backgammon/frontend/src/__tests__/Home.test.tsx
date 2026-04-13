@@ -26,6 +26,10 @@ vi.mock("../services/api", () => ({
   joinTable: vi.fn(),
   inviteBot: vi.fn(),
   getPlayerDashboard: vi.fn(),
+  getLobby: vi.fn(),
+  getActiveGames: vi.fn(),
+  getLeaderboard: vi.fn(),
+  listTournaments: vi.fn(),
 }));
 
 // We need to dynamically import the mocked module so we can configure return values.
@@ -62,6 +66,13 @@ beforeEach(() => {
     rating_games: 0,
     games: [],
   });
+  // Default: lobby returns empty data
+  vi.mocked(api.getLobby).mockResolvedValue([]);
+  vi.mocked(api.getActiveGames).mockResolvedValue([]);
+  // Default: leaderboard returns empty data
+  vi.mocked(api.getLeaderboard).mockResolvedValue({ entries: [], total: 0 });
+  // Default: tournaments returns empty list
+  vi.mocked(api.listTournaments).mockResolvedValue([]);
 });
 
 // ---------------------------------------------------------------------------
@@ -90,12 +101,11 @@ describe("Home – welcome message", () => {
 // ---------------------------------------------------------------------------
 
 describe("Home – action cards", () => {
-  it("renders Play vs Bot, New Game, and Join Game sections", () => {
+  it("renders Play vs Bot, Create Game, and Join sections", () => {
     render(<Home player={registeredPlayer} />);
-    // "Play vs Bot" appears as both <h3> and <button>, so check for at least one
-    expect(screen.getAllByText("Play vs Bot").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("New Game")).toBeInTheDocument();
-    expect(screen.getByText("Join Game")).toBeInTheDocument();
+    expect(screen.getByText("Play vs Bot")).toBeInTheDocument();
+    expect(screen.getByText("Create Game")).toBeInTheDocument();
+    expect(screen.getByText("Join")).toBeInTheDocument();
   });
 
   it("renders the table ID input for Join Game", () => {
@@ -112,7 +122,7 @@ describe("Home – bot difficulty selector", () => {
   it("renders all difficulty levels", () => {
     render(<Home player={registeredPlayer} />);
     expect(screen.getByText("Easy")).toBeInTheDocument();
-    expect(screen.getByText("Medium")).toBeInTheDocument();
+    expect(screen.getByText("Med")).toBeInTheDocument();
     expect(screen.getByText("Hard")).toBeInTheDocument();
     expect(screen.getByText("Expert")).toBeInTheDocument();
   });
@@ -184,9 +194,9 @@ describe("Home – match points selector", () => {
 
   it("has 5 selected by default", () => {
     render(<Home player={registeredPlayer} />);
-    // The "5" button in the match-points-options section
+    // The "5" button in the config-pill-bar
     const buttons = screen.getAllByText("5");
-    const matchBtn = buttons.find((b) => b.classList.contains("match-points-option"));
+    const matchBtn = buttons.find((b) => b.classList.contains("config-pill-option"));
     expect(matchBtn).toBeDefined();
     expect(matchBtn!.classList.contains("selected")).toBe(true);
   });
@@ -210,7 +220,7 @@ describe("Home – Create Table", () => {
     });
 
     render(<Home player={registeredPlayer} />);
-    fireEvent.click(screen.getByText("Create Table"));
+    fireEvent.click(screen.getByText("Create Game"));
 
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith("/game/ABC12345");
@@ -221,7 +231,7 @@ describe("Home – Create Table", () => {
     vi.mocked(api.createTable).mockRejectedValue(new Error("Server error"));
 
     render(<Home player={registeredPlayer} />);
-    fireEvent.click(screen.getByText("Create Table"));
+    fireEvent.click(screen.getByText("Create Game"));
 
     await waitFor(() => {
       expect(screen.getByText("Server error")).toBeInTheDocument();
@@ -256,10 +266,10 @@ describe("Home – Play vs Bot", () => {
     // Pick Easy difficulty
     fireEvent.click(screen.getByText("Easy"));
 
-    // Click Play vs Bot button (the one inside the action card)
+    // Click Play vs Bot button (inside .play-actions)
     const botButtons = screen.getAllByText("Play vs Bot");
     const actionButton = botButtons.find(
-      (b) => b.tagName === "BUTTON" && b.closest(".action-card"),
+      (b) => b.tagName === "BUTTON" && b.closest(".play-actions"),
     );
     fireEvent.click(actionButton!);
 
@@ -314,15 +324,43 @@ describe("Home – Join Game", () => {
 // ---------------------------------------------------------------------------
 
 describe("Home – Dashboard section", () => {
-  it("renders Dashboard for registered users", () => {
+  it("renders Dashboard tab for registered users", () => {
     render(<Home player={registeredPlayer} />);
-    expect(screen.getByText("Dashboard")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Dashboard" })).toBeInTheDocument();
   });
 
-  it("shows stats-unavailable message for guests", () => {
+  it("shows guest prompt when guest clicks Dashboard tab", () => {
     render(<Home player={guestPlayer} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Dashboard" }));
     expect(
-      screen.getByText(/Statistics are only available for registered users/),
+      screen.getByText(/Create an account to track your stats/),
     ).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tabbed content
+// ---------------------------------------------------------------------------
+
+describe("Home – tabbed content", () => {
+  it("renders all four tabs", () => {
+    render(<Home player={registeredPlayer} />);
+    expect(screen.getByRole("tab", { name: "Lobby" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Dashboard" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Leaderboard" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Tournaments" })).toBeInTheDocument();
+  });
+
+  it("starts with Lobby tab active", () => {
+    render(<Home player={registeredPlayer} />);
+    const lobbyTab = screen.getByRole("tab", { name: "Lobby" });
+    expect(lobbyTab.getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("switches to Leaderboard tab on click", () => {
+    render(<Home player={registeredPlayer} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Leaderboard" }));
+    const leaderboardTab = screen.getByRole("tab", { name: "Leaderboard" });
+    expect(leaderboardTab.getAttribute("aria-selected")).toBe("true");
   });
 });

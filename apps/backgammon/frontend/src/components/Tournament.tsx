@@ -22,9 +22,10 @@ import "./styles/Tournament.css";
 
 interface TournamentListProps {
   player: Player;
+  embedded?: boolean;
 }
 
-export function TournamentList({ player }: TournamentListProps) {
+export function TournamentList({ player, embedded }: TournamentListProps) {
   const navigate = useNavigate();
   const [tournaments, setTournaments] = useState<TournamentType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,15 +75,24 @@ export function TournamentList({ player }: TournamentListProps) {
   if (loading) return <div className="tournament-loading">Loading tournaments…</div>;
 
   return (
-    <div className="tournament-list-page">
-      <div className="tournament-list-header">
-        <h2>Tournaments</h2>
-        {!player.is_guest && (
+    <div className={`tournament-list-page${embedded ? " tournament-list-page--embedded" : ""}`}>
+      {!embedded && (
+        <div className="tournament-list-header">
+          <h2>Tournaments</h2>
+          {!player.is_guest && (
+            <button className="btn-primary" onClick={() => setShowCreate((v) => !v)}>
+              {showCreate ? "Cancel" : "Create Tournament"}
+            </button>
+          )}
+        </div>
+      )}
+      {embedded && !player.is_guest && (
+        <div className="tournament-list-header tournament-list-header--embedded">
           <button className="btn-primary" onClick={() => setShowCreate((v) => !v)}>
             {showCreate ? "Cancel" : "Create Tournament"}
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {showCreate && (
         <form className="tournament-create-form" onSubmit={handleCreate}>

@@ -378,3 +378,14 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Embedded mode (inside tab panel) */
+
+.tournament-list-page--embedded {
+  padding: 0;
+  max-width: none;
+}
+
+.tournament-list-header--embedded {
+  margin-bottom: 1rem;
+}

@@ -8,6 +8,7 @@ type Metric = "wins" | "win_rate" | "rating";
 interface LeaderboardProps {
   playerId: string | null;
   onBack: () => void;
+  embedded?: boolean;
 }
 
 const TABS: { value: Metric; label: string }[] = [
@@ -18,7 +19,7 @@ const TABS: { value: Metric; label: string }[] = [
 
 const PAGE_SIZE = 25;
 
-function Leaderboard({ playerId, onBack }: LeaderboardProps) {
+function Leaderboard({ playerId, onBack, embedded }: LeaderboardProps) {
   const [metric, setMetric] = useState<Metric>("wins");
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [total, setTotal] = useState(0);
@@ -66,14 +67,16 @@ function Leaderboard({ playerId, onBack }: LeaderboardProps) {
   };
 
   return (
-    <div className="leaderboard">
-      <div className="leaderboard-header">
-        <button className="leaderboard-back-btn" onClick={onBack}>
-          Back
-        </button>
-        <h2>Leaderboard</h2>
-        <div className="leaderboard-header-spacer" />
-      </div>
+    <div className={`leaderboard${embedded ? " leaderboard--embedded" : ""}`}>
+      {!embedded && (
+        <div className="leaderboard-header">
+          <button className="leaderboard-back-btn" onClick={onBack}>
+            Back
+          </button>
+          <h2>Leaderboard</h2>
+          <div className="leaderboard-header-spacer" />
+        </div>
+      )}
 
       <div className="leaderboard-tabs" role="tablist">
         {TABS.map((tab) => (

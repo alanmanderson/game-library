@@ -5,11 +5,21 @@ import { createTable, joinTable, inviteBot } from "../services/api";
 import Dashboard from "./Dashboard";
 import Lobby from "./Lobby";
 import Leaderboard from "./Leaderboard";
+import { TournamentList } from "./Tournament";
 import "./styles/Home.css";
 
 interface HomeProps {
   player: Player;
 }
+
+type HomeTab = "lobby" | "dashboard" | "leaderboard" | "tournaments";
+
+const TAB_LABELS: Record<HomeTab, string> = {
+  lobby: "Lobby",
+  dashboard: "Dashboard",
+  leaderboard: "Leaderboard",
+  tournaments: "Tournaments",
+};
 
 function Home({ player }: HomeProps) {
   const navigate = useNavigate();
@@ -21,9 +31,10 @@ function Home({ player }: HomeProps) {
   const [preferredColor, setPreferredColor] = useState<string | undefined>(undefined);
   const [matchPoints, setMatchPoints] = useState(5);
   const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>("hard");
-  const [showLobby, setShowLobby] = useState(false);
-  const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [timeControl, setTimeControl] = useState<TimeControl>("unlimited");
+  const [activeTab, setActiveTab] = useState<HomeTab>(
+    player.is_guest ? "lobby" : "lobby"
+  );
 
   const handleCreateTable = useCallback(async () => {
     setCreatingTable(true);
@@ -75,196 +86,188 @@ function Home({ player }: HomeProps) {
     [joinTableId, player.id, navigate],
   );
 
-  if (showLobby) {
-    return (
-      <Lobby
-        player={player}
-        onBack={() => setShowLobby(false)}
-        preferredColor={preferredColor}
-        matchPoints={matchPoints}
-      />
-    );
-  }
-
-  if (showLeaderboard) {
-    return (
-      <Leaderboard
-        playerId={player.is_guest ? null : player.id}
-        onBack={() => setShowLeaderboard(false)}
-      />
-    );
-  }
-
   return (
     <div className="home">
-      <div className="home-header">
-        <img src="/images/backsplash.png" alt="Backgammon Online" className="home-hero" />
-        <p className="welcome-text">
+      {/* Welcome Bar */}
+      <div className="home-welcome-bar">
+        <span className="app-title">Backgammon Online</span>
+        <span className="welcome-text">
           Welcome, <strong>{player.nickname}</strong>
           {player.is_guest && <span className="guest-badge"> (Guest)</span>}
-        </p>
+        </span>
       </div>
 
-      <div className="home-actions">
-        {/* Color preference selector */}
-        <div className="color-selector">
-          <span className="color-selector-label">Play as:</span>
-          <div className="color-options">
+      {/* Two-column layout */}
+      <div className="home-main">
+        {/* Left: Play Panel */}
+        <div className="play-panel">
+          <div className="play-panel-title">New Game</div>
+
+          <div className="config-section">
+            {/* Color */}
+            <div className="config-row">
+              <span className="config-label">Play as</span>
+              <div className="config-pill-bar">
+                <button
+                  className={`config-pill-option${preferredColor === "white" ? " selected" : ""}`}
+                  onClick={() => setPreferredColor(preferredColor === "white" ? undefined : "white")}
+                >
+                  <span className="color-dot white" /> White
+                </button>
+                <button
+                  className={`config-pill-option${preferredColor === undefined ? " selected" : ""}`}
+                  onClick={() => setPreferredColor(undefined)}
+                >
+                  Random
+                </button>
+                <button
+                  className={`config-pill-option${preferredColor === "black" ? " selected" : ""}`}
+                  onClick={() => setPreferredColor(preferredColor === "black" ? undefined : "black")}
+                >
+                  <span className="color-dot black" /> Black
+                </button>
+              </div>
+            </div>
+
+            {/* Match Points */}
+            <div className="config-row">
+              <span className="config-label">Match to</span>
+              <div className="config-pill-bar">
+                {[1, 3, 5, 7, 10].map((pts) => (
+                  <button
+                    key={pts}
+                    className={`config-pill-option${matchPoints === pts ? " selected" : ""}`}
+                    onClick={() => setMatchPoints(pts)}
+                  >
+                    {pts}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Time Control */}
+            <div className="config-row">
+              <span className="config-label">Time control</span>
+              <div className="config-pill-bar">
+                {([
+                  { value: "unlimited" as TimeControl, label: "None" },
+                  { value: "classical" as TimeControl, label: "15m" },
+                  { value: "rapid" as TimeControl, label: "7m" },
+                  { value: "blitz" as TimeControl, label: "3m" },
+                ]).map(({ value, label }) => (
+                  <button
+                    key={value}
+                    className={`config-pill-option${timeControl === value ? " selected" : ""}`}
+                    onClick={() => setTimeControl(value)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Bot Difficulty */}
+            <div className="config-row">
+              <span className="config-label">Bot level</span>
+              <div className="config-pill-bar">
+                {(["easy", "medium", "hard", "expert"] as BotDifficulty[]).map((d) => (
+                  <button
+                    key={d}
+                    className={`config-pill-option${botDifficulty === d ? " selected" : ""}`}
+                    onClick={() => setBotDifficulty(d)}
+                  >
+                    {d === "medium" ? "Med" : d.charAt(0).toUpperCase() + d.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="play-actions">
             <button
-              className={`color-option ${preferredColor === "white" ? "selected" : ""}`}
-              onClick={() => setPreferredColor(preferredColor === "white" ? undefined : "white")}
+              className="play-action-primary"
+              onClick={handlePlayBot}
+              disabled={creatingBotGame}
             >
-              <span className="color-swatch white-swatch" /> White
+              {creatingBotGame ? "Starting..." : "Play vs Bot"}
             </button>
             <button
-              className={`color-option ${preferredColor === undefined ? "selected" : ""}`}
-              onClick={() => setPreferredColor(undefined)}
+              className="play-action-secondary"
+              onClick={handleCreateTable}
+              disabled={creatingTable}
             >
-              Random
-            </button>
-            <button
-              className={`color-option ${preferredColor === "black" ? "selected" : ""}`}
-              onClick={() => setPreferredColor(preferredColor === "black" ? undefined : "black")}
-            >
-              <span className="color-swatch black-swatch" /> Black
+              {creatingTable ? "Creating..." : "Create Game"}
             </button>
           </div>
-        </div>
 
-        {/* Match points selector */}
-        <div className="match-points-selector">
-          <span className="match-points-label">Match to:</span>
-          <div className="match-points-options">
-            {[1, 3, 5, 7, 10].map((pts) => (
-              <button
-                key={pts}
-                className={`match-points-option ${matchPoints === pts ? "selected" : ""}`}
-                onClick={() => setMatchPoints(pts)}
-              >
-                {pts}
-              </button>
-            ))}
-          </div>
-        </div>
+          {error && <div className="panel-error">{error}</div>}
 
-        {/* Time control selector */}
-        <div className="time-control-selector">
-          <span className="time-control-label">Time control:</span>
-          <div className="time-control-options">
-            {([
-              { value: "unlimited" as TimeControl, label: "Unlimited" },
-              { value: "classical" as TimeControl, label: "Classical (15m)" },
-              { value: "rapid" as TimeControl, label: "Rapid (7m)" },
-              { value: "blitz" as TimeControl, label: "Blitz (3m)" },
-            ]).map(({ value, label }) => (
-              <button
-                key={value}
-                className={`time-control-option ${timeControl === value ? "selected" : ""}`}
-                onClick={() => setTimeControl(value)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Bot difficulty selector */}
-        <div className="difficulty-selector">
-          <span className="difficulty-label">Bot difficulty:</span>
-          <div className="difficulty-options">
-            {(["easy", "medium", "hard", "expert"] as BotDifficulty[]).map((d) => (
-              <button
-                key={d}
-                className={`difficulty-option ${botDifficulty === d ? "selected" : ""}`}
-                onClick={() => setBotDifficulty(d)}
-              >
-                {d.charAt(0).toUpperCase() + d.slice(1)}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Play vs Bot */}
-        <div className="action-card">
-          <h3>Play vs Bot</h3>
-          <p>Start a game against the AI bot.</p>
-          <button onClick={handlePlayBot} disabled={creatingBotGame}>
-            {creatingBotGame ? "Starting..." : "Play vs Bot"}
-          </button>
-        </div>
-
-        {/* Create Table */}
-        <div className="action-card">
-          <h3>New Game</h3>
-          <p>Create a table and invite a friend to play.</p>
-          <button onClick={handleCreateTable} disabled={creatingTable}>
-            {creatingTable ? "Creating..." : "Create Table"}
-          </button>
-        </div>
-
-        {/* Find Game (Lobby) */}
-        <div className="action-card">
-          <h3>Find Game</h3>
-          <p>Browse open games or get matched with an opponent.</p>
-          <button onClick={() => setShowLobby(true)}>
-            Game Lobby
-          </button>
-        </div>
-
-        {/* Tournaments */}
-        <div className="action-card">
-          <h3>Tournaments</h3>
-          <p>Join or create single-elimination tournaments.</p>
-          <button onClick={() => navigate("/tournament")}>
-            View Tournaments
-          </button>
-        </div>
-
-        {/* Leaderboard */}
-        <div className="action-card">
-          <h3>Leaderboard</h3>
-          <p>See the top players ranked by wins, win rate, and rating.</p>
-          <button onClick={() => setShowLeaderboard(true)}>
-            View Leaderboard
-          </button>
-        </div>
-
-        {/* Join Table */}
-        <div className="action-card">
-          <h3>Join Game</h3>
-          <p>Enter a table ID to join an existing game.</p>
-          <form className="join-form" onSubmit={handleJoinTable}>
+          {/* Join Game */}
+          <div className="play-divider" />
+          <form className="play-join-form" onSubmit={handleJoinTable}>
             <input
               type="text"
-              placeholder="Table ID"
+              placeholder="Enter table code"
               aria-label="Table code"
               value={joinTableId}
               onChange={(e) => setJoinTableId(e.target.value.toUpperCase())}
               disabled={joiningTable}
             />
-            <button type="submit" disabled={joiningTable}>
-              {joiningTable ? "Joining..." : "Join"}
+            <button type="submit" className="play-join-btn" disabled={joiningTable}>
+              {joiningTable ? "..." : "Join"}
             </button>
           </form>
         </div>
+
+        {/* Right: Tabbed Content */}
+        <div className="content-panel">
+          <div className="content-tabs" role="tablist">
+            {(["lobby", "dashboard", "leaderboard", "tournaments"] as HomeTab[]).map((tab) => (
+              <button
+                key={tab}
+                role="tab"
+                aria-selected={activeTab === tab}
+                className={`content-tab${activeTab === tab ? " active" : ""}`}
+                onClick={() => setActiveTab(tab)}
+              >
+                {TAB_LABELS[tab]}
+              </button>
+            ))}
+          </div>
+
+          <div className="content-tab-body" role="tabpanel">
+            {activeTab === "lobby" && (
+              <Lobby
+                player={player}
+                onBack={() => {}}
+                preferredColor={preferredColor}
+                matchPoints={matchPoints}
+                embedded
+              />
+            )}
+            {activeTab === "dashboard" && !player.is_guest && (
+              <Dashboard playerId={player.id} />
+            )}
+            {activeTab === "dashboard" && player.is_guest && (
+              <div className="guest-prompt">
+                <h3>Track Your Progress</h3>
+                <p>Create an account to track your stats, game history, and rating.</p>
+              </div>
+            )}
+            {activeTab === "leaderboard" && (
+              <Leaderboard
+                playerId={player.is_guest ? null : player.id}
+                onBack={() => {}}
+                embedded
+              />
+            )}
+            {activeTab === "tournaments" && (
+              <TournamentList player={player} embedded />
+            )}
+          </div>
+        </div>
       </div>
-
-      {error && <div className="home-error">{error}</div>}
-
-      {/* Dashboard (only for registered users) */}
-      {!player.is_guest && (
-        <div className="stats-section">
-          <h3>Dashboard</h3>
-          <Dashboard playerId={player.id} />
-        </div>
-      )}
-      {player.is_guest && (
-        <div className="stats-section">
-          <p style={{ color: "var(--text-secondary)", fontStyle: "italic" }}>
-            Statistics are only available for registered users. Create an account to track your stats.
-          </p>
-        </div>
-      )}
     </div>
   );
 }

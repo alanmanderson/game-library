@@ -9,9 +9,10 @@ interface LobbyProps {
   onBack: () => void;
   preferredColor?: string;
   matchPoints: number;
+  embedded?: boolean;
 }
 
-function Lobby({ player, onBack, preferredColor, matchPoints }: LobbyProps) {
+function Lobby({ player, onBack, preferredColor, matchPoints, embedded }: LobbyProps) {
   const navigate = useNavigate();
   const [tables, setTables] = useState<LobbyTable[]>([]);
   const [activeGames, setActiveGames] = useState<ActiveGame[]>([]);
@@ -99,14 +100,16 @@ function Lobby({ player, onBack, preferredColor, matchPoints }: LobbyProps) {
   };
 
   return (
-    <div className="lobby">
-      <div className="lobby-header">
-        <button className="lobby-back-btn" onClick={onBack}>
-          Back
-        </button>
-        <h2>Game Lobby</h2>
-        <div className="lobby-header-spacer" />
-      </div>
+    <div className={`lobby${embedded ? " lobby--embedded" : ""}`}>
+      {!embedded && (
+        <div className="lobby-header">
+          <button className="lobby-back-btn" onClick={onBack}>
+            Back
+          </button>
+          <h2>Game Lobby</h2>
+          <div className="lobby-header-spacer" />
+        </div>
+      )}
 
       <div className="lobby-actions">
         <button
