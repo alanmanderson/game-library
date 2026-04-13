@@ -650,6 +650,30 @@ class TestBarEdgeCases:
         for m in moves:
             assert m.from_point == 25
 
+    def test_multiple_checkers_on_bar_no_combined_moves(self):
+        """With 2+ checkers on bar, no combined bar+move allowed (both dice must enter)."""
+        # Black has 2 on bar, rolls [2,5]. Must enter bar/2 and bar/5,
+        # NOT bar/7 (combined bar->2->7).
+        board = empty_board()
+        board[7] = 1   # lone white blot on point 7 (would be hit target)
+        board[20] = -5
+        board[19] = -5
+        board[18] = -3
+        engine = setup_engine_for_move(board, Color.BLACK, die1=2, die2=5,
+                                       bar_black=2)
+        moves = engine.get_valid_moves()
+        # All moves must be bar entry (from_point == 0 for black)
+        for m in moves:
+            assert m.from_point == 0, (
+                f"Expected bar entry only, got {m.to_notation(Color.BLACK)}"
+            )
+        # Specifically: bar/7 must NOT be in moves
+        assert Move(0, 7) not in moves
+        assert Move(0, 7, is_hit=True) not in moves
+        # But bar/2 and bar/5 should be valid
+        assert Move(0, 2) in moves
+        assert Move(0, 5) in moves
+
     def test_bar_entry_with_hit(self):
         """Re-enter from bar and hit an opponent blot."""
         board = empty_board()

@@ -811,8 +811,17 @@ class BackgammonEngine:
                     intermediate_move = Move(current, dest, is_hit_intermediate)
                     saved = self._snapshot_internals()
                     self._apply_move_internal(color, intermediate_move)
-                    self._dfs_combined(color, original_from, dest,
-                                       new_remaining, new_depth, results)
+
+                    # If we just entered from the bar but there are still
+                    # checkers on the bar, don't continue moving this
+                    # checker — remaining dice must enter other bar
+                    # checkers first.
+                    bar_after = (self.state.bar_white if color == Color.WHITE
+                                 else self.state.bar_black)
+                    if current != bar or bar_after == 0:
+                        self._dfs_combined(color, original_from, dest,
+                                           new_remaining, new_depth, results)
+
                     self._restore_internals(saved)
 
     def _find_combined_path(self, color: Color,
@@ -903,7 +912,16 @@ class BackgammonEngine:
             saved = self._snapshot_internals()
             self._apply_move_internal(color, step_move)
             path.append((step_move, die))
-            if self._dfs_find_path(color, dest, target, new_remaining, path):
+
+            # If we just entered from the bar but there are still
+            # checkers on the bar, remaining dice must enter them —
+            # don't continue moving this checker.
+            bar_after = (self.state.bar_white if color == Color.WHITE
+                         else self.state.bar_black)
+            can_continue = (current != bar or bar_after == 0)
+
+            if can_continue and self._dfs_find_path(
+                    color, dest, target, new_remaining, path):
                 self._restore_internals(saved)
                 return True
             path.pop()
