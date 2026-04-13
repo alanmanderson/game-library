@@ -9,6 +9,7 @@ import type {
   Player,
   Table,
   LobbyTable,
+  ActiveGame,
   MoveRecord,
   StatsOverview,
   DashboardData,
@@ -232,6 +233,11 @@ export function exportGame(tableId: string): Promise<string> {
 /** Fetch the list of public tables waiting for opponents. */
 export function getLobby(): Promise<LobbyTable[]> {
   return request<LobbyTable[]>("/api/lobby");
+}
+
+/** Fetch the list of public tables with games currently in progress. */
+export function getActiveGames(): Promise<ActiveGame[]> {
+  return request<ActiveGame[]>("/api/active-games");
 }
 
 /** Join an available public table or create a new one. */

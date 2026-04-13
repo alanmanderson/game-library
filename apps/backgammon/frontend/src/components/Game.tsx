@@ -625,6 +625,11 @@ function Game() {
         </div>
       )}
       {error && <div className="game-error-banner">{error}</div>}
+      {(table.spectator_count ?? 0) > 0 && (
+        <div className="spectator-count-banner">
+          👁 {table.spectator_count} watching
+        </div>
+      )}
 
       <div className="game-layout">
         <div className="game-center">

@@ -169,3 +169,34 @@
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+.lobby-watch-btn {
+  padding: 0.45rem 1rem;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lobby-watch-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--bg-primary);
+}
+
+.lobby-watch-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.lobby-active-games {
+  margin-top: 0.5rem;
+}
+
+.lobby-spectator-count {
+  color: var(--accent);
+  font-size: 0.75rem;
+}

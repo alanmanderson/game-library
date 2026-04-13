@@ -18,6 +18,7 @@ from app.schemas import (
     DashboardResponse,
     GameHistoryItem,
     LobbyTable,
+    ActiveGame,
     LeaderboardEntry,
     LeaderboardResponse,
 )
@@ -27,7 +28,7 @@ from app.services.bot_service import (
     BOT_PLAYER_ID, ensure_bot_player, schedule_bot_turn_if_needed,
     set_bot_difficulty,
 )
-from app.api.websocket import notify_game_started
+from app.api.websocket import notify_game_started, manager as ws_manager
 from app.api.auth import get_current_player
 
 router = APIRouter(prefix="/api")
@@ -362,6 +363,57 @@ async def get_lobby(db: AsyncSession = Depends(get_db)):
         )
 
     return lobby_tables
+
+
+@router.get("/active-games", response_model=list[ActiveGame])
+async def get_active_games(db: AsyncSession = Depends(get_db)):
+    """Get all public tables with games currently in progress.
+
+    Returns tables with status 'playing' or 'game_over', ordered by most
+    recently created. Includes live spectator counts.
+    """
+    result = await db.execute(
+        select(Table).where(
+            Table.is_public.is_(True),
+            Table.status.in_(["playing", "game_over"]),
+        ).order_by(Table.created_at.desc()).limit(20)
+    )
+    tables = result.scalars().all()
+
+    # Load player nicknames
+    player_ids: set[str] = set()
+    for table in tables:
+        if table.white_player_id:
+            player_ids.add(table.white_player_id)
+        if table.black_player_id:
+            player_ids.add(table.black_player_id)
+
+    if player_ids:
+        players_result = await db.execute(
+            select(Player).where(Player.id.in_(player_ids))
+        )
+        player_lookup = {p.id: p for p in players_result.scalars().all()}
+    else:
+        player_lookup = {}
+
+    active_games: list[ActiveGame] = []
+    for table in tables:
+        white = player_lookup.get(table.white_player_id) if table.white_player_id else None
+        black = player_lookup.get(table.black_player_id) if table.black_player_id else None
+        active_games.append(
+            ActiveGame(
+                id=table.id,
+                white_player_nickname=white.nickname if white else "Unknown",
+                black_player_nickname=black.nickname if black else "Unknown",
+                match_points=table.match_points,
+                white_match_score=table.white_match_score,
+                black_match_score=table.black_match_score,
+                spectator_count=ws_manager.get_spectator_count(table.id),
+                created_at=table.created_at,
+            )
+        )
+
+    return active_games
 
 
 @router.post("/quick-match", response_model=TableResponse)

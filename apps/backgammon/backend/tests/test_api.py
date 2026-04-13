@@ -364,6 +364,79 @@ class TestPlayerStats:
 
 
 # -----------------------------------------------------------------------
+# Active games endpoint
+# -----------------------------------------------------------------------
+
+
+class TestActiveGamesEndpoint:
+    async def test_active_games_empty(self, client):
+        """GET /api/active-games returns empty list when no games are active."""
+        resp = await client.get("/api/active-games")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    async def test_active_games_shows_playing_tables(self, client):
+        """GET /api/active-games returns tables with status 'playing'."""
+        auth1 = await create_test_player(client, "Alice")
+        auth2 = await create_test_player(client, "Bob")
+        # Create a public table
+        create_resp = await client.post(
+            "/api/tables",
+            json={"player_id": auth1["player"]["id"], "is_public": True},
+            headers=auth_headers(auth1["token"]),
+        )
+        assert create_resp.status_code == 200
+        table_id = create_resp.json()["id"]
+        # Join it to start the game
+        join_resp = await client.post(
+            f"/api/tables/{table_id}/join",
+            json={"player_id": auth2["player"]["id"]},
+            headers=auth_headers(auth2["token"]),
+        )
+        assert join_resp.status_code == 200
+
+        resp = await client.get("/api/active-games")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        game = data[0]
+        assert game["id"] == table_id
+        assert "white_player_nickname" in game
+        assert "black_player_nickname" in game
+        assert "spectator_count" in game
+        assert game["spectator_count"] == 0
+
+    async def test_active_games_excludes_waiting_tables(self, client):
+        """GET /api/active-games does not include tables still waiting."""
+        auth = await create_test_player(client, "Alice")
+        await create_test_table(client, auth["token"], auth["player"]["id"])
+        # Waiting table should not appear
+        resp = await client.get("/api/active-games")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    async def test_active_games_excludes_private_tables(self, client):
+        """GET /api/active-games does not include private tables."""
+        auth1 = await create_test_player(client, "Alice")
+        auth2 = await create_test_player(client, "Bob")
+        # Create a private table
+        resp = await client.post(
+            "/api/tables",
+            json={"player_id": auth1["player"]["id"], "is_public": False},
+            headers=auth_headers(auth1["token"]),
+        )
+        assert resp.status_code == 200
+        table_id = resp.json()["id"]
+        # Join it to start the game
+        await client.post(
+            f"/api/tables/{table_id}/join",
+            json={"player_id": auth2["player"]["id"]},
+            headers=auth_headers(auth2["token"]),
+        )
+        resp = await client.get("/api/active-games")
+        assert resp.status_code == 200
+        # Private table should not show up
+        assert all(g["id"] != table_id for g in resp.json())
 # Leaderboard endpoint
 # -----------------------------------------------------------------------
 
