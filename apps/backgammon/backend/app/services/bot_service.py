@@ -441,7 +441,28 @@ def _plan_bot_turn(engine, table_id: str):
                                      evaluate_race_position, GamePhase)
             phase = classify_game_phase(engine)
 
-            # Race / bearoff: pip-count evaluator is much better than NN
+            if phase == GamePhase.BEAROFF:
+                # Pure bearoff: use the bearoff endgame DB for perfect play
+                v2_bot = _load_v2_bot()
+                if v2_bot is not None and v2_bot.bearoff_db is not None:
+                    bearoff_db = v2_bot.bearoff_db
+                    if bearoff_db.is_bearoff_position(engine, color):
+                        best_turn, best_eq = None, float('-inf')
+                        for turn in turns:
+                            saved = engine._snapshot_internals()
+                            for m in turn:
+                                engine._apply_move_internal(color, m)
+                            own_pos, opp_pos = bearoff_db.get_position_key(
+                                engine, color)
+                            eq = bearoff_db.lookup(own_pos, opp_pos)
+                            engine._restore_internals(saved)
+                            if eq is not None and eq > best_eq:
+                                best_eq = eq
+                                best_turn = turn
+                        if best_turn is not None:
+                            return best_turn
+
+            # Race / bearoff fallback: pip-count evaluator
             if phase in (GamePhase.RACE, GamePhase.BEAROFF):
                 best_turn, best_eq = None, float('-inf')
                 for turn in turns:

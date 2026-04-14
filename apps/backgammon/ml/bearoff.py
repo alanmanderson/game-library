@@ -281,6 +281,13 @@ class BearoffDB:
     def get_position_key(self, engine, perspective) -> tuple:
         """Extract the bearoff position key for the perspective player.
 
+        The DB indexes positions as ``(pt1, pt2, ..., pt6)`` where pt1 is
+        the point closest to bearing off and pt6 is the farthest.
+
+        For White, pt1 = board point 1 and pt6 = board point 6 (natural order).
+        For Black, pt1 = board point 24 (closest to off) and pt6 = board
+        point 19 (farthest), so the board points must be **reversed**.
+
         Args:
             engine: BackgammonEngine instance.
             perspective: Color of the perspective player.
@@ -293,9 +300,11 @@ class BearoffDB:
 
         if perspective == Color.WHITE:
             own_pos = tuple(max(0, state.points[i]) for i in range(1, 7))
-            opp_pos = tuple(max(0, -state.points[i]) for i in range(19, 25))
+            # Black's key also needs reversal: pt24 (closest) first
+            opp_pos = tuple(max(0, -state.points[i]) for i in range(24, 18, -1))
         else:
-            own_pos = tuple(max(0, -state.points[i]) for i in range(19, 25))
+            # Reverse: pt24 (closest to off) → pt19 (farthest)
+            own_pos = tuple(max(0, -state.points[i]) for i in range(24, 18, -1))
             opp_pos = tuple(max(0, state.points[i]) for i in range(1, 7))
 
         return own_pos, opp_pos
