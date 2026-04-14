@@ -595,21 +595,16 @@ class TestHardDifficulty:
             chosen = _select_bot_move(engine, valid_moves, "HARD01")
             assert chosen in valid_moves
 
-    def test_hard_uses_ml_model_when_available(self):
-        """When the ML model is available, hard should use it for move selection."""
+    def test_hard_uses_full_turn_eval(self):
+        """Hard difficulty should use _plan_bot_turn for full-turn evaluation."""
+        from app.services.bot_service import _plan_bot_turn
         engine = _make_engine_at_moving(Color.WHITE, 3, 1)
-        valid_moves = engine.get_valid_moves()
-        assert len(valid_moves) > 0
-
-        # Create a mock ML bot that always returns the last valid move
-        mock_ml_bot = MagicMock()
-        mock_ml_bot.select_move.return_value = valid_moves[-1]
 
         set_bot_difficulty("HARD02", "hard")
-        with patch("app.services.bot_service._load_ml_bot", return_value=mock_ml_bot):
-            chosen = _select_bot_move(engine, valid_moves, "HARD02")
-            assert chosen == valid_moves[-1]
-            mock_ml_bot.select_move.assert_called_once_with(engine)
+        # With ML model available, _plan_bot_turn should return a valid turn
+        plan = _plan_bot_turn(engine, "HARD02")
+        assert plan is not None
+        assert len(plan) == 2  # non-double uses 2 dice
 
     def test_hard_falls_back_when_ml_returns_none(self):
         """When ML model returns None, hard should fall back to random."""
@@ -641,30 +636,23 @@ class TestHardDifficulty:
 
     def test_hard_is_default_for_unknown_table(self):
         """An unknown table should default to hard difficulty."""
+        from app.services.bot_service import _plan_bot_turn
+        engine = _make_engine_at_moving(Color.WHITE, 3, 1)
+
+        # Unknown table defaults to hard, which uses full-turn eval
+        plan = _plan_bot_turn(engine, "UNKNOWN_TABLE")
+        assert plan is not None
+        assert len(plan) == 2
+
+    def test_invalid_difficulty_falls_back_to_random(self):
+        """An invalid difficulty value should fall back to random move."""
         engine = _make_engine_at_moving(Color.WHITE, 3, 1)
         valid_moves = engine.get_valid_moves()
-
-        mock_ml_bot = MagicMock()
-        mock_ml_bot.select_move.return_value = valid_moves[0]
-
-        with patch("app.services.bot_service._load_ml_bot", return_value=mock_ml_bot):
-            chosen = _select_bot_move(engine, valid_moves, "UNKNOWN_TABLE")
-            mock_ml_bot.select_move.assert_called_once()
-
-    def test_invalid_difficulty_falls_through_to_hard(self):
-        """An invalid difficulty value should fall through to hard (ML)."""
-        engine = _make_engine_at_moving(Color.WHITE, 3, 1)
-        valid_moves = engine.get_valid_moves()
-
-        mock_ml_bot = MagicMock()
-        mock_ml_bot.select_move.return_value = valid_moves[0]
 
         set_bot_difficulty("INVALID1", "impossible")
-        with patch("app.services.bot_service._load_ml_bot", return_value=mock_ml_bot):
-            chosen = _select_bot_move(engine, valid_moves, "INVALID1")
-            # "impossible" doesn't match easy, medium, or expert,
-            # so it falls through to the default hard path
-            mock_ml_bot.select_move.assert_called_once()
+        # _select_bot_move falls through to random for unknown difficulties
+        chosen = _select_bot_move(engine, valid_moves, "INVALID1")
+        assert chosen in valid_moves
 
 
 # -----------------------------------------------------------------------

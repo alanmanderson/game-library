@@ -930,6 +930,111 @@ class BackgammonEngine:
         return False
 
     # ------------------------------------------------------------------
+    # Full-turn enumeration
+    # ------------------------------------------------------------------
+
+    def enumerate_complete_turns(self) -> list[list[Move]]:
+        """Enumerate all distinct complete turns for the current dice roll.
+
+        A "complete turn" is a sequence of single-die moves that uses the
+        maximum possible number of dice (per backgammon rules).  Sequences
+        are deduplicated by resulting board position so that only one
+        representative move order is kept for each unique outcome.
+
+        The "must use higher die" rule is applied when only one die can
+        be used from a non-double roll.
+
+        Returns an empty list if no moves are possible.
+        """
+        if self.state.status != GameStatus.MOVING:
+            return []
+        if not self.state.remaining_dice:
+            return []
+
+        color = self.state.current_turn
+        remaining = list(self.state.remaining_dice)
+
+        all_sequences: list[list[Move]] = []
+        self._enum_turns_dfs(color, remaining, [], all_sequences, set())
+
+        if not all_sequences:
+            return []
+
+        # Must use maximum number of dice.
+        max_dice = max(len(seq) for seq in all_sequences)
+        all_sequences = [seq for seq in all_sequences
+                         if len(seq) == max_dice]
+
+        # "Must use higher die" rule: when exactly one die can be used
+        # from a non-double roll, the player must use the larger die.
+        unique_dice = sorted(set(remaining))
+        if max_dice == 1 and len(unique_dice) == 2:
+            higher = max(unique_dice)
+            higher_seqs = [
+                seq for seq in all_sequences
+                if self._die_value_for_move(color, seq[0]) == higher
+            ]
+            if higher_seqs:
+                all_sequences = higher_seqs
+
+        # Deduplicate by resulting board state.
+        unique: dict[tuple, list[Move]] = {}
+        for seq in all_sequences:
+            saved = self._snapshot_internals()
+            for move in seq:
+                self._apply_move_internal(color, move)
+            key = (tuple(self.state.points), self.state.bar_white,
+                   self.state.bar_black, self.state.off_white,
+                   self.state.off_black)
+            if key not in unique:
+                unique[key] = seq
+            self._restore_internals(saved)
+
+        return list(unique.values())
+
+    def _enum_turns_dfs(self, color: Color, remaining_dice: list[int],
+                        current_seq: list[Move],
+                        results: list[list[Move]],
+                        seen: set) -> None:
+        """DFS to find all possible complete turn sequences.
+
+        *seen* tracks ``(board_state, remaining_dice)`` tuples to prune
+        duplicate sub-trees (important for doubles where move order
+        doesn't matter).
+        """
+        unique_dice = sorted(set(remaining_dice))
+        any_move = False
+
+        for die in unique_dice:
+            for move in self._legal_moves_for_die(color, die):
+                any_move = True
+                saved = self._snapshot_internals()
+                self._apply_move_internal(color, move)
+                new_remaining = list(remaining_dice)
+                new_remaining.remove(die)
+
+                current_seq.append(move)
+                if new_remaining:
+                    state_key = (
+                        tuple(self.state.points),
+                        self.state.bar_white, self.state.bar_black,
+                        self.state.off_white, self.state.off_black,
+                        tuple(sorted(new_remaining)),
+                    )
+                    if state_key not in seen:
+                        seen.add(state_key)
+                        self._enum_turns_dfs(
+                            color, new_remaining, current_seq,
+                            results, seen)
+                else:
+                    results.append(list(current_seq))
+                current_seq.pop()
+                self._restore_internals(saved)
+
+        if not any_move:
+            results.append(list(current_seq))
+
+    # ------------------------------------------------------------------
     # Move execution
     # ------------------------------------------------------------------
 

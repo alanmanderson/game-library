@@ -213,29 +213,75 @@ def _score_bearoff_move(move, color) -> float:
         return float(distance)
 
 
+def _evaluate_position_heuristic(engine, color) -> float:
+    """Evaluate a board position using simple heuristics.
+
+    Used by medium difficulty for full-turn evaluation.  Returns a
+    score where higher is better for *color*.
+    """
+    state = engine.state
+    is_white = color.value == "white"
+    inc = 1 if is_white else -1
+    score = 0.0
+
+    # Pip count advantage
+    own_pips = opp_pips = 0
+    for i in range(1, 25):
+        val = state.points[i]
+        if is_white:
+            if val > 0:
+                own_pips += val * i
+            elif val < 0:
+                opp_pips += (-val) * (25 - i)
+        else:
+            if val < 0:
+                own_pips += (-val) * (25 - i)
+            elif val > 0:
+                opp_pips += val * i
+    own_pips += (state.bar_white if is_white else state.bar_black) * 25
+    opp_pips += (state.bar_black if is_white else state.bar_white) * 25
+    score += (opp_pips - own_pips) * 0.003
+
+    # Home board points made (very valuable)
+    home = range(1, 7) if is_white else range(19, 25)
+    for pt in home:
+        if state.points[pt] * inc >= 2:
+            score += 0.4
+
+    # Blots penalty (exposed checkers)
+    for i in range(1, 25):
+        if state.points[i] * inc == 1:
+            score -= 0.2
+
+    # Borne off checkers
+    off = state.off_white if is_white else state.off_black
+    score += off * 0.3
+
+    # Opponent on bar (good for us)
+    opp_bar = state.bar_black if is_white else state.bar_white
+    score += opp_bar * 0.3
+
+    # Own checkers on bar (bad for us)
+    own_bar = state.bar_white if is_white else state.bar_black
+    score -= own_bar * 0.5
+
+    return score
+
+
 def _select_bot_move(engine, valid_moves, table_id: str = ""):
-    """Select a move based on the table's difficulty setting."""
+    """Select a single move based on the table's difficulty setting.
+
+    This is the per-move fallback used when full-turn planning is
+    unavailable (easy difficulty) or when a planned move is invalid.
+    """
     difficulty = get_bot_difficulty(table_id)
 
     if difficulty == "easy":
         return random.choice(valid_moves)
 
-    # Expert difficulty: let the V2 bot handle it first — its bearoff DB
-    # has exact equity lookups that beat any heuristic.
-    if difficulty == "expert":
-        v2_bot = _load_v2_bot()
-        if v2_bot is not None:
-            try:
-                move = v2_bot.select_move(engine)
-                if move is not None:
-                    return move
-            except (ValueError, IndexError, KeyError) as e:
-                logger.warning("V2 expert move selection failed: %s", e)
-        # Fall through — V2 unavailable, bearoff heuristic or hard ML below
-
     # In a no-contact bearoff, use a deterministic heuristic instead of the
-    # base ML model.  The neural network is weak at pure bearing-off races;
-    # a simple "always bear off, move farthest checker" rule is near-optimal.
+    # ML model.  A simple "always bear off, move farthest checker" rule is
+    # near-optimal.
     if _is_no_contact_bearoff(engine):
         color = engine.state.current_turn
         return max(valid_moves, key=lambda m: _score_bearoff_move(m, color))
@@ -243,16 +289,140 @@ def _select_bot_move(engine, valid_moves, table_id: str = ""):
     if difficulty == "medium":
         return max(valid_moves, key=lambda m: _heuristic_score_move(engine, m))
 
-    # Default: hard (ML model)
-    ml_bot = _load_ml_bot()
-    if ml_bot is not None:
-        try:
-            move = ml_bot.select_move(engine)
-            if move is not None:
-                return move
-        except (ValueError, IndexError, KeyError) as e:
-            logger.warning("ML move selection failed: %s", e)
+    # Default: random (ML full-turn eval is the normal path now)
     return random.choice(valid_moves)
+
+
+def _plan_bot_turn(engine, table_id: str):
+    """Plan the bot's complete turn using full-turn evaluation.
+
+    Enumerates all possible complete move sequences for the current dice
+    roll and picks the best one.  For expert difficulty, uses the opening
+    book, game-phase routing (race evaluator vs neural net), and the V2
+    model.
+
+    Returns a list of Move objects to execute in order, an empty list if
+    no moves are possible, or None to fall back to per-move selection.
+    """
+    difficulty = get_bot_difficulty(table_id)
+    color = engine.state.current_turn
+
+    if difficulty == "easy":
+        return None  # easy uses random per-move
+
+    # --- Expert: opening book ---
+    if difficulty == "expert":
+        try:
+            ml_dir = _find_ml_dir()
+            if ml_dir and ml_dir not in sys.path:
+                sys.path.insert(0, ml_dir)
+            from opening_book import get_opening_moves, is_opening_position
+            if is_opening_position(engine) and engine.state.dice:
+                dice = (engine.state.dice.die1, engine.state.dice.die2)
+                book_moves = get_opening_moves(dice, color)
+                if book_moves is not None:
+                    logger.info("Expert bot using opening book for %s", dice)
+                    return book_moves
+        except ImportError:
+            pass
+
+    # --- Enumerate all possible complete turns ---
+    turns = engine.enumerate_complete_turns()
+    if not turns:
+        return []
+    if len(turns) == 1:
+        return turns[0]
+
+    # --- Expert: game-phase routing ---
+    if difficulty == "expert":
+        try:
+            ml_dir = _find_ml_dir()
+            if ml_dir and ml_dir not in sys.path:
+                sys.path.insert(0, ml_dir)
+            from game_phases import (classify_game_phase,
+                                     evaluate_race_position, GamePhase)
+            phase = classify_game_phase(engine)
+
+            # Race / bearoff: pip-count evaluator is much better than NN
+            if phase in (GamePhase.RACE, GamePhase.BEAROFF):
+                best_turn, best_eq = None, float('-inf')
+                for turn in turns:
+                    saved = engine._snapshot_internals()
+                    for m in turn:
+                        engine._apply_move_internal(color, m)
+                    eq = evaluate_race_position(engine, color)
+                    engine._restore_internals(saved)
+                    if eq > best_eq:
+                        best_eq = eq
+                        best_turn = turn
+                return best_turn
+        except ImportError:
+            pass
+
+    # --- Expert: V2 neural net for contact positions ---
+    if difficulty == "expert":
+        v2_bot = _load_v2_bot()
+        if v2_bot is not None:
+            try:
+                best_turn, best_eq = None, float('-inf')
+                for turn in turns:
+                    saved = engine._snapshot_internals()
+                    for m in turn:
+                        engine._apply_move_internal(color, m)
+                    eq = v2_bot._evaluate_position(engine, color)
+                    engine._restore_internals(saved)
+                    if eq > best_eq:
+                        best_eq = eq
+                        best_turn = turn
+                return best_turn
+            except (ValueError, IndexError, KeyError) as e:
+                logger.warning("V2 full-turn eval failed: %s", e)
+
+    # --- Hard (or expert fallback): V1 neural net ---
+    if difficulty in ("hard", "expert"):
+        ml_bot = _load_ml_bot()
+        if ml_bot is not None:
+            try:
+                import torch
+                ml_dir = _find_ml_dir()
+                if ml_dir and ml_dir not in sys.path:
+                    sys.path.insert(0, ml_dir)
+                from encoder import encode_state
+                from model import compute_equity
+
+                best_turn, best_eq = None, float('-inf')
+                for turn in turns:
+                    saved = engine._snapshot_internals()
+                    for m in turn:
+                        engine._apply_move_internal(color, m)
+                    with torch.no_grad():
+                        features = encode_state(engine, color)
+                        ft = torch.from_numpy(features).to(ml_bot.device)
+                        outputs = ml_bot.model(ft)
+                        eq = compute_equity(outputs).item()
+                    engine._restore_internals(saved)
+                    if eq > best_eq:
+                        best_eq = eq
+                        best_turn = turn
+                return best_turn
+            except (ValueError, IndexError, KeyError, ImportError) as e:
+                logger.warning("ML full-turn eval failed: %s", e)
+
+    # --- Medium: heuristic position evaluation ---
+    if difficulty == "medium":
+        best_turn, best_score = None, float('-inf')
+        for turn in turns:
+            saved = engine._snapshot_internals()
+            for m in turn:
+                engine._apply_move_internal(color, m)
+            s = _evaluate_position_heuristic(engine, color)
+            engine._restore_internals(saved)
+            if s > best_score:
+                best_score = s
+                best_turn = turn
+        return best_turn
+
+    return None  # fall back to per-move selection
 
 
 async def ensure_bot_player(db: AsyncSession) -> Player:
@@ -373,7 +543,18 @@ async def execute_bot_turn(table_id: str) -> None:
             # Turn was auto-skipped, nothing more to do
             return
 
+        # --- Plan full turn ---
+        planned_turn = None
+        async with game_manager._get_lock(table_id):
+            engine = game_manager.get_engine(table_id)
+            if engine and engine.state.status == GameStatus.MOVING:
+                try:
+                    planned_turn = _plan_bot_turn(engine, table_id)
+                except Exception as e:
+                    logger.warning("Bot turn planning failed: %s", e)
+
         # --- Make moves ---
+        move_index = 0
         while True:
             await asyncio.sleep(BOT_MOVE_DELAY)
 
@@ -399,8 +580,23 @@ async def execute_bot_turn(table_id: str) -> None:
                         await _send_game_state_to_all(table_id, db=db)
                     return
 
-                # Pick the best move based on difficulty
-                move = _select_bot_move(engine, valid_moves, table_id)
+                # Use planned move if available, else fall back
+                move = None
+                if planned_turn is not None and move_index < len(planned_turn):
+                    planned_move = planned_turn[move_index]
+                    if planned_move in valid_moves:
+                        move = planned_move
+                    else:
+                        logger.warning(
+                            "Planned move %s->%s not in valid moves, "
+                            "falling back to per-move selection",
+                            planned_move.from_point, planned_move.to_point,
+                        )
+                        planned_turn = None  # abandon plan
+                if move is None:
+                    move = _select_bot_move(engine, valid_moves, table_id)
+                move_index += 1
+
                 async with async_session() as db:
                     state_snapshot = engine.get_state_snapshot()
                     try:

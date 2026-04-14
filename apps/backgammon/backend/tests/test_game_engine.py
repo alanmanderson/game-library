@@ -1307,3 +1307,109 @@ class TestCrawfordRule:
         engine.state.cube_owner = Color.WHITE  # White owns cube
 
         assert engine.can_double(Color.WHITE) is False
+
+
+# -----------------------------------------------------------------------
+# Full-turn enumeration
+# -----------------------------------------------------------------------
+
+class TestEnumerateCompleteTurns:
+    """Tests for BackgammonEngine.enumerate_complete_turns()."""
+
+    def test_opening_31_returns_multiple_turns(self):
+        """Opening 3-1 should produce multiple distinct turns."""
+        engine = BackgammonEngine()
+        engine.start_game(first_player=Color.WHITE, dice=DiceRoll(3, 1))
+        turns = engine.enumerate_complete_turns()
+        # There should be many possible turns (typically 15-20)
+        assert len(turns) > 10
+        # Each turn should use 2 dice (2 moves)
+        for turn in turns:
+            assert len(turn) == 2
+
+    def test_all_turns_are_legal(self):
+        """Every move in every enumerated turn must be a legal move."""
+        engine = BackgammonEngine()
+        engine.start_game(first_player=Color.WHITE, dice=DiceRoll(5, 3))
+        turns = engine.enumerate_complete_turns()
+        for turn in turns:
+            test_engine = BackgammonEngine()
+            test_engine.start_game(first_player=Color.WHITE, dice=DiceRoll(5, 3))
+            for move in turn:
+                valid = test_engine.get_valid_moves()
+                assert move in valid, (
+                    f"Move {move.from_point}->{move.to_point} not in valid moves"
+                )
+                test_engine.make_move(move)
+
+    def test_turns_are_deduplicated(self):
+        """No two enumerated turns should result in the same board state."""
+        engine = BackgammonEngine()
+        engine.start_game(first_player=Color.WHITE, dice=DiceRoll(3, 1))
+        turns = engine.enumerate_complete_turns()
+        color = engine.state.current_turn
+        final_states = set()
+        for turn in turns:
+            saved = engine._snapshot_internals()
+            for move in turn:
+                engine._apply_move_internal(color, move)
+            key = (tuple(engine.state.points), engine.state.bar_white,
+                   engine.state.bar_black, engine.state.off_white,
+                   engine.state.off_black)
+            assert key not in final_states, "Duplicate final state found"
+            final_states.add(key)
+            engine._restore_internals(saved)
+
+    def test_doubles_enumerate_four_moves(self):
+        """Doubles should produce turns of length 4 when all dice can be used."""
+        engine = BackgammonEngine()
+        engine.start_game(first_player=Color.WHITE)
+        engine.roll_dice(3, 3)
+        turns = engine.enumerate_complete_turns()
+        assert len(turns) > 0
+        for turn in turns:
+            assert len(turn) == 4
+
+    def test_higher_die_rule(self):
+        """When only one die can be used, the higher die must be used."""
+        # White has one checker on point 10, point 3 blocked.
+        # Die 4: 10->6 (valid). Die 3: 10->7 (valid).
+        # After either move, the other die can't reach anywhere useful
+        # (both routes converge on blocked point 3), so max_usable = 1.
+        # Higher die rule: must use die 4. Only turn should be [10->6].
+        board = empty_board()
+        board[10] = 1
+        board[3] = -2  # blocks the second hop for both paths
+        engine = setup_engine_for_move(board, Color.WHITE, die1=4, die2=3,
+                                       off_white=14)
+        turns = engine.enumerate_complete_turns()
+        assert len(turns) == 1
+        assert turns[0][0].from_point == 10
+        assert turns[0][0].to_point == 6  # used die 4, not die 3
+
+    def test_no_moves_returns_empty_sequence(self):
+        """When no moves are possible, return a single empty sequence."""
+        board = empty_board()
+        board[1] = 1  # White on point 1 (home board)
+        # Block all entry points for die values
+        board[24] = -2  # Block point 24
+        board[23] = -2  # Block point 23
+        # White on bar can't enter
+        engine = setup_engine_for_move(board, Color.WHITE, die1=1, die2=2,
+                                       bar_white=1)
+        turns = engine.enumerate_complete_turns()
+        # One "turn" of zero moves (completely blocked)
+        assert turns == [[]]
+
+    def test_engine_state_unchanged_after_enumeration(self):
+        """Enumeration must not alter the engine state."""
+        engine = BackgammonEngine()
+        engine.start_game(first_player=Color.WHITE, dice=DiceRoll(6, 1))
+        before = (list(engine.state.points), engine.state.bar_white,
+                  engine.state.bar_black, engine.state.off_white,
+                  engine.state.off_black, list(engine.state.remaining_dice))
+        engine.enumerate_complete_turns()
+        after = (list(engine.state.points), engine.state.bar_white,
+                 engine.state.bar_black, engine.state.off_white,
+                 engine.state.off_black, list(engine.state.remaining_dice))
+        assert before == after
