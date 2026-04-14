@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.models import Player
-from app.game_engine import Color, GameStatus, _home_range, _off_point, _opponent
+from app.game_engine import Color, DiceRoll, GameStatus, _home_range, _off_point, _opponent
 
 logger = logging.getLogger(__name__)
 
@@ -268,6 +268,104 @@ def _evaluate_position_heuristic(engine, color) -> float:
     return score
 
 
+# All 21 distinct dice outcomes: (die1, die2, die_values, probability)
+_DICE_OUTCOMES: list[tuple[int, int, list[int], float]] = []
+for _d1 in range(1, 7):
+    for _d2 in range(_d1, 7):
+        if _d1 == _d2:
+            _DICE_OUTCOMES.append((_d1, _d2, [_d1] * 4, 1.0 / 36.0))
+        else:
+            _DICE_OUTCOMES.append((_d1, _d2, [_d1, _d2], 2.0 / 36.0))
+
+
+def _evaluate_1ply(engine, color, scored_turns, eval_fn, top_n=5):
+    """Re-rank top candidate turns using 1-ply lookahead.
+
+    For each of the top *top_n* candidates (sorted best-first by 0-ply
+    equity), simulate all 21 possible opponent dice rolls.  For each
+    roll, find the opponent's best response (the move that minimises
+    *our* equity) and weight by roll probability.  Return the candidate
+    with the highest expected 1-ply equity.
+
+    This is roughly: top_n × 21 rolls × ~25 opponent turns ≈ 2,500–3,000
+    neural-net evaluations — well under a second for a small network.
+    """
+    if len(scored_turns) <= 1:
+        return scored_turns[0][1] if scored_turns else None
+
+    opp_color = _opponent(color)
+    top_candidates = scored_turns[:top_n]
+    is_white = color == Color.WHITE
+
+    best_turn = top_candidates[0][1]
+    best_1ply_eq = float('-inf')
+
+    for _zero_ply_eq, turn in top_candidates:
+        # Apply our candidate turn
+        saved_outer = engine._snapshot_internals()
+        for m in turn:
+            engine._apply_move_internal(color, m)
+
+        # If all our checkers are off the board, we've won — no opponent turn
+        our_off = engine.state.off_white if is_white else engine.state.off_black
+        if our_off >= 15:
+            eq = eval_fn(engine, color)
+            engine._restore_internals(saved_outer)
+            if eq > best_1ply_eq:
+                best_1ply_eq = eq
+                best_turn = turn
+            continue
+
+        # Save engine state fields that we temporarily overwrite
+        orig_current_turn = engine.state.current_turn
+        orig_dice = engine.state.dice
+        orig_remaining = (list(engine.state.remaining_dice)
+                          if engine.state.remaining_dice else [])
+        orig_status = engine.state.status
+
+        weighted_eq = 0.0
+
+        for d1, d2, dice_values, prob in _DICE_OUTCOMES:
+            # Set up opponent's hypothetical turn
+            engine.state.current_turn = opp_color
+            engine.state.dice = DiceRoll(d1, d2)
+            engine.state.remaining_dice = list(dice_values)
+            engine.state.status = GameStatus.MOVING
+
+            opp_turns = engine.enumerate_complete_turns()
+
+            if not opp_turns:
+                # Opponent can't move — evaluate position as-is
+                roll_eq = eval_fn(engine, color)
+            else:
+                # Opponent picks the turn that minimises our equity
+                min_eq = float('inf')
+                for opp_turn in opp_turns:
+                    saved_inner = engine._snapshot_internals()
+                    for om in opp_turn:
+                        engine._apply_move_internal(opp_color, om)
+                    eq = eval_fn(engine, color)
+                    engine._restore_internals(saved_inner)
+                    if eq < min_eq:
+                        min_eq = eq
+                roll_eq = min_eq
+
+            weighted_eq += prob * roll_eq
+
+        # Restore everything
+        engine.state.current_turn = orig_current_turn
+        engine.state.dice = orig_dice
+        engine.state.remaining_dice = orig_remaining
+        engine.state.status = orig_status
+        engine._restore_internals(saved_outer)
+
+        if weighted_eq > best_1ply_eq:
+            best_1ply_eq = weighted_eq
+            best_turn = turn
+
+    return best_turn
+
+
 def _select_bot_move(engine, valid_moves, table_id: str = ""):
     """Select a single move based on the table's difficulty setting.
 
@@ -359,26 +457,26 @@ def _plan_bot_turn(engine, table_id: str):
         except ImportError:
             pass
 
-    # --- Expert: V2 neural net for contact positions ---
+    # --- Expert: V2 neural net for contact positions (with 1-ply lookahead) ---
     if difficulty == "expert":
         v2_bot = _load_v2_bot()
         if v2_bot is not None:
             try:
-                best_turn, best_eq = None, float('-inf')
+                scored_turns = []
                 for turn in turns:
                     saved = engine._snapshot_internals()
                     for m in turn:
                         engine._apply_move_internal(color, m)
                     eq = v2_bot._evaluate_position(engine, color)
                     engine._restore_internals(saved)
-                    if eq > best_eq:
-                        best_eq = eq
-                        best_turn = turn
-                return best_turn
+                    scored_turns.append((eq, turn))
+                scored_turns.sort(key=lambda x: x[0], reverse=True)
+                return _evaluate_1ply(engine, color, scored_turns,
+                                      v2_bot._evaluate_position)
             except (ValueError, IndexError, KeyError) as e:
                 logger.warning("V2 full-turn eval failed: %s", e)
 
-    # --- Hard (or expert fallback): V1 neural net ---
+    # --- Hard (or expert fallback): V1 neural net (with 1-ply lookahead) ---
     if difficulty in ("hard", "expert"):
         ml_bot = _load_ml_bot()
         if ml_bot is not None:
@@ -390,21 +488,23 @@ def _plan_bot_turn(engine, table_id: str):
                 from encoder import encode_state
                 from model import compute_equity
 
-                best_turn, best_eq = None, float('-inf')
+                def _eval_v1(eng, clr):
+                    with torch.no_grad():
+                        features = encode_state(eng, clr)
+                        ft = torch.from_numpy(features).to(ml_bot.device)
+                        outputs = ml_bot.model(ft)
+                        return compute_equity(outputs).item()
+
+                scored_turns = []
                 for turn in turns:
                     saved = engine._snapshot_internals()
                     for m in turn:
                         engine._apply_move_internal(color, m)
-                    with torch.no_grad():
-                        features = encode_state(engine, color)
-                        ft = torch.from_numpy(features).to(ml_bot.device)
-                        outputs = ml_bot.model(ft)
-                        eq = compute_equity(outputs).item()
+                    eq = _eval_v1(engine, color)
                     engine._restore_internals(saved)
-                    if eq > best_eq:
-                        best_eq = eq
-                        best_turn = turn
-                return best_turn
+                    scored_turns.append((eq, turn))
+                scored_turns.sort(key=lambda x: x[0], reverse=True)
+                return _evaluate_1ply(engine, color, scored_turns, _eval_v1)
             except (ValueError, IndexError, KeyError, ImportError) as e:
                 logger.warning("ML full-turn eval failed: %s", e)
 
