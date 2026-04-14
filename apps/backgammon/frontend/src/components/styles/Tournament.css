@@ -201,6 +201,30 @@
   margin-bottom: 1.5rem;
 }
 
+.tournament-match-ready-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  background: linear-gradient(90deg, rgba(46, 204, 113, 0.18), rgba(46, 204, 113, 0.05));
+  border: 1px solid rgba(46, 204, 113, 0.4);
+  border-radius: 8px;
+  padding: 0.85rem 1.25rem;
+  margin-bottom: 1.25rem;
+  color: var(--text-primary);
+  animation: match-ready-pulse 2s ease-in-out infinite;
+}
+
+.tournament-match-ready-banner strong {
+  color: var(--success);
+}
+
+@keyframes match-ready-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.35); }
+  50% { box-shadow: 0 0 0 6px rgba(46, 204, 113, 0); }
+}
+
 .registered-badge {
   color: #2ecc71;
   font-size: 0.9rem;

@@ -8,8 +8,8 @@ import Board from "./Board";
 import Dice from "./Dice";
 import GameControls from "./GameControls";
 import GameInfo from "./GameInfo";
-import WaitingRoom from "./WaitingRoom";
 import GameOverBanner from "./GameOverBanner";
+import WaitingState from "./WaitingState";
 import PlayerInfoRow from "./PlayerInfoRow";
 import ConnectionBanners from "./ConnectionBanners";
 import ShortcutHelpModal from "./ShortcutHelpModal";
@@ -181,22 +181,13 @@ function Game() {
     );
   }
 
-  if (waitingForOpponent && !gameState) {
-    return <WaitingRoom tableId={tableId} />;
-  }
-
   if (!gameState || !myColor || !table) {
     return (
-      <div className="game-page">
-        <div className="game-header">
-          <h2>Backgammon</h2>
-          <Link to="/" className="back-link">Home</Link>
-        </div>
-        <div className="game-loading">
-          <div className="spinner" />
-          <p>{isConnected ? "Loading game..." : "Connecting..."}</p>
-        </div>
-      </div>
+      <WaitingState
+        tableId={tableId}
+        isConnected={isConnected}
+        waitingForOpponent={waitingForOpponent}
+      />
     );
   }
 

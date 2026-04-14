@@ -3,7 +3,7 @@
  * and displays a single-elimination bracket visualization.
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { Player, Tournament as TournamentType, TournamentBracket, TournamentMatch } from "../types/game";
 import {
@@ -15,6 +15,16 @@ import {
   startMatchTable,
 } from "../services/api";
 import "./styles/Tournament.css";
+
+// How often to refresh the bracket while a participant has an active match.
+// Polling is paused when the tab is hidden and stops once the user's tournament
+// run is over.
+//
+// TODO(follow-up): replace polling with a tournament-scoped WebSocket channel
+// (e.g. /ws/tournament/{id}) that pushes `match_started` / `match_completed`
+// events from tournament_routes.py. Polling is a pragmatic band-aid at current
+// scale but costs O(participants) requests per interval.
+const TOURNAMENT_POLL_MS = 4000;
 
 // ---------------------------------------------------------------------------
 // Tournament List View
@@ -159,6 +169,34 @@ export function TournamentList({ player, embedded }: TournamentListProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Match-ready banner
+// ---------------------------------------------------------------------------
+
+interface MatchReadyBannerProps {
+  match: TournamentMatch;
+  viewerId: string;
+  onJoin: (tableId: string) => void;
+}
+
+function MatchReadyBanner({ match, viewerId, onJoin }: MatchReadyBannerProps) {
+  const opponentName =
+    match.player1_id === viewerId ? match.player2_nickname : match.player1_nickname;
+  return (
+    <div className="tournament-match-ready-banner" role="status">
+      <span>
+        Your match vs <strong>{opponentName || "opponent"}</strong> is ready.
+      </span>
+      <button
+        className="btn-primary"
+        onClick={() => match.table_id && onJoin(match.table_id)}
+      >
+        Join Now
+      </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Tournament Detail / Bracket View
 // ---------------------------------------------------------------------------
 
@@ -189,6 +227,35 @@ export function TournamentDetail({ player }: TournamentDetailProps) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Poll only when the viewer is a participant with an active match (pending
+  // or playing) — so spectators don't drive needless traffic, and polling stops
+  // once the user's tournament run is over. Also pauses when the tab is hidden.
+  const shouldPoll = useMemo(() => {
+    if (!bracket || bracket.tournament.status !== "in_progress") return false;
+    return bracket.matches.some(
+      (m) =>
+        (m.player1_id === player.id || m.player2_id === player.id) &&
+        (m.status === "pending" || m.status === "playing"),
+    );
+  }, [bracket, player.id]);
+
+  useEffect(() => {
+    if (!shouldPoll) return;
+    let id: ReturnType<typeof setInterval> | null = null;
+    const start = () => { if (id === null) id = setInterval(load, TOURNAMENT_POLL_MS); };
+    const stop = () => { if (id !== null) { clearInterval(id); id = null; } };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") start();
+      else stop();
+    };
+    if (document.visibilityState === "visible") start();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [shouldPoll, load]);
 
   const handleRegister = async () => {
     if (!tournamentId) return;
@@ -236,6 +303,13 @@ export function TournamentDetail({ player }: TournamentDetailProps) {
   if (!bracket) return <div className="tournament-error">{error || "Tournament not found"}</div>;
 
   const { tournament, entries, matches, total_rounds } = bracket;
+
+  const myLiveMatch = matches.find(
+    (m) =>
+      m.status === "playing" &&
+      m.table_id &&
+      (m.player1_id === player.id || m.player2_id === player.id),
+  );
 
   const isRegistered = entries.some((e) => e.player_id === player.id);
   const isCreator = tournament.created_by === player.id;
@@ -292,6 +366,14 @@ export function TournamentDetail({ player }: TournamentDetailProps) {
       )}
 
       {error && <div className="tournament-error">{error}</div>}
+
+      {myLiveMatch && (
+        <MatchReadyBanner
+          match={myLiveMatch}
+          viewerId={player.id}
+          onJoin={(tableId) => navigate(`/game/${tableId}`)}
+        />
+      )}
 
       <div className="tournament-actions">
         {canRegister && (
@@ -366,7 +448,7 @@ export function TournamentDetail({ player }: TournamentDetailProps) {
                           onClick={() => navigate(`/game/${match.table_id}`)}
                         >
                           {match.player1_id === player.id || match.player2_id === player.id
-                            ? "Resume"
+                            ? "Join Game"
                             : "Watch"}
                         </button>
                       )}
