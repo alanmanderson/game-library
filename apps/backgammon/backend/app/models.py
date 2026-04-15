@@ -43,6 +43,9 @@ class Player(Base):
     cube_accepts: int = Column(Integer, default=0, nullable=False, server_default="0")
     cube_declines: int = Column(Integer, default=0, nullable=False, server_default="0")
 
+    # Accumulated reward points from completed daily/weekly challenges.
+    challenge_points: int = Column(Integer, default=0, nullable=False, server_default="0")
+
     # Cosmetic preferences — selected board theme + checker style.
     # Validated against known IDs by the preferences endpoint; unknown values
     # simply fall back to "classic" in the frontend so an old column value
@@ -337,3 +340,71 @@ class Season(Base):
 
     def __repr__(self) -> str:
         return f"<Season(id={self.id!r}, name={self.name!r}, is_active={self.is_active!r})>"
+
+
+class Challenge(Base):
+    """A daily or weekly challenge template.
+
+    Templates are seeded via migrations and identified by a stable string id
+    so that :class:`PlayerChallenge` rows keep referencing them across
+    deployments. ``metric`` drives the progress-tracking logic in
+    :mod:`app.services.challenge_service`.
+    """
+
+    __tablename__ = "challenges"
+    __table_args__ = (
+        CheckConstraint("type IN ('daily', 'weekly')", name="ck_challenges_type"),
+    )
+
+    id: str = Column(String(64), primary_key=True)
+    name: str = Column(String(100), nullable=False)
+    description: str = Column(String(255), nullable=False)
+    type: str = Column(String(16), nullable=False)
+    target: int = Column(Integer, nullable=False)
+    metric: str = Column(String(64), nullable=False)
+    reward_points: int = Column(Integer, nullable=False, default=0, server_default="0")
+    is_active: bool = Column(Boolean, nullable=False, default=True, server_default="true")
+
+    def __repr__(self) -> str:
+        return f"<Challenge(id={self.id!r}, type={self.type!r}, target={self.target!r})>"
+
+
+class PlayerChallenge(Base):
+    """Per-player progress for a given challenge within a given period.
+
+    ``period_key`` is a string "YYYY-MM-DD" for daily challenges and
+    "YYYY-Www" for weekly challenges. A unique (player, challenge, period)
+    triple guarantees one row per active window.
+    """
+
+    __tablename__ = "player_challenges"
+    __table_args__ = (
+        UniqueConstraint(
+            "player_id", "challenge_id", "period_key", name="uq_player_challenge_period"
+        ),
+    )
+
+    id: int = Column(Integer, primary_key=True, autoincrement=True)
+    player_id: str = Column(
+        String(36), ForeignKey("players.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    challenge_id: str = Column(
+        String(64), ForeignKey("challenges.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    period_key: str = Column(String(16), nullable=False)
+    progress: int = Column(Integer, nullable=False, default=0, server_default="0")
+    completed_at: datetime | None = Column(DateTime(timezone=True), nullable=True)
+    created_at: datetime = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+    challenge = relationship("Challenge", foreign_keys=[challenge_id])
+    player = relationship("Player", foreign_keys=[player_id])
+
+    def __repr__(self) -> str:
+        return (
+            f"<PlayerChallenge(player_id={self.player_id!r}, "
+            f"challenge_id={self.challenge_id!r}, "
+            f"period_key={self.period_key!r}, "
+            f"progress={self.progress!r})>"
+        )

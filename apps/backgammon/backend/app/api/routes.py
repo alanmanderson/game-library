@@ -29,6 +29,8 @@ from app.schemas import (
     ReplayMoveRecord,
     ReplayResponse,
     SeasonResponse,
+    ChallengesResponse,
+    ChallengeProgress,
 )
 from app.cosmetics import BOARD_THEMES, CHECKER_STYLES
 from app.services.game_service import game_manager
@@ -145,6 +147,36 @@ async def player_advanced_stats(
             detail="Advanced stats are not available for guest players",
         )
     return await get_advanced_stats(db, player_id)
+
+
+@router.get("/challenges/me", response_model=ChallengesResponse)
+async def my_challenges(
+    current_player: Player = Depends(get_current_player),
+    db: AsyncSession = Depends(get_db),
+) -> ChallengesResponse:
+    """Return the authenticated player's active daily + weekly challenges.
+
+    Guests are rejected — challenge progress is only persisted for registered
+    accounts. PlayerChallenge rows for the current period are upserted on
+    demand so callers never see a stale or missing period.
+    """
+    if current_player.is_guest:
+        raise HTTPException(
+            status_code=403,
+            detail="Challenges are not available for guest players",
+        )
+
+    from app.services.challenge_service import get_active_player_challenges
+
+    rows = await get_active_player_challenges(db, current_player.id)
+    await db.commit()
+    daily = [ChallengeProgress(**r) for r in rows if r["type"] == "daily"]
+    weekly = [ChallengeProgress(**r) for r in rows if r["type"] == "weekly"]
+    return ChallengesResponse(
+        daily=daily,
+        weekly=weekly,
+        challenge_points=getattr(current_player, "challenge_points", 0) or 0,
+    )
 
 
 @router.get("/players/{player_id}/dashboard", response_model=DashboardResponse)
@@ -286,6 +318,7 @@ async def player_dashboard(
         games=games,
         rating=player.rating,
         rating_games=player.rating_games,
+        challenge_points=getattr(player, "challenge_points", 0) or 0,
         active_season=(
             SeasonResponse.model_validate(active_season) if active_season else None
         ),

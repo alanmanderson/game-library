@@ -39,6 +39,29 @@ export interface Player {
   board_theme?: string;
   /** Cosmetic preference: checker style ID (see `constants/themes.ts`). */
   checker_style?: string;
+  /** Accumulated daily/weekly challenge reward points. */
+  challenge_points?: number;
+}
+
+/** A daily or weekly challenge with the current player's progress. */
+export interface ChallengeProgress {
+  id: string;
+  name: string;
+  description: string;
+  type: "daily" | "weekly";
+  target: number;
+  metric: string;
+  reward_points: number;
+  progress: number;
+  completed_at: string | null;
+  period_key: string;
+}
+
+/** Aggregate response for GET /api/challenges/me. */
+export interface ChallengesData {
+  daily: ChallengeProgress[];
+  weekly: ChallengeProgress[];
+  challenge_points: number;
 }
 
 /** Partial update payload for PATCH /api/players/me/preferences. */
@@ -245,6 +268,7 @@ export interface DashboardData {
   rating: number;
   rating_games: number;
   tier?: string;
+  challenge_points?: number;
   active_season?: Season | null;
 }
 

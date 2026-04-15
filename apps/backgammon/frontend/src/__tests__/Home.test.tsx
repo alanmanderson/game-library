@@ -31,6 +31,7 @@ vi.mock("../services/api", () => ({
   getLeaderboard: vi.fn(),
   listTournaments: vi.fn(),
   updateMyPreferences: vi.fn(),
+  getMyChallenges: vi.fn(),
 }));
 
 // We need to dynamically import the mocked module so we can configure return values.
@@ -74,6 +75,12 @@ beforeEach(() => {
   vi.mocked(api.getLeaderboard).mockResolvedValue({ entries: [], total: 0 });
   // Default: tournaments returns empty list
   vi.mocked(api.listTournaments).mockResolvedValue([]);
+  // Default: challenges returns empty payload
+  vi.mocked(api.getMyChallenges).mockResolvedValue({
+    daily: [],
+    weekly: [],
+    challenge_points: 0,
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -350,6 +357,7 @@ describe("Home – tabbed content", () => {
     expect(screen.getByRole("tab", { name: "Dashboard" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Leaderboard" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Tournaments" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Challenges" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Settings" })).toBeInTheDocument();
   });
 

@@ -23,6 +23,7 @@ class PlayerResponse(BaseModel):
     auth_provider: str = "local"
     rating: int = 1500
     rating_games: int = 0
+    challenge_points: int = 0
     board_theme: str = "classic"
     checker_style: str = "classic"
 
@@ -224,6 +225,7 @@ class DashboardResponse(BaseModel):
     games: list[GameHistoryItem]
     rating: int = 1500
     rating_games: int = 0
+    challenge_points: int = 0
     active_season: Optional["SeasonResponse"] = None
 
     @computed_field  # type: ignore[prop-decorator]
@@ -346,6 +348,30 @@ class SeasonResponse(BaseModel):
     start_date: datetime
     end_date: datetime
     is_active: bool
+
+
+# ── Challenge Schemas ────────────────────────────────────────────────────
+
+
+class ChallengeProgress(BaseModel):
+    """A single challenge with the current player's progress attached."""
+
+    id: str
+    name: str
+    description: str
+    type: Literal["daily", "weekly"]
+    target: int
+    metric: str
+    reward_points: int
+    progress: int
+    completed_at: Optional[datetime] = None
+    period_key: str
+
+
+class ChallengesResponse(BaseModel):
+    daily: list[ChallengeProgress]
+    weekly: list[ChallengeProgress]
+    challenge_points: int
 
 
 class TournamentCreate(BaseModel):

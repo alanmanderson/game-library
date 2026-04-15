@@ -781,6 +781,11 @@ class GameManager:
         """
         from app.services.stats_service import update_stats
         from app.services.rating_service import update_ratings
+        from app.services.challenge_service import (
+            GameResultMeta,
+            record_game_result,
+        )
+        from app.services.bot_service import BOT_PLAYER_ID
 
         table = await db.get(Table, table_id)
         if not table:
@@ -845,6 +850,32 @@ class GameManager:
         # Advance tournament bracket if this table is part of a tournament match
         if match_over and table.winner_id:
             await self._process_tournament_advancement(db, table_id, table.winner_id)
+
+        # Record challenge progress for each non-bot participant. Fires on every
+        # individual game finish (both game_over mid-match and match-ending
+        # finished states) so "play 3 games" counts games played, not matches won.
+        white_id = table.white_player_id
+        black_id = table.black_player_id
+        white_is_bot = white_id == BOT_PLAYER_ID
+        black_is_bot = black_id == BOT_PLAYER_ID
+        bot_difficulty = table.bot_difficulty
+        for side_id, opponent_id, opp_is_bot in (
+            (white_id, black_id, black_is_bot),
+            (black_id, white_id, white_is_bot),
+        ):
+            if not side_id or side_id == BOT_PLAYER_ID:
+                continue
+            meta = GameResultMeta(
+                won=(table.winner_id == side_id),
+                win_type=table.win_type,
+                opponent_is_bot=opp_is_bot,
+                bot_difficulty=bot_difficulty if opp_is_bot else None,
+            )
+            try:
+                await record_game_result(db, side_id, meta)
+            except Exception:
+                # Challenge progress is best-effort — never block a game finish.
+                logger.exception("Failed to record challenge progress for %s", side_id)
 
         # NOTE: Engine cleanup is deferred to cleanup_finished_game() so that
         # the WebSocket handler can still broadcast the final game state.

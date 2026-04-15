@@ -21,6 +21,7 @@ import type {
   Season,
   Tournament,
   TournamentBracket,
+  ChallengesData,
 } from "../types/game";
 import { TOKEN_KEY } from "../constants";
 
@@ -313,6 +314,15 @@ export function getLeaderboard(
 /** Fetch the currently active season, or null if none is active. */
 export function getActiveSeason(): Promise<Season | null> {
   return request<Season | null>("/api/seasons/active");
+}
+
+// ---------------------------------------------------------------------------
+// Challenges endpoints
+// ---------------------------------------------------------------------------
+
+/** Fetch the authenticated player's active daily and weekly challenges. */
+export function getMyChallenges(): Promise<ChallengesData> {
+  return request<ChallengesData>("/api/challenges/me");
 }
 
 // ---------------------------------------------------------------------------

@@ -7,6 +7,7 @@ import Lobby from "./Lobby";
 import Leaderboard from "./Leaderboard";
 import { TournamentList } from "./Tournament";
 import Cosmetics from "./Cosmetics";
+import Challenges from "./Challenges";
 import "./styles/Home.css";
 
 interface HomeProps {
@@ -15,13 +16,14 @@ interface HomeProps {
   onPlayerUpdate?: (p: Player) => void;
 }
 
-type HomeTab = "lobby" | "dashboard" | "leaderboard" | "tournaments" | "settings";
+type HomeTab = "lobby" | "dashboard" | "leaderboard" | "tournaments" | "challenges" | "settings";
 
 const TAB_LABELS: Record<HomeTab, string> = {
   lobby: "Lobby",
   dashboard: "Dashboard",
   leaderboard: "Leaderboard",
   tournaments: "Tournaments",
+  challenges: "Challenges",
   settings: "Settings",
 };
 
@@ -248,7 +250,7 @@ function Home({ player, onPlayerUpdate }: HomeProps) {
         {/* Right: Tabbed Content */}
         <div className="content-panel">
           <div className="content-tabs" role="tablist">
-            {(["lobby", "dashboard", "leaderboard", "tournaments", "settings"] as HomeTab[]).map((tab) => (
+            {(["lobby", "dashboard", "leaderboard", "tournaments", "challenges", "settings"] as HomeTab[]).map((tab) => (
               <button
                 key={tab}
                 role="tab"
@@ -290,6 +292,9 @@ function Home({ player, onPlayerUpdate }: HomeProps) {
             )}
             {activeTab === "tournaments" && (
               <TournamentList player={player} embedded />
+            )}
+            {activeTab === "challenges" && (
+              <Challenges player={player} />
             )}
             {activeTab === "settings" && (
               <Cosmetics player={player} onPlayerUpdate={onPlayerUpdate} />
