@@ -1336,6 +1336,19 @@ class BackgammonEngine:
             "double_offered": s.double_offered,
             "double_offered_by": s.double_offered_by.value if s.double_offered_by else None,
             "is_crawford_game": s.is_crawford_game,
+            # Last completed turn — used by the client to highlight the
+            # opponent's most recent move while you're about to roll.
+            "last_turn_color": (
+                s.moves_history[-1][0].value if s.moves_history else None
+            ),
+            "last_turn_notation": (
+                " ".join(
+                    m.to_notation(s.moves_history[-1][0])
+                    for m in s.moves_history[-1][2]
+                )
+                if s.moves_history and s.moves_history[-1][2]
+                else None
+            ),
         }
 
     def get_notation_log(self) -> list[str]:

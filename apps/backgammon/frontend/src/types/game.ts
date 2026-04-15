@@ -130,6 +130,10 @@ export interface GameState {
   time_control?: string;
   white_time_remaining_ms?: number | null;
   black_time_remaining_ms?: number | null;
+  /** Notation of the most recently completed turn's moves (e.g. "13/11 6/5"). */
+  last_turn_notation?: string | null;
+  /** Colour of the player who made the most recently completed turn. */
+  last_turn_color?: Color | null;
 }
 
 /** A table (lobby / game room) that two players can join. */
