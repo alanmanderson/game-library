@@ -84,6 +84,15 @@ async def lifespan(app: FastAPI):
 
     # Gracefully close all WebSocket connections
     await ws_manager.close_all()
+
+    # Close any lingering gnubg HTTP clients (no-op if never used).
+    try:
+        from app.services.gnubg_client import close_gnubg_client, close_sync_client
+        await close_gnubg_client()
+        close_sync_client()
+    except Exception:  # pragma: no cover - defensive
+        logger.exception("Error closing gnubg clients")
+
     logger.info("Application shut down")
 
 

@@ -50,3 +50,15 @@ variable "allowed_ssh_ips" {
   type        = list(string)
   default     = ["0.0.0.0/0"]
 }
+
+variable "enable_training_vm" {
+  description = "Whether to provision the (primary) ML training VM — off by default, flip on only while training."
+  type        = bool
+  default     = false
+}
+
+variable "enable_training_vm_2" {
+  description = "Whether to provision the secondary ML training VM — off by default."
+  type        = bool
+  default     = false
+}

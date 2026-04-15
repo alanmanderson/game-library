@@ -136,6 +136,15 @@
   font-weight: 600;
 }
 
+/* GNU pill — subtle "top-tier" affordance. When unselected, show a thin
+   accent outline; when selected it picks up the regular `.selected` style. */
+.config-pill-option--gnu:not(.selected) {
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
 .color-dot {
   display: inline-block;
   width: 10px;

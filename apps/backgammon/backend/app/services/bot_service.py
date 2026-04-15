@@ -5,6 +5,8 @@ Difficulty levels:
   - medium: Heuristic-based move scoring
   - hard: ML neural network (backgammon_model_final.pt)
   - expert: V2 neural network with bearoff DB (v2_model.pt)
+  - gnu: External gnubg service (requires GNUBG_URL); falls back to expert
+    if the service is unreachable.
 """
 
 import asyncio
@@ -405,6 +407,12 @@ def _plan_bot_turn(engine, table_id: str):
     difficulty = get_bot_difficulty(table_id)
     color = engine.state.current_turn
 
+    # "gnu" falls back to "expert" when the gnubg service is unreachable —
+    # the async caller will have already tried gnubg; by the time we hit
+    # this sync planner it should behave like expert.
+    if difficulty == "gnu":
+        difficulty = "expert"
+
     if difficulty == "easy":
         return None  # easy uses random per-move
 
@@ -546,6 +554,85 @@ def _plan_bot_turn(engine, table_id: str):
     return None  # fall back to per-move selection
 
 
+async def _plan_bot_turn_gnu(engine, table_id: str):
+    """Plan the bot's turn using the external gnubg service.
+
+    Returns a list of Move objects from the gnubg "best move" response,
+    mapped back onto the engine's enumerated valid turns (so we always
+    return Move objects the engine accepts — gnubg occasionally returns
+    move notation that doesn't match the backend's exact from/to
+    semantics for bar entries or partial bearoff).
+
+    Returns None on failure so the caller can fall back to the expert path.
+    """
+    from app.services import gnubg_client  # local import avoids a cycle
+
+    if not engine.state.dice:
+        return None
+
+    try:
+        board = gnubg_client.board_payload_from_engine(engine)
+        dice = [engine.state.dice.die1, engine.state.dice.die2]
+        resp = await gnubg_client.best_move(board, dice)
+    except Exception as exc:  # defensive: never let the bot die on network errors
+        logger.warning("gnubg best_move failed: %s", exc)
+        return None
+
+    if not resp or "best" not in resp:
+        return None
+
+    best_moves = resp["best"].get("moves") or []
+    if not best_moves:
+        return None
+
+    # Map the gnubg from/to pairs onto a valid enumerated turn so the
+    # engine's move validation doesn't reject a slightly-off bar/off
+    # representation.  If no exact match exists, pick the enumerated turn
+    # with the most matching moves (best effort).
+    target = [(m["from_point"], m["to_point"]) for m in best_moves]
+    turns = engine.enumerate_complete_turns()
+    if not turns:
+        return None
+
+    def _score(turn) -> int:
+        pairs = [(m.from_point, m.to_point) for m in turn]
+        # Count matches ignoring order so bar/off variants still line up.
+        remaining = list(pairs)
+        hits = 0
+        for t in target:
+            if t in remaining:
+                remaining.remove(t)
+                hits += 1
+        return hits
+
+    scored = [(turn, _score(turn)) for turn in turns]
+    scored.sort(key=lambda x: x[1], reverse=True)
+    best_turn, best_score = scored[0]
+    if best_score == 0:
+        # No overlap at all — gnubg output couldn't be mapped. Fall back.
+        return None
+    return best_turn
+
+
+async def _cube_decision_gnu(engine) -> tuple[bool, bool] | None:
+    """Ask gnubg for the correct cube decision.
+
+    Returns ``(should_offer, should_accept)`` or ``None`` if gnubg is
+    unavailable. Callers interpret the flag relevant to their context.
+    """
+    from app.services import gnubg_client
+
+    try:
+        board = gnubg_client.board_payload_from_engine(engine)
+        resp = await gnubg_client.cube_decision(board)
+    except Exception as exc:
+        logger.warning("gnubg cube_decision failed: %s", exc)
+        return None
+    if not resp:
+        return None
+    return bool(resp.get("should_offer", False)), bool(resp.get("should_accept", False))
+
+
 async def ensure_bot_player(db: AsyncSession) -> Player:
     """Create the bot Player row if it doesn't exist. Returns the bot player."""
     bot = await db.get(Player, BOT_PLAYER_ID)
@@ -614,7 +701,19 @@ async def execute_bot_turn(table_id: str) -> None:
             if engine.state.double_offered and engine.state.double_offered_by != get_bot_color(table_id):
                 should_accept = True
                 difficulty = get_bot_difficulty(table_id)
-                if difficulty == "expert":
+                if difficulty == "gnu":
+                    gnu_result = await _cube_decision_gnu(engine)
+                    if gnu_result is not None:
+                        _, should_accept = gnu_result
+                    else:
+                        # Fall back to the expert evaluator.
+                        v2_bot = _load_v2_bot()
+                        if v2_bot is not None:
+                            try:
+                                should_accept = v2_bot.should_accept_double(engine)
+                            except (ValueError, IndexError, KeyError):
+                                pass
+                elif difficulty == "expert":
                     v2_bot = _load_v2_bot()
                     if v2_bot is not None:
                         try:
@@ -666,13 +765,34 @@ async def execute_bot_turn(table_id: str) -> None:
 
         # --- Plan full turn ---
         planned_turn = None
-        async with game_manager._get_lock(table_id):
-            engine = game_manager.get_engine(table_id)
-            if engine and engine.state.status == GameStatus.MOVING:
+        difficulty = get_bot_difficulty(table_id)
+
+        # "gnu" difficulty queries the external gnubg service.  It holds
+        # the lock only for the engine snapshot, not across the HTTP call,
+        # so other handlers aren't blocked while we wait on gnubg.
+        if difficulty == "gnu":
+            async with game_manager._get_lock(table_id):
+                engine = game_manager.get_engine(table_id)
+                if not engine or engine.state.status != GameStatus.MOVING:
+                    engine = None
+            if engine is not None:
                 try:
-                    planned_turn = _plan_bot_turn(engine, table_id)
+                    planned_turn = await _plan_bot_turn_gnu(engine, table_id)
                 except Exception as e:
-                    logger.warning("Bot turn planning failed: %s", e)
+                    logger.warning("gnu bot turn planning failed: %s", e)
+            if planned_turn is None:
+                logger.info(
+                    "gnubg unavailable for table %s; falling back to expert", table_id
+                )
+
+        if planned_turn is None:
+            async with game_manager._get_lock(table_id):
+                engine = game_manager.get_engine(table_id)
+                if engine and engine.state.status == GameStatus.MOVING:
+                    try:
+                        planned_turn = _plan_bot_turn(engine, table_id)
+                    except Exception as e:
+                        logger.warning("Bot turn planning failed: %s", e)
 
         # --- Make moves ---
         move_index = 0

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sys
 from typing import Any, Optional
 
@@ -84,6 +85,40 @@ def _restore_engine_to(
     s.status = GameStatus.MOVING
     s.turn_moves = []
     engine._cached_valid_moves = None
+
+
+# Notation parser: "13/7*", "bar/22", "6/off", "13/7(2)" → (from, to) pairs.
+_NOTATION_STEP = re.compile(
+    r"(bar|off|\d+)\s*/\s*(bar|off|\d+)(?:\*+)?(?:\((\d+)\))?",
+    re.IGNORECASE,
+)
+
+
+def _parse_notation_to_steps(notation: str, color: Color) -> list[dict]:
+    """Convert a moves_notation string into a list of {from_point, to_point} dicts.
+
+    Uses the backend's indexing convention (bar_white=25, bar_black=0,
+    off_white=0, off_black=25).
+    """
+    bar = 25 if color == Color.WHITE else 0
+    off = 0 if color == Color.WHITE else 25
+    steps: list[dict] = []
+    for m in _NOTATION_STEP.finditer(notation or ""):
+
+        def _resolve(tok: str, is_from: bool) -> int:
+            t = tok.lower()
+            if t == "bar":
+                return bar
+            if t == "off":
+                return off
+            return int(t)
+
+        src = _resolve(m.group(1), True)
+        dst = _resolve(m.group(2), False)
+        repeat = int(m.group(3)) if m.group(3) else 1
+        for _ in range(repeat):
+            steps.append({"from_point": src, "to_point": dst})
+    return steps
 
 
 def _make_evaluator() -> tuple[Optional[Any], bool]:
@@ -205,6 +240,25 @@ def compute_analysis(
         ``(analyses, ml_available, moves_analysed)``.
     """
     player_nicknames = player_nicknames or {}
+
+    # Prefer gnubg when configured and reachable.  Falls through to the
+    # existing ML/pip-count path on any failure so analysis stays best-
+    # effort rather than all-or-nothing.
+    try:
+        from app.services import gnubg_client
+
+        if gnubg_client.is_available_sync():
+            return _compute_analysis_gnubg(
+                initial_state,
+                move_records,
+                white_player_id,
+                black_player_id,
+                player_nicknames,
+                move_limit,
+            )
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("gnubg analysis path failed, falling back: %s", exc)
+
     evaluator, ml_available = _make_evaluator()
 
     engine = BackgammonEngine()
@@ -301,9 +355,140 @@ def compute_analysis(
                 "equity_loss": round(equity_loss, 4),
                 "quality": classify_quality(equity_loss),
                 "best_move_notation": best_notation,
+                "source": "ml" if ml_available else "heuristic",
             }
         )
 
         prev_state = game_state_after
 
     return analyses, ml_available, len(analyses)
+
+
+# gnubg equity_loss → main-backend quality label. The gnubg service has
+# finer-grained buckets (very_good / good / doubtful / bad / very_bad /
+# blunder); we project them onto the existing labels that the frontend
+# already renders. Extra detail is preserved verbatim in the probs fields.
+_GNUBG_QUALITY_MAP = {
+    "very_good": "best",
+    "good": "good",
+    "doubtful": "inaccuracy",
+    "bad": "mistake",
+    "very_bad": "mistake",
+    "blunder": "blunder",
+}
+
+
+def _compute_analysis_gnubg(
+    initial_state: dict,
+    move_records: list[dict],
+    white_player_id: Optional[str],
+    black_player_id: Optional[str],
+    player_nicknames: dict[str, str],
+    move_limit: int,
+) -> tuple[list[dict], bool, int]:
+    """gnubg-backed analysis — one POST per move.
+
+    gnubg does the best-move enumeration and the chosen-move evaluation
+    internally; we just feed it the pre-move board + dice + chosen
+    notation and record the response. Falls back per-move to the ML
+    path by raising; the outer ``compute_analysis`` handles that.
+    """
+    from app.services import gnubg_client
+
+    analyses: list[dict] = []
+    prev_state = initial_state
+    limit = min(len(move_records), max(0, move_limit))
+
+    failures = 0
+    for record in move_records[:limit]:
+        color = _color_from_record(
+            record.get("player_id"), white_player_id, black_player_id
+        )
+        dice = _parse_dice(record.get("dice_roll") or "")
+        game_state_after = record.get("game_state_after") or prev_state
+
+        if color is None or dice is None:
+            prev_state = game_state_after
+            continue
+
+        chosen_moves = _parse_notation_to_steps(
+            record.get("moves_notation") or "", color
+        )
+
+        # Build the gnubg request body.
+        board_payload = {
+            "points": list(prev_state.get("points") or [0] * 26),
+            "bar_white": int(prev_state.get("bar_white") or 0),
+            "bar_black": int(prev_state.get("bar_black") or 0),
+            "off_white": int(prev_state.get("off_white") or 0),
+            "off_black": int(prev_state.get("off_black") or 0),
+            "turn": color.value,
+            "cube_value": int(prev_state.get("cube_value") or 1),
+            "cube_owner": prev_state.get("cube_owner"),
+            "match_score": None,
+        }
+
+        try:
+            resp = gnubg_client.analyze_move_sync(
+                board_payload,
+                [dice.die1, dice.die2],
+                chosen_moves,
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("gnubg analyze_move failed: %s", exc)
+            resp = None
+
+        if resp is None:
+            failures += 1
+            prev_state = game_state_after
+            # If gnubg fails for more than a handful of moves in a row, give
+            # up and let the caller run the ML path for the whole game.
+            if failures >= 3:
+                raise RuntimeError("gnubg analysis unavailable")
+            continue
+
+        best = resp.get("best") or {}
+        chosen = resp.get("chosen") or {}
+        best_probs = best.get("probs") or None
+        chosen_probs = chosen.get("probs") or None
+        best_equity = float(best.get("equity") or 0.0)
+        chosen_equity = float(chosen.get("equity") or 0.0)
+        equity_loss = max(0.0, float(resp.get("equity_loss") or 0.0))
+        gnubg_quality = str(resp.get("quality") or "good")
+        quality = _GNUBG_QUALITY_MAP.get(gnubg_quality, "good")
+
+        analyses.append(
+            {
+                "move_number": int(record.get("move_number") or 0),
+                "player_color": color.value,
+                "player_nickname": player_nicknames.get(record.get("player_id") or ""),
+                "dice_roll": record.get("dice_roll") or "",
+                "moves_notation": record.get("moves_notation") or "",
+                # equity_before is what the player had before moving — we
+                # don't have a direct gnubg number for this, but the
+                # best-move equity is the upper bound, so use it. The
+                # frontend uses the delta (best - after) for severity.
+                "equity_before": round(best_equity, 4),
+                "equity_after": round(chosen_equity, 4),
+                "best_equity": round(best_equity, 4),
+                "equity_loss": round(equity_loss, 4),
+                "quality": quality,
+                "best_move_notation": best.get("notation"),
+                "best_probs": best_probs,
+                "chosen_probs": chosen_probs,
+                "best_win_prob": (
+                    float(best_probs["win"]) if best_probs and "win" in best_probs else None
+                ),
+                "chosen_win_prob": (
+                    float(chosen_probs["win"])
+                    if chosen_probs and "win" in chosen_probs
+                    else None
+                ),
+                "source": "gnubg",
+            }
+        )
+        prev_state = game_state_after
+
+    # gnubg-backed analysis counts as "ml_available" from the UI's
+    # perspective — it's not the heuristic fallback.
+    return analyses, True, len(analyses)

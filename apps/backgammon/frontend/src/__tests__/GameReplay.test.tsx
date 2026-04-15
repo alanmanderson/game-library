@@ -435,6 +435,198 @@ describe("GameReplay – analysis panel", () => {
     expect(screen.getByText(/best: 8\/4 6\/4/)).toBeInTheDocument();
   });
 
+  it("shows the 'Analyzed by GNU Backgammon' banner when source is gnubg", async () => {
+    vi.mocked(api.getReplay).mockResolvedValue(replayWithMoves);
+    vi.mocked(api.getAnalysis).mockResolvedValue({
+      table_id: "TABLE001",
+      ml_available: true,
+      moves_analysed: 1,
+      total_moves: 1,
+      move_analyses: [
+        {
+          move_number: 1,
+          player_color: "white",
+          player_nickname: "Alice",
+          dice_roll: "3-1",
+          moves_notation: "8/5 6/5",
+          equity_before: 0.0,
+          equity_after: 0.05,
+          best_equity: 0.05,
+          equity_loss: 0.0,
+          quality: "very_good",
+          best_move_notation: "8/5 6/5",
+          source: "gnubg",
+          best_win_prob: 0.55,
+          chosen_win_prob: 0.55,
+          best_probs: {
+            win: 0.55,
+            win_g: 0.15,
+            lose_g: 0.05,
+            win_bg: 0.01,
+            lose_bg: 0.0,
+          },
+          chosen_probs: {
+            win: 0.55,
+            win_g: 0.15,
+            lose_g: 0.05,
+            win_bg: 0.01,
+            lose_bg: 0.0,
+          },
+        },
+      ],
+    });
+
+    renderReplay("TABLE001");
+    await waitFor(() => screen.getByText("Starting position"));
+    fireEvent.click(
+      screen.getByRole("button", { name: /show move analysis/i }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/analyzed by gnu backgammon/i),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("renders chosen and best win probabilities on move rows", async () => {
+    vi.mocked(api.getReplay).mockResolvedValue(replayWithMoves);
+    vi.mocked(api.getAnalysis).mockResolvedValue({
+      table_id: "TABLE001",
+      ml_available: true,
+      moves_analysed: 1,
+      total_moves: 1,
+      move_analyses: [
+        {
+          move_number: 1,
+          player_color: "white",
+          player_nickname: "Alice",
+          dice_roll: "3-1",
+          moves_notation: "13/10 8/5",
+          equity_before: 0.0,
+          equity_after: -0.1,
+          best_equity: 0.1,
+          equity_loss: 0.2,
+          quality: "bad",
+          best_move_notation: "8/5 6/5",
+          source: "gnubg",
+          chosen_win_prob: 0.523,
+          best_win_prob: 0.613,
+        },
+      ],
+    });
+
+    renderReplay("TABLE001");
+    await waitFor(() => screen.getByText("Starting position"));
+    fireEvent.click(
+      screen.getByRole("button", { name: /show move analysis/i }),
+    );
+
+    await waitFor(() => {
+      // Chosen and best win percentages should both appear
+      expect(screen.getByText(/52\.3% win/)).toBeInTheDocument();
+      expect(screen.getByText(/61\.3% win/)).toBeInTheDocument();
+    });
+    // Chosen / Best row labels
+    expect(screen.getByText("Chosen")).toBeInTheDocument();
+    expect(screen.getByText("Best")).toBeInTheDocument();
+  });
+
+  it("renders gnubg-native quality labels like 'Very bad'", async () => {
+    vi.mocked(api.getReplay).mockResolvedValue(replayWithMoves);
+    vi.mocked(api.getAnalysis).mockResolvedValue({
+      table_id: "TABLE001",
+      ml_available: true,
+      moves_analysed: 1,
+      total_moves: 1,
+      move_analyses: [
+        {
+          move_number: 1,
+          player_color: "white",
+          player_nickname: "Alice",
+          dice_roll: "6-5",
+          moves_notation: "24/18 13/8",
+          equity_before: 0.1,
+          equity_after: -0.4,
+          best_equity: 0.1,
+          equity_loss: 0.5,
+          quality: "very_bad",
+          best_move_notation: "13/8 13/7",
+          source: "gnubg",
+        },
+      ],
+    });
+
+    renderReplay("TABLE001");
+    await waitFor(() => screen.getByText("Starting position"));
+    fireEvent.click(
+      screen.getByRole("button", { name: /show move analysis/i }),
+    );
+
+    await waitFor(() => {
+      // The gnubg-native "Very bad" label should render as-is
+      expect(screen.getAllByText(/very bad/i).length).toBeGreaterThan(0);
+    });
+  });
+
+  it("expands the gammon breakdown when the details toggle is clicked", async () => {
+    vi.mocked(api.getReplay).mockResolvedValue(replayWithMoves);
+    vi.mocked(api.getAnalysis).mockResolvedValue({
+      table_id: "TABLE001",
+      ml_available: true,
+      moves_analysed: 1,
+      total_moves: 1,
+      move_analyses: [
+        {
+          move_number: 1,
+          player_color: "white",
+          player_nickname: "Alice",
+          dice_roll: "3-1",
+          moves_notation: "8/5 6/5",
+          equity_before: 0.0,
+          equity_after: 0.1,
+          best_equity: 0.1,
+          equity_loss: 0.0,
+          quality: "best",
+          best_move_notation: "8/5 6/5",
+          source: "gnubg",
+          chosen_win_prob: 0.6,
+          best_win_prob: 0.6,
+          chosen_probs: {
+            win: 0.6,
+            win_g: 0.2,
+            lose_g: 0.1,
+            win_bg: 0.02,
+            lose_bg: 0.01,
+          },
+          best_probs: {
+            win: 0.6,
+            win_g: 0.2,
+            lose_g: 0.1,
+            win_bg: 0.02,
+            lose_bg: 0.01,
+          },
+        },
+      ],
+    });
+
+    renderReplay("TABLE001");
+    await waitFor(() => screen.getByText("Starting position"));
+    fireEvent.click(
+      screen.getByRole("button", { name: /show move analysis/i }),
+    );
+
+    const toggle = await screen.findByRole("button", {
+      name: /show gammon breakdown/i,
+    });
+    fireEvent.click(toggle);
+
+    await waitFor(() => {
+      expect(screen.getByText("Win (gammon)")).toBeInTheDocument();
+      expect(screen.getByText("Lose (bg)")).toBeInTheDocument();
+    });
+  });
+
   it("shows an error banner if analysis fails", async () => {
     vi.mocked(api.getReplay).mockResolvedValue(replayWithMoves);
     vi.mocked(api.getAnalysis).mockRejectedValue(new Error("Analysis crashed"));

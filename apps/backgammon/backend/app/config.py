@@ -23,6 +23,10 @@ class Settings(BaseModel):
     # Google OAuth (optional -- empty string means disabled)
     google_client_id: str = os.getenv("GOOGLE_CLIENT_ID", "")
 
+    # Internal gnubg analysis service (optional -- empty string means disabled).
+    # When set, the bot "gnu" difficulty and analysis endpoints use it.
+    gnubg_url: str = os.getenv("GNUBG_URL", "")
+
 
 settings = Settings()
 

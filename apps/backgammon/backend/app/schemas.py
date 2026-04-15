@@ -102,7 +102,7 @@ class TableResponse(BaseModel):
 
 
 class InviteBotRequest(BaseModel):
-    difficulty: Literal["easy", "medium", "hard", "expert"] = "hard"
+    difficulty: Literal["easy", "medium", "hard", "expert", "gnu"] = "hard"
 
 
 class LobbyTable(BaseModel):
@@ -328,6 +328,14 @@ class MoveAnalysis(BaseModel):
     equity_loss: float         # max(0, best_equity - equity_after)
     quality: str               # "best" | "good" | "inaccuracy" | "mistake" | "blunder"
     best_move_notation: Optional[str] = None
+    # Optional enrichment populated when the gnubg evaluator is used.
+    # Frontend consumers should treat these as nullable — they're absent
+    # when the heuristic or ML evaluator produced this analysis.
+    best_probs: Optional[dict[str, float]] = None
+    chosen_probs: Optional[dict[str, float]] = None
+    best_win_prob: Optional[float] = None
+    chosen_win_prob: Optional[float] = None
+    source: Optional[str] = None  # "gnubg" | "ml" | "heuristic"
 
 
 class AnalysisResponse(BaseModel):

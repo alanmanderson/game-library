@@ -197,13 +197,22 @@ function Home({ player, onPlayerUpdate }: HomeProps) {
             <div className="config-row">
               <span className="config-label">Bot level</span>
               <div className="config-pill-bar">
-                {(["easy", "medium", "hard", "expert"] as BotDifficulty[]).map((d) => (
+                {(["easy", "medium", "hard", "expert", "gnu"] as BotDifficulty[]).map((d) => (
                   <button
                     key={d}
-                    className={`config-pill-option${botDifficulty === d ? " selected" : ""}`}
+                    className={`config-pill-option${botDifficulty === d ? " selected" : ""}${d === "gnu" ? " config-pill-option--gnu" : ""}`}
                     onClick={() => setBotDifficulty(d)}
+                    title={
+                      d === "gnu"
+                        ? "GNU Backgammon — strongest opponent"
+                        : undefined
+                    }
                   >
-                    {d === "medium" ? "Med" : d.charAt(0).toUpperCase() + d.slice(1)}
+                    {d === "medium"
+                      ? "Med"
+                      : d === "gnu"
+                        ? "GNU"
+                        : d.charAt(0).toUpperCase() + d.slice(1)}
                   </button>
                 ))}
               </div>

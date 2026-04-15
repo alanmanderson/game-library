@@ -133,6 +133,15 @@ describe("Home – bot difficulty selector", () => {
     expect(screen.getByText("Med")).toBeInTheDocument();
     expect(screen.getByText("Hard")).toBeInTheDocument();
     expect(screen.getByText("Expert")).toBeInTheDocument();
+    expect(screen.getByText("GNU")).toBeInTheDocument();
+  });
+
+  it("selects GNU when the GNU button is clicked", () => {
+    render(<Home player={registeredPlayer} />);
+    const gnuBtn = screen.getByText("GNU");
+    fireEvent.click(gnuBtn);
+    expect(gnuBtn.classList.contains("selected")).toBe(true);
+    expect(screen.getByText("Hard").classList.contains("selected")).toBe(false);
   });
 
   it("has Hard selected by default", () => {

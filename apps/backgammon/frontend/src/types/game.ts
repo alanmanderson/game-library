@@ -14,8 +14,8 @@ export type GameStatus = "waiting" | "rolling" | "moving" | "finished" | "game_o
 /** How a game was won – affects point scoring in match play. */
 export type WinType = "normal" | "gammon" | "backgammon";
 
-/** Bot difficulty levels. */
-export type BotDifficulty = "easy" | "medium" | "hard" | "expert";
+/** Bot difficulty levels. `gnu` routes to the GNU Backgammon engine. */
+export type BotDifficulty = "easy" | "medium" | "hard" | "expert" | "gnu";
 
 /** Time control modes. */
 export type TimeControl = "blitz" | "rapid" | "classical" | "unlimited";
@@ -226,8 +226,38 @@ export interface ReplayData {
   moves: ReplayMoveRecord[];
 }
 
-/** Quality classification for a single move. */
-export type MoveQuality = "best" | "good" | "inaccuracy" | "mistake" | "blunder";
+/**
+ * Quality classification for a single move.
+ *
+ * The backend may return either the ML-native labels (`best`, `good`,
+ * `inaccuracy`, `mistake`, `blunder`) or the GNU Backgammon native labels
+ * (`very_good`, `good`, `doubtful`, `bad`, `very_bad`, `blunder`). The UI
+ * handles both sets interchangeably.
+ */
+export type MoveQuality =
+  | "best"
+  | "good"
+  | "inaccuracy"
+  | "mistake"
+  | "blunder"
+  | "very_good"
+  | "doubtful"
+  | "bad"
+  | "very_bad";
+
+/** Per-move win-probability breakdown returned by the analysis service. */
+export interface MoveProbs {
+  /** P(current player wins the game). */
+  win: number;
+  /** P(current player wins a gammon). */
+  win_g: number;
+  /** P(current player loses a gammon). */
+  lose_g: number;
+  /** P(current player wins a backgammon). */
+  win_bg: number;
+  /** P(current player loses a backgammon). */
+  lose_bg: number;
+}
 
 /** Per-move analysis entry produced by the backend analysis service. */
 export interface MoveAnalysis {
@@ -242,6 +272,16 @@ export interface MoveAnalysis {
   equity_loss: number;
   quality: MoveQuality;
   best_move_notation: string | null;
+  /** Full probability distribution for what the engine would have played. */
+  best_probs?: MoveProbs | null;
+  /** Full probability distribution for the move the player actually made. */
+  chosen_probs?: MoveProbs | null;
+  /** Convenience scalar for the engine's top move's win probability. */
+  best_win_prob?: number | null;
+  /** Convenience scalar for the chosen move's win probability. */
+  chosen_win_prob?: number | null;
+  /** Which evaluator produced this row — drives the "Analyzed by…" banner. */
+  source?: "gnubg" | "ml" | "heuristic" | null;
 }
 
 /** Full analysis payload for a completed game. */

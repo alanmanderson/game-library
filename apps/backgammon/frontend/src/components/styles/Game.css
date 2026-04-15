@@ -429,6 +429,12 @@
   color: #ce93d8;
 }
 
+.bot-difficulty-badge.difficulty-gnu {
+  background: rgba(212, 168, 67, 0.2);
+  color: var(--accent, #d4a843);
+  border: 1px solid rgba(212, 168, 67, 0.5);
+}
+
 /* Crawford game badge */
 
 .crawford-badge {

@@ -22,3 +22,8 @@ output "google_client_id" {
   description = "Google OAuth client ID"
   value       = var.google_client_id
 }
+
+output "gnubg_private_ip" {
+  description = "Private IP address of the gnubg analysis VM (no public IP)"
+  value       = azurerm_network_interface.gnubg.private_ip_address
+}

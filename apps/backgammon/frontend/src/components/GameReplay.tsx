@@ -17,6 +17,7 @@ import type {
   AnalysisData,
   GameState,
   MoveAnalysis,
+  MoveProbs,
   MoveQuality,
   ReplayData,
   ReplayMoveRecord,
@@ -25,14 +26,51 @@ import { getAnalysis, getReplay } from "../services/api";
 import Board from "./Board";
 import "./styles/GameReplay.css";
 
-/** Display label for each move-quality level. */
+/**
+ * Display label for each move-quality level.
+ *
+ * Covers both the ML-native labels (`best`, `good`, `inaccuracy`, `mistake`,
+ * `blunder`) and the GNU Backgammon native labels (`very_good`, `doubtful`,
+ * `bad`, `very_bad`).
+ */
 const QUALITY_LABEL: Record<MoveQuality, string> = {
   best: "Best",
   good: "Good",
   inaccuracy: "Inaccuracy",
   mistake: "Mistake",
   blunder: "Blunder",
+  very_good: "Very good",
+  doubtful: "Doubtful",
+  bad: "Bad",
+  very_bad: "Very bad",
 };
+
+/**
+ * Map every quality label to an existing CSS colour class.
+ *
+ * gnubg-native labels reuse the closest matching ML colour: `very_good` → best,
+ * `doubtful` → inaccuracy, `bad` → mistake, `very_bad` → blunder. This keeps
+ * the palette tight and avoids inventing new colours for conceptually similar
+ * buckets.
+ */
+const QUALITY_CSS_CLASS: Record<MoveQuality, string> = {
+  best: "best",
+  good: "good",
+  inaccuracy: "inaccuracy",
+  mistake: "mistake",
+  blunder: "blunder",
+  very_good: "best",
+  doubtful: "inaccuracy",
+  bad: "mistake",
+  very_bad: "blunder",
+};
+
+/** Format a 0..1 probability as a percentage with one decimal place. */
+function formatPct(p: number | null | undefined): string | null {
+  if (p === null || p === undefined || Number.isNaN(p)) return null;
+  const clamped = Math.max(0, Math.min(1, p));
+  return `${(clamped * 100).toFixed(1)}%`;
+}
 
 /** Parse a dice_roll string like "3-5" into { die1, die2 }. */
 function parseDiceRoll(diceRoll: string): { die1: number; die2: number } | null {
@@ -92,6 +130,56 @@ function setMeta(selector: string, attrs: Record<string, string>) {
   }
 }
 
+/**
+ * Compact grid showing the win / gammon / backgammon probability breakdown
+ * for the chosen move and the engine's best move.
+ */
+function MoveProbsBreakdown({
+  chosen,
+  best,
+}: {
+  chosen: MoveProbs | null;
+  best: MoveProbs | null;
+}) {
+  const rows: { key: keyof MoveProbs; label: string }[] = [
+    { key: "win", label: "Win" },
+    { key: "win_g", label: "Win (gammon)" },
+    { key: "lose_g", label: "Lose (gammon)" },
+    { key: "win_bg", label: "Win (bg)" },
+    { key: "lose_bg", label: "Lose (bg)" },
+  ];
+  return (
+    <div className="replay-move-probs-breakdown" role="table">
+      <div className="replay-move-probs-breakdown-header" role="row">
+        <span role="columnheader" />
+        <span role="columnheader">Chosen</span>
+        <span role="columnheader">Best</span>
+      </div>
+      {rows.map(({ key, label }) => {
+        const c = formatPct(chosen?.[key]);
+        const b = formatPct(best?.[key]);
+        return (
+          <div
+            key={key}
+            className="replay-move-probs-breakdown-row"
+            role="row"
+          >
+            <span role="rowheader" className="replay-move-probs-breakdown-label">
+              {label}
+            </span>
+            <span role="cell" className="replay-move-probs-breakdown-value">
+              {c ?? "—"}
+            </span>
+            <span role="cell" className="replay-move-probs-breakdown-value">
+              {b ?? "—"}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function GameReplay() {
   const { tableId } = useParams<{ tableId: string }>();
   const navigate = useNavigate();
@@ -116,6 +204,8 @@ function GameReplay() {
   const [analysis, setAnalysis] = useState<AnalysisData | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  /** Move numbers whose details panel (gammon/bg breakdown) is expanded. */
+  const [expandedMoves, setExpandedMoves] = useState<Set<number>>(new Set());
 
   // Speed slider constants: the slider is inverted so right = faster.
   // Slider range is [SPEED_SLIDER_MIN, SPEED_SLIDER_MAX]; actual delay = SPEED_OFFSET - sliderValue.
@@ -265,6 +355,32 @@ function GameReplay() {
       .slice(0, 3)
       .filter((m) => m.equity_loss > 0);
   }, [analysis]);
+
+  /**
+   * Source label for the analysis banner. We consider the analysis to be
+   * "gnubg-sourced" if any move row declares it — mixed responses fall back
+   * to the existing behaviour (ml_available banner only).
+   */
+  const analysisSource = useMemo<"gnubg" | "ml" | "heuristic" | null>(() => {
+    if (!analysis) return null;
+    for (const m of analysis.move_analyses) {
+      if (m.source === "gnubg") return "gnubg";
+    }
+    // Fall back to the first non-null source we see.
+    for (const m of analysis.move_analyses) {
+      if (m.source) return m.source;
+    }
+    return null;
+  }, [analysis]);
+
+  const toggleMoveDetails = useCallback((moveNumber: number) => {
+    setExpandedMoves((prev) => {
+      const next = new Set(prev);
+      if (next.has(moveNumber)) next.delete(moveNumber);
+      else next.add(moveNumber);
+      return next;
+    });
+  }, []);
 
   const handleCopyShareLink = useCallback(async () => {
     if (!tableId) return;
@@ -487,7 +603,7 @@ function GameReplay() {
           )}
           {!analysisLoading && !analysisError && analysis && (
             <>
-              {!analysis.ml_available && (
+              {analysisSource !== "gnubg" && !analysis.ml_available && (
                 <div className="replay-analysis-banner">
                   ML model unavailable — showing pip-count fallback analysis.
                 </div>
@@ -508,7 +624,7 @@ function GameReplay() {
                           }}
                         >
                           <span
-                            className={`replay-quality replay-quality--${m.quality}`}
+                            className={`replay-quality replay-quality--${QUALITY_CSS_CLASS[m.quality]}`}
                           >
                             {QUALITY_LABEL[m.quality]}
                           </span>
@@ -534,43 +650,151 @@ function GameReplay() {
                     : ""}
                   )
                 </h3>
+                {analysisSource === "gnubg" && (
+                  <p
+                    className="replay-analysis-attribution"
+                    title="Each move is evaluated by the gnubg engine. Win probabilities reflect the chance the mover wins from that position."
+                  >
+                    Analyzed by GNU Backgammon
+                  </p>
+                )}
                 <ul className="replay-move-list">
-                  {analysis.move_analyses.map((m) => (
-                    <li
-                      key={m.move_number}
-                      className={`replay-move-item${m.move_number === moveIndex ? " replay-move-item--active" : ""}`}
-                    >
-                      <button
-                        type="button"
-                        className="replay-move-item-btn"
-                        onClick={() => {
-                          stopAutoPlay();
-                          goTo(m.move_number);
-                        }}
+                  {analysis.move_analyses.map((m) => {
+                    const chosenPct = formatPct(
+                      m.chosen_win_prob ?? m.chosen_probs?.win,
+                    );
+                    const bestPct = formatPct(
+                      m.best_win_prob ?? m.best_probs?.win,
+                    );
+                    const hasProbs = chosenPct !== null || bestPct !== null;
+                    const hasDetails =
+                      !!m.chosen_probs || !!m.best_probs;
+                    const isExpanded = expandedMoves.has(m.move_number);
+                    // Collapse the "chosen == best" case into a single line:
+                    // when the player played the top move, showing two identical
+                    // rows duplicates the same number. A move is considered the
+                    // top pick if it's labelled best/very_good AND either there's
+                    // no distinct best-move notation or the equity loss is
+                    // effectively zero.
+                    const chosenIsBest =
+                      chosenPct !== null &&
+                      bestPct !== null &&
+                      (m.quality === "best" || m.quality === "very_good") &&
+                      (m.best_move_notation == null || m.equity_loss < 0.001);
+                    return (
+                      <li
+                        key={m.move_number}
+                        className={`replay-move-item${m.move_number === moveIndex ? " replay-move-item--active" : ""}`}
                       >
-                        <span className="replay-move-item-num">
-                          {m.move_number}
-                        </span>
-                        <span
-                          className={`replay-quality replay-quality--${m.quality}`}
-                          title={`Equity loss: ${m.equity_loss.toFixed(3)}`}
+                        <button
+                          type="button"
+                          className="replay-move-item-btn"
+                          onClick={() => {
+                            stopAutoPlay();
+                            goTo(m.move_number);
+                          }}
                         >
-                          {QUALITY_LABEL[m.quality]}
-                        </span>
-                        <span className="replay-move-item-player">
-                          {m.player_color === "white" ? "⚪" : "⚫"} {m.dice_roll}
-                        </span>
-                        <span className="replay-move-item-notation">
-                          {m.moves_notation}
-                        </span>
-                        {m.quality !== "best" && m.best_move_notation && (
-                          <span className="replay-move-item-best">
-                            best: {m.best_move_notation}
+                          <span className="replay-move-item-num">
+                            {m.move_number}
                           </span>
+                          <span
+                            className={`replay-quality replay-quality--${QUALITY_CSS_CLASS[m.quality]}`}
+                            title={`Equity loss: ${m.equity_loss.toFixed(3)}`}
+                          >
+                            {QUALITY_LABEL[m.quality]}
+                          </span>
+                          <span className="replay-move-item-player">
+                            {m.player_color === "white" ? "⚪" : "⚫"} {m.dice_roll}
+                          </span>
+                          <span className="replay-move-item-notation">
+                            {m.moves_notation}
+                          </span>
+                          {m.quality !== "best" && m.best_move_notation && (
+                            <span className="replay-move-item-best">
+                              best: {m.best_move_notation}
+                            </span>
+                          )}
+                        </button>
+
+                        {hasProbs && (
+                          <div className="replay-move-probs">
+                            {chosenIsBest ? (
+                              <span className="replay-move-probs-row">
+                                <span className="replay-move-probs-notation">
+                                  {m.moves_notation}
+                                </span>
+                                <span className="replay-move-probs-pct replay-move-probs-pct--chosen">
+                                  {chosenPct} win
+                                </span>
+                                <span className="replay-move-probs-label replay-move-probs-label--best">
+                                  Best
+                                </span>
+                              </span>
+                            ) : (
+                              <>
+                                {chosenPct && (
+                                  <span className="replay-move-probs-row">
+                                    <span className="replay-move-probs-label">
+                                      Chosen
+                                    </span>
+                                    <span className="replay-move-probs-notation">
+                                      {m.moves_notation}
+                                    </span>
+                                    <span className="replay-move-probs-pct replay-move-probs-pct--chosen">
+                                      {chosenPct} win
+                                    </span>
+                                  </span>
+                                )}
+                                {bestPct &&
+                                  (m.quality !== "best" || chosenPct !== bestPct) && (
+                                    <span className="replay-move-probs-row">
+                                      <span className="replay-move-probs-label replay-move-probs-label--best">
+                                        Best
+                                      </span>
+                                      <span className="replay-move-probs-notation">
+                                        {m.best_move_notation ?? m.moves_notation}
+                                      </span>
+                                      <span className="replay-move-probs-pct replay-move-probs-pct--best">
+                                        {bestPct} win
+                                      </span>
+                                    </span>
+                                  )}
+                              </>
+                            )}
+                            {!chosenIsBest && (
+                              <span className="replay-move-probs-delta">
+                                Δ equity −{m.equity_loss.toFixed(3)}
+                              </span>
+                            )}
+                            {hasDetails && (
+                              <button
+                                type="button"
+                                className={`replay-move-probs-toggle${isExpanded ? " replay-move-probs-toggle--open" : ""}`}
+                                aria-expanded={isExpanded}
+                                aria-label={
+                                  isExpanded
+                                    ? `Hide gammon breakdown for move ${m.move_number}`
+                                    : `Show gammon breakdown for move ${m.move_number}`
+                                }
+                                onClick={() =>
+                                  toggleMoveDetails(m.move_number)
+                                }
+                              >
+                                {isExpanded ? "▾" : "▸"} details
+                              </button>
+                            )}
+                          </div>
                         )}
-                      </button>
-                    </li>
-                  ))}
+
+                        {isExpanded && hasDetails && (
+                          <MoveProbsBreakdown
+                            chosen={m.chosen_probs ?? null}
+                            best={m.best_probs ?? null}
+                          />
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             </>
