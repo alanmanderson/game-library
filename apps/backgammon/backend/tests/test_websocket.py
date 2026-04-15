@@ -857,6 +857,138 @@ class TestDoublingCube:
             resp = ws.receive_json()
             assert resp["type"] == "error"
 
+    def test_offer_double_db_failure_restores_engine(self, ws_test_env):
+        """A DB commit failure during offer_double leaves engine cube state unchanged."""
+        client = ws_test_env["client"]
+        sf = ws_test_env["session_factory"]
+        tid, white, black = _run_async(_create_game(sf))
+        current, _ = _current_and_other(tid, white, black)
+
+        # Force the engine into ROLLING so offer_double is legal for the
+        # current player (the engine-level rule requires ROLLING + own/centered cube).
+        engine = game_manager.get_engine(tid)
+        engine.state.status = GameStatus.ROLLING
+        engine.state.dice = None
+        engine.state.remaining_dice = []
+
+        pre = engine.get_state_snapshot()
+
+        with client.websocket_connect(
+            f"/ws/{tid}/{current.id}?token={_token(current.id)}"
+        ) as ws:
+            ws.receive_json()
+
+            # Patch AsyncSession.commit on the session in use to raise,
+            # simulating a DB write failure after the cube action mutates
+            # the engine but before commit succeeds.
+            with patch(
+                "sqlalchemy.ext.asyncio.AsyncSession.commit",
+                side_effect=RuntimeError("simulated DB failure"),
+            ):
+                ws.send_json({"action": "offer_double"})
+                # Drain messages until we see the error triggered by the
+                # commit failure (the handler broadcasts game_state before
+                # the commit attempt).
+                saw_error = False
+                for _ in range(5):
+                    resp = ws.receive_json()
+                    if resp["type"] == "error":
+                        saw_error = True
+                        break
+                assert saw_error
+
+        post = engine.get_state_snapshot()
+        # Engine cube state must match the pre-call snapshot exactly.
+        assert post["double_offered"] == pre["double_offered"] is False
+        assert post["double_offered_by"] == pre["double_offered_by"]
+        assert post["cube_value"] == pre["cube_value"]
+        assert post["cube_owner"] == pre["cube_owner"]
+        assert post["status"] == pre["status"]
+
+    def test_accept_double_db_failure_restores_engine(self, ws_test_env):
+        """A DB commit failure during accept_double leaves engine cube state unchanged."""
+        client = ws_test_env["client"]
+        sf = ws_test_env["session_factory"]
+        tid, white, black = _run_async(_create_game(sf))
+        current, other = _current_and_other(tid, white, black)
+
+        # Set up a pending double offered by `current`, to be accepted by `other`.
+        engine = game_manager.get_engine(tid)
+        engine.state.status = GameStatus.ROLLING
+        engine.state.dice = None
+        engine.state.remaining_dice = []
+        engine.state.double_offered = True
+        engine.state.double_offered_by = engine.state.current_turn
+
+        pre = engine.get_state_snapshot()
+
+        with client.websocket_connect(
+            f"/ws/{tid}/{other.id}?token={_token(other.id)}"
+        ) as ws:
+            ws.receive_json()
+
+            with patch(
+                "sqlalchemy.ext.asyncio.AsyncSession.commit",
+                side_effect=RuntimeError("simulated DB failure"),
+            ):
+                ws.send_json({"action": "accept_double"})
+                saw_error = False
+                for _ in range(5):
+                    resp = ws.receive_json()
+                    if resp["type"] == "error":
+                        saw_error = True
+                        break
+                assert saw_error
+
+        post = engine.get_state_snapshot()
+        # Offer must still be pending; cube unchanged; ownership not transferred.
+        assert post["double_offered"] == pre["double_offered"] is True
+        assert post["double_offered_by"] == pre["double_offered_by"]
+        assert post["cube_value"] == pre["cube_value"]
+        assert post["cube_owner"] == pre["cube_owner"]
+
+    def test_decline_double_db_failure_restores_engine(self, ws_test_env):
+        """A DB commit failure during decline_double leaves engine state unchanged."""
+        client = ws_test_env["client"]
+        sf = ws_test_env["session_factory"]
+        tid, white, black = _run_async(_create_game(sf))
+        current, other = _current_and_other(tid, white, black)
+
+        engine = game_manager.get_engine(tid)
+        engine.state.status = GameStatus.ROLLING
+        engine.state.dice = None
+        engine.state.remaining_dice = []
+        engine.state.double_offered = True
+        engine.state.double_offered_by = engine.state.current_turn
+
+        pre = engine.get_state_snapshot()
+
+        with client.websocket_connect(
+            f"/ws/{tid}/{other.id}?token={_token(other.id)}"
+        ) as ws:
+            ws.receive_json()
+
+            with patch(
+                "sqlalchemy.ext.asyncio.AsyncSession.commit",
+                side_effect=RuntimeError("simulated DB failure"),
+            ):
+                ws.send_json({"action": "decline_double"})
+                saw_error = False
+                for _ in range(5):
+                    resp = ws.receive_json()
+                    if resp["type"] == "error":
+                        saw_error = True
+                        break
+                assert saw_error
+
+        post = engine.get_state_snapshot()
+        # Game must NOT be marked finished and offer must still be pending.
+        assert post["status"] == pre["status"]
+        assert post["status"] != GameStatus.FINISHED.value
+        assert post["winner"] == pre["winner"]
+        assert post["double_offered"] == pre["double_offered"] is True
+        assert post["double_offered_by"] == pre["double_offered_by"]
+
 
 # ===========================================================================
 # Error Scenarios
