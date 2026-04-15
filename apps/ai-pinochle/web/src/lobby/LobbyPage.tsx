@@ -1,10 +1,19 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import type { CreateResponse, JoinResponse } from "@pinochle/shared";
 import { useAuth } from "../auth/AuthContext.tsx";
 import { postAuth, ApiError } from "../api/client.ts";
-import { RoomPage } from "../room/RoomPage.tsx";
-import { MyGamesPage } from "../game/MyGamesPage.tsx";
+import { Loading } from "../ui/Loading.tsx";
 import styles from "./LobbyPage.module.css";
+
+// RoomPage transitively pulls in the game surface (cards, phase components,
+// reducer). MyGamesPage is only opened on demand. Both are lazy so the lobby
+// chunk stays small. See issue #14.
+const RoomPage = lazy(() =>
+  import("../room/RoomPage.tsx").then((m) => ({ default: m.RoomPage })),
+);
+const MyGamesPage = lazy(() =>
+  import("../game/MyGamesPage.tsx").then((m) => ({ default: m.MyGamesPage })),
+);
 
 function extractRoomCode(pathname: string): string {
   const match = pathname.match(/^\/([A-Z]{4})$/);
@@ -111,19 +120,23 @@ export function LobbyPage() {
 
   if (roomCode) {
     return (
-      <RoomPage roomCode={roomCode} onLeave={leaveRoom} />
+      <Suspense fallback={<Loading />}>
+        <RoomPage roomCode={roomCode} onLeave={leaveRoom} />
+      </Suspense>
     );
   }
 
   if (showMyGames) {
     return (
-      <MyGamesPage
-        onBack={() => setShowMyGames(false)}
-        onOpenGame={(code) => {
-          setShowMyGames(false);
-          enterRoom(code);
-        }}
-      />
+      <Suspense fallback={<Loading />}>
+        <MyGamesPage
+          onBack={() => setShowMyGames(false)}
+          onOpenGame={(code) => {
+            setShowMyGames(false);
+            enterRoom(code);
+          }}
+        />
+      </Suspense>
     );
   }
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import type { Seats, WsEvent } from "@pinochle/shared";
 import {
   SEATS,
@@ -9,9 +9,15 @@ import {
 } from "@pinochle/shared";
 import { useAuth } from "../auth/AuthContext.tsx";
 import { useWebSocket } from "../hooks/useWebSocket.ts";
-import { GamePage } from "../game/GamePage.tsx";
 import { GameErrorBoundary } from "../game/GameErrorBoundary.tsx";
+import { Loading } from "../ui/Loading.tsx";
 import styles from "./RoomPage.module.css";
+
+// GamePage + the seven phase components are the heaviest slice of the bundle;
+// only fetch once a hand has actually been dealt. See issue #14.
+const GamePage = lazy(() =>
+  import("../game/GamePage.tsx").then((m) => ({ default: m.GamePage })),
+);
 
 interface Props {
   roomCode: string;
@@ -95,14 +101,16 @@ export function RoomPage({ roomCode, onLeave }: Props) {
   if (gameStarted && mySeat) {
     return (
       <GameErrorBoundary roomCode={roomCode} onLeave={onLeave}>
-        <GamePage
-          sendMessage={sendMessage}
-          connected={connected}
-          game={game}
-          mySeat={mySeat.toUpperCase()}
-          seatPlayers={seats}
-          onLeave={onLeave}
-        />
+        <Suspense fallback={<Loading label="Loading game..." />}>
+          <GamePage
+            sendMessage={sendMessage}
+            connected={connected}
+            game={game}
+            mySeat={mySeat.toUpperCase()}
+            seatPlayers={seats}
+            onLeave={onLeave}
+          />
+        </Suspense>
       </GameErrorBoundary>
     );
   }
