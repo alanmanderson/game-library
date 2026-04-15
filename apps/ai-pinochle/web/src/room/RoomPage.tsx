@@ -1,12 +1,11 @@
-import { useState, useReducer } from "react";
+import { useState } from "react";
 import type { Seats, WsEvent } from "@pinochle/shared";
 import {
   SEATS,
   SEAT_LABELS_LOWER,
   getTableOrder,
   sendAction,
-  gameReducer,
-  initialGameState,
+  useGameState,
 } from "@pinochle/shared";
 import { useAuth } from "../auth/AuthContext.tsx";
 import { useWebSocket } from "../hooks/useWebSocket.ts";
@@ -40,7 +39,11 @@ export function RoomPage({ roomCode, onLeave }: Props) {
   const [gameStarted, setGameStarted] = useState(false);
   const [copied, setCopied] = useState<"code" | "link" | null>(null);
 
-  const [gameState, dispatch] = useReducer(gameReducer, initialGameState([]));
+  const { sendMessage, connected } = useWebSocket(roomCode, token!, {
+    onEvent: (event) => handleEvent(event),
+  });
+
+  const game = useGameState({ mySeat, sendMessage });
 
   function handleEvent(event: WsEvent) {
     switch (event.event) {
@@ -56,20 +59,16 @@ export function RoomPage({ roomCode, onLeave }: Props) {
         return;
       case "HAND_DEALT":
         setGameStarted(true);
-        dispatch({ type: "WS_EVENT", event, mySeat: (mySeat ?? "").toUpperCase() });
+        game.applyEvent(event);
         return;
       case "LEFT_TO_LOBBY":
         onLeave();
         return;
       default:
-        dispatch({ type: "WS_EVENT", event, mySeat: (mySeat ?? "").toUpperCase() });
+        game.applyEvent(event);
         return;
     }
   }
-
-  const { sendMessage, connected } = useWebSocket(roomCode, token!, {
-    onEvent: handleEvent,
-  });
 
   async function copyText(text: string, kind: "code" | "link") {
     try {
@@ -97,8 +96,7 @@ export function RoomPage({ roomCode, onLeave }: Props) {
       <GamePage
         sendMessage={sendMessage}
         connected={connected}
-        state={gameState}
-        dispatch={dispatch}
+        game={game}
         mySeat={mySeat.toUpperCase()}
         seatPlayers={seats}
         onLeave={onLeave}

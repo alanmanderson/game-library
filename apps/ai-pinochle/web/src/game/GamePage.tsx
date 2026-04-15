@@ -1,15 +1,9 @@
 import { useEffect } from "react";
-import type {
-  Phase,
-  WsAction,
-  GameState,
-  GameAction,
-} from "@pinochle/shared";
+import type { Phase, UseGameStateApi } from "@pinochle/shared";
 import {
   CARDS_PER_PLAYER,
   TEAM_FOR_SEAT,
   getTableOrder,
-  sendAction,
 } from "@pinochle/shared";
 import { HandDisplay } from "./HandDisplay.tsx";
 import { BiddingPhase } from "./BiddingPhase.tsx";
@@ -28,69 +22,50 @@ type SendMessage = (msg: Record<string, unknown>) => boolean | void;
 interface Props {
   sendMessage: SendMessage;
   connected: boolean;
-  state: GameState;
-  dispatch: (action: GameAction) => void;
+  game: UseGameStateApi;
   mySeat: string;
   seatPlayers: Record<string, string | null>;
   onLeave: () => void;
 }
 
-function send(sendMessage: SendMessage, action: WsAction): void {
-  sendAction(sendMessage, action);
-}
-
 export function GamePage({
   sendMessage,
   connected,
-  state,
-  dispatch,
+  game,
   mySeat,
   seatPlayers,
   onLeave,
 }: Props) {
   const {
-    phase,
-    hand,
-    biddingState,
-    biddingResult,
-    trumpSuit,
-    meldData,
-    acknowledgedSeats,
-    error,
-    trickNumber,
-    currentTrick,
-    nextToActSeat,
-    legalCards,
-    tricksTaken,
-    trickScores,
-    trickResult,
-    handResult,
-    handResultAckedSeats,
-    passingState,
-    gameScores,
-    gameOver,
-    rematchRequested,
-    pendingRematchSeats,
-  } = state;
-
-  // 2-second trick-review timer: when TRICK_COMPLETED lands, the reducer sets
-  // `trickResult`; we clear it after a pause so the next trick starts fresh.
-  useEffect(() => {
-    if (!trickResult) return;
-    if (trickResult.trick_number >= 12) return;
-    const nextNum = trickResult.trick_number + 1;
-    const id = window.setTimeout(() => {
-      dispatch({ type: "CLEAR_TRICK_DISPLAY", nextTrickNumber: nextNum });
-    }, 2000);
-    return () => clearTimeout(id);
-  }, [trickResult, dispatch]);
-
-  // 5-second error auto-dismiss.
-  useEffect(() => {
-    if (error === null) return;
-    const id = window.setTimeout(() => dispatch({ type: "CLEAR_ERROR" }), 5000);
-    return () => clearTimeout(id);
-  }, [error, dispatch]);
+    state: {
+      phase,
+      hand,
+      biddingState,
+      biddingResult,
+      trumpSuit,
+      meldData,
+      acknowledgedSeats,
+      error,
+      trickNumber,
+      currentTrick,
+      nextToActSeat,
+      legalCards,
+      tricksTaken,
+      trickScores,
+      trickResult,
+      handResult,
+      handResultAckedSeats,
+      passingState,
+      gameScores,
+      gameOver,
+      rematchRequested,
+      pendingRematchSeats,
+    },
+    playCard,
+    requestRematch,
+    acknowledgeHandResult,
+    leaveToLobby,
+  } = game;
 
   // Warn before closing the tab while a game is active.
   useEffect(() => {
@@ -103,11 +78,6 @@ export function GamePage({
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [phase]);
-
-  function handleCardPlay(card: string) {
-    dispatch({ type: "OPTIMISTIC_PLAY", card });
-    send(sendMessage, { action: "PLAY_CARD", payload: { card } });
-  }
 
   const hasAcknowledged = acknowledgedSeats.includes(mySeat);
   const [bottom, left, top, right] = getTableOrder(mySeat);
@@ -219,7 +189,7 @@ export function GamePage({
             hasAcknowledged={handResultAckedSeats.includes(mySeat)}
             acknowledgedSeats={handResultAckedSeats}
             seatPlayers={seatPlayers}
-            onAcknowledge={() => send(sendMessage, { action: "ACKNOWLEDGE_HAND_RESULT", payload: {} })}
+            onAcknowledge={acknowledgeHandResult}
           />
         )}
 
@@ -232,13 +202,8 @@ export function GamePage({
             rematchRequested={rematchRequested}
             pendingSeats={pendingRematchSeats}
             seatPlayers={seatPlayers}
-            onRematch={() => {
-              dispatch({ type: "REQUEST_REMATCH" });
-              send(sendMessage, { action: "REMATCH_REQUEST", payload: {} });
-            }}
-            onLeaveToLobby={() => {
-              send(sendMessage, { action: "LEAVE_TO_LOBBY", payload: {} });
-            }}
+            onRematch={requestRematch}
+            onLeaveToLobby={leaveToLobby}
           />
         )}
       </div>
@@ -254,7 +219,7 @@ export function GamePage({
           <HandDisplay
             cards={hand}
             trumpSuit={trumpSuit}
-            onCardClick={isMyTurn ? handleCardPlay : undefined}
+            onCardClick={isMyTurn ? playCard : undefined}
             legalCards={isMyTurn ? legalCards : undefined}
           />
         )}
