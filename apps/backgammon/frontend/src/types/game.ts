@@ -222,6 +222,44 @@ export interface DashboardData {
   rating_games: number;
 }
 
+/** Win/loss split for a subset of games (e.g. as white, blitz time control). */
+export interface ColorWinRate {
+  games: number;
+  wins: number;
+  win_rate: number;
+}
+
+/** Cube action counters and derived accept rate. */
+export interface CubeStats {
+  offered: number;
+  accepted: number;
+  declined: number;
+  accept_rate: number;
+}
+
+/** One data point on the player's ELO rating graph. */
+export interface RatingHistoryPoint {
+  played_at: string;
+  rating_after: number;
+  rating_change: number;
+}
+
+/** Full advanced-stats payload surfaced in the Dashboard Stats tab. */
+export interface AdvancedStatsData {
+  total_games: number;
+  gammon_wins: number;
+  gammon_losses: number;
+  gammon_rate: number;
+  backgammon_wins: number;
+  backgammon_losses: number;
+  backgammon_rate: number;
+  win_rate_as_white: ColorWinRate;
+  win_rate_as_black: ColorWinRate;
+  win_rate_by_time_control: Record<string, ColorWinRate>;
+  cube_stats: CubeStats;
+  rating_history: RatingHistoryPoint[];
+}
+
 /** A single entry in the leaderboard. */
 export interface LeaderboardEntry {
   rank: number;

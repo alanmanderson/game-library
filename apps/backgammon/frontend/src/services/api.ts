@@ -12,6 +12,7 @@ import type {
   ActiveGame,
   PaginatedMoveHistory,
   StatsOverview,
+  AdvancedStatsData,
   DashboardData,
   AuthResponse,
   LeaderboardData,
@@ -156,6 +157,15 @@ export function getPlayerStats(playerId: string): Promise<StatsOverview> {
 /** Fetch the player's dashboard with game history and stats. */
 export function getPlayerDashboard(playerId: string): Promise<DashboardData> {
   return request<DashboardData>(`/api/players/${playerId}/dashboard`);
+}
+
+/** Fetch advanced per-player stats (gammon/backgammon rates, cube, rating history). */
+export function getPlayerAdvancedStats(
+  playerId: string,
+): Promise<AdvancedStatsData> {
+  return request<AdvancedStatsData>(
+    `/api/players/${playerId}/advanced-stats`,
+  );
 }
 
 // ---------------------------------------------------------------------------

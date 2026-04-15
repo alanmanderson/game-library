@@ -34,6 +34,38 @@
 }
 
 /* ------------------------------------------------------------------
+   Tab switcher (Game History / Advanced Stats)
+   ------------------------------------------------------------------ */
+
+.dashboard-tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 1rem;
+}
+
+.dashboard-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 0.6rem 1rem;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.dashboard-tab:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.dashboard-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* ------------------------------------------------------------------
    Game history table – extends .opponent-table from Statistics.css
    ------------------------------------------------------------------ */
 

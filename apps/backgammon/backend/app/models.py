@@ -38,6 +38,11 @@ class Player(Base):
     rating: int = Column(Integer, default=1500, nullable=False)
     rating_games: int = Column(Integer, default=0, nullable=False)
 
+    # Cube action counters (lifetime totals across all games)
+    cube_offers: int = Column(Integer, default=0, nullable=False, server_default="0")
+    cube_accepts: int = Column(Integer, default=0, nullable=False, server_default="0")
+    cube_declines: int = Column(Integer, default=0, nullable=False, server_default="0")
+
     # Relationships
     white_tables = relationship(
         "Table", foreign_keys="Table.white_player_id", back_populates="white_player"
@@ -262,4 +267,40 @@ class PlayerStats(Base):
             f"<PlayerStats(player_id={self.player_id!r}, "
             f"opponent_id={self.opponent_id!r}, "
             f"games_played={self.games_played!r})>"
+        )
+
+
+class RatingHistory(Base):
+    """Per-player snapshot of ELO rating after each rated game.
+
+    A new row is written by :func:`app.services.rating_service.update_ratings`
+    each time a player's rating changes, enabling a historical rating graph
+    on the player's dashboard.
+    """
+
+    __tablename__ = "rating_history"
+
+    id: int = Column(Integer, primary_key=True, autoincrement=True)
+    player_id: str = Column(
+        String(36), ForeignKey("players.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    rating: int = Column(Integer, nullable=False)
+    rating_change: int = Column(Integer, nullable=False, default=0)
+    opponent_id: str | None = Column(
+        String(36), ForeignKey("players.id", ondelete="SET NULL"), nullable=True
+    )
+    table_id: str | None = Column(
+        String(8), ForeignKey("tables.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: datetime = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+    player = relationship("Player", foreign_keys=[player_id])
+    opponent = relationship("Player", foreign_keys=[opponent_id])
+
+    def __repr__(self) -> str:
+        return (
+            f"<RatingHistory(player_id={self.player_id!r}, "
+            f"rating={self.rating!r}, created_at={self.created_at!r})>"
         )

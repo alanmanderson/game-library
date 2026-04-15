@@ -2,7 +2,10 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import type { DashboardData, GameHistoryItem } from "../types/game";
 import { getPlayerDashboard, exportGame } from "../services/api";
+import AdvancedStats from "./AdvancedStats";
 import "./styles/Dashboard.css";
+
+type DashboardTab = "history" | "stats";
 
 interface DashboardProps {
   playerId: string;
@@ -83,6 +86,7 @@ function Dashboard({ playerId }: DashboardProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [tab, setTab] = useState<DashboardTab>("history");
 
   useEffect(() => {
     let cancelled = false;
@@ -178,12 +182,36 @@ function Dashboard({ playerId }: DashboardProps) {
         </div>
       </div>
 
-      {exportError && (
+      {/* Tab switcher: game history vs advanced stats */}
+      <div className="dashboard-tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "history"}
+          className={`dashboard-tab ${tab === "history" ? "active" : ""}`}
+          onClick={() => setTab("history")}
+        >
+          Game History
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "stats"}
+          className={`dashboard-tab ${tab === "stats" ? "active" : ""}`}
+          onClick={() => setTab("stats")}
+        >
+          Advanced Stats
+        </button>
+      </div>
+
+      {exportError && tab === "history" && (
         <div className="dashboard-empty">{exportError}</div>
       )}
 
+      {tab === "stats" && <AdvancedStats playerId={playerId} />}
+
       {/* Game history table */}
-      {data.games.length > 0 && (
+      {tab === "history" && data.games.length > 0 && (
         <table className="opponent-table dashboard-table">
           <thead>
             <tr>

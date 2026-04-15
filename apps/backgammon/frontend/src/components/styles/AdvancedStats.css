@@ -1,0 +1,198 @@
+/* Advanced stats dashboard section. Rendered inside Dashboard's Stats tab. */
+
+.adv-stats {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.adv-stats-loading,
+.adv-stats-empty {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 1.25rem;
+  font-style: italic;
+}
+
+/* ------------------------------------------------------------------
+   Headline stat cards
+   ------------------------------------------------------------------ */
+
+.adv-stats-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.adv-stat-card {
+  background: var(--bg-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 1rem;
+  text-align: center;
+}
+
+.adv-stat-value {
+  font-size: 1.85rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.adv-stat-accent {
+  color: var(--accent);
+}
+
+.adv-stat-label {
+  margin-top: 0.25rem;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.adv-stat-sub {
+  margin-top: 0.4rem;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+/* ------------------------------------------------------------------
+   Section headings
+   ------------------------------------------------------------------ */
+
+.adv-section {
+  background: var(--bg-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+}
+
+.adv-section-title {
+  margin: 0 0 0.85rem;
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* ------------------------------------------------------------------
+   Win rate bar rows
+   ------------------------------------------------------------------ */
+
+.adv-bar-row {
+  display: grid;
+  grid-template-columns: 110px 1fr 110px;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.35rem 0;
+}
+
+.adv-bar-label {
+  color: var(--text-primary);
+  font-size: 0.85rem;
+}
+
+.adv-bar-track {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  height: 10px;
+  overflow: hidden;
+}
+
+.adv-bar-fill {
+  height: 100%;
+  background: var(--success);
+  border-radius: 6px;
+  transition: width 0.3s ease;
+}
+
+.adv-bar-value {
+  text-align: right;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.adv-bar-meta {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  margin-left: 0.25rem;
+}
+
+/* ------------------------------------------------------------------
+   Rating graph
+   ------------------------------------------------------------------ */
+
+.adv-rating-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.5rem;
+}
+
+.adv-rating-current {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.adv-rating-diff-up {
+  color: var(--success);
+  font-size: 0.85rem;
+}
+
+.adv-rating-diff-down {
+  color: var(--danger);
+  font-size: 0.85rem;
+}
+
+.adv-rating-svg {
+  width: 100%;
+  height: 180px;
+  display: block;
+}
+
+.adv-rating-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.adv-rating-baseline {
+  stroke: rgba(255, 255, 255, 0.1);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+
+.adv-rating-dot {
+  fill: var(--accent);
+}
+
+.adv-rating-empty {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 1rem;
+  font-style: italic;
+}
+
+/* ------------------------------------------------------------------
+   Responsive
+   ------------------------------------------------------------------ */
+
+@media (max-width: 600px) {
+  .adv-stat-value {
+    font-size: 1.5rem;
+  }
+
+  .adv-bar-row {
+    grid-template-columns: 90px 1fr 90px;
+    gap: 0.5rem;
+  }
+
+  .adv-bar-label,
+  .adv-bar-value {
+    font-size: 0.78rem;
+  }
+}

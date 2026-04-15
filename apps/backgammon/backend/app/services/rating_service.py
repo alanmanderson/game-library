@@ -10,7 +10,7 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Player
+from app.models import Player, RatingHistory
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +56,7 @@ async def update_ratings(
     db: AsyncSession,
     winner_id: Optional[str],
     loser_id: Optional[str],
+    table_id: Optional[str] = None,
 ) -> Optional[tuple[int, int]]:
     """Update ELO ratings for both players after a completed game.
 
@@ -101,6 +102,26 @@ async def update_ratings(
     # Floor rating at 100 to avoid negative or very low ratings
     if loser.rating < 100:
         loser.rating = 100
+
+    # Persist rating history snapshots so dashboards can plot a rating graph.
+    db.add(
+        RatingHistory(
+            player_id=winner.id,
+            rating=winner.rating,
+            rating_change=winner_change,
+            opponent_id=loser.id,
+            table_id=table_id,
+        )
+    )
+    db.add(
+        RatingHistory(
+            player_id=loser.id,
+            rating=loser.rating,
+            rating_change=loser_change,
+            opponent_id=winner.id,
+            table_id=table_id,
+        )
+    )
 
     logger.info(
         "Rating update: %s (%d -> %d, +%d) beat %s (%d -> %d, %d)",

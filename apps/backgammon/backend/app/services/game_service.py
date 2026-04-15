@@ -27,6 +27,23 @@ TIME_CONTROL_PRESETS: dict[str, tuple[int | None, int | None]] = {
 }
 
 
+async def _increment_cube_counter(
+    db: AsyncSession, player_id: str, field: str
+) -> None:
+    """Increment one of the player's cube action counters.
+
+    Skips the bot player so the bot's cube stats don't pollute leaderboards.
+    No-ops silently if the player row is missing.
+    """
+    from app.services.bot_service import BOT_PLAYER_ID
+    if not player_id or player_id == BOT_PLAYER_ID:
+        return
+    player = await db.get(Player, player_id)
+    if not player:
+        return
+    setattr(player, field, (getattr(player, field) or 0) + 1)
+
+
 class GameManager:
     """Manages active game engines in memory, keyed by table_id.
 
@@ -633,6 +650,7 @@ class GameManager:
         table = await db.get(Table, table_id)
         if table:
             table.game_state = engine.get_state_snapshot()
+        await _increment_cube_counter(db, player_id, "cube_offers")
         return True
 
     async def accept_double(self, db: AsyncSession, table_id: str, player_id: str) -> bool:
@@ -648,6 +666,7 @@ class GameManager:
         table = await db.get(Table, table_id)
         if table:
             table.game_state = engine.get_state_snapshot()
+        await _increment_cube_counter(db, player_id, "cube_accepts")
         return True
 
     async def decline_double(self, db: AsyncSession, table_id: str, player_id: str) -> dict:
@@ -665,6 +684,7 @@ class GameManager:
         table = await db.get(Table, table_id)
         if table:
             table.game_state = engine.get_state_snapshot()
+        await _increment_cube_counter(db, player_id, "cube_declines")
         return {"winner": winner.value if winner else None}
 
     async def undo_turn(self, db: AsyncSession, table_id: str, player_id: str) -> bool:
@@ -820,7 +840,7 @@ class GameManager:
                 if table.winner_id == table.white_player_id
                 else table.white_player_id
             )
-            await update_ratings(db, table.winner_id, loser_id)
+            await update_ratings(db, table.winner_id, loser_id, table_id=table_id)
 
         # Advance tournament bracket if this table is part of a tournament match
         if match_over and table.winner_id:

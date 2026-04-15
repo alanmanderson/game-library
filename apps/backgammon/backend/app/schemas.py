@@ -206,6 +206,51 @@ class DashboardResponse(BaseModel):
     rating_games: int = 0
 
 
+# ── Advanced Stats Schemas ──────────────────────────────────────────────
+
+
+class ColorWinRate(BaseModel):
+    games: int
+    wins: int
+    win_rate: float
+
+
+class TimeControlWinRate(BaseModel):
+    games: int
+    wins: int
+    win_rate: float
+
+
+class CubeStats(BaseModel):
+    offered: int
+    accepted: int
+    declined: int
+    accept_rate: float  # accepted / (accepted + declined)
+    # NOTE: "cube decision accuracy" (offers/takes vs ML-optimal equity) is not
+    # yet computed. Raw counts are a meaningful first step.
+
+
+class RatingHistoryPoint(BaseModel):
+    played_at: datetime
+    rating_after: int
+    rating_change: int
+
+
+class AdvancedStatsResponse(BaseModel):
+    total_games: int
+    gammon_wins: int
+    gammon_losses: int
+    gammon_rate: float  # gammon_wins / total_wins
+    backgammon_wins: int
+    backgammon_losses: int
+    backgammon_rate: float  # backgammon_wins / total_wins
+    win_rate_as_white: ColorWinRate
+    win_rate_as_black: ColorWinRate
+    win_rate_by_time_control: dict[str, TimeControlWinRate]
+    cube_stats: CubeStats
+    rating_history: list[RatingHistoryPoint]
+
+
 # ── Replay Schemas ───────────────────────────────────────────────────────
 
 

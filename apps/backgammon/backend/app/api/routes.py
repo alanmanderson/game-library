@@ -16,6 +16,7 @@ from app.schemas import (
     MoveRecordResponse,
     PaginatedMoveHistoryResponse,
     StatsOverview,
+    AdvancedStatsResponse,
     DashboardResponse,
     GameHistoryItem,
     LobbyTable,
@@ -26,7 +27,7 @@ from app.schemas import (
     ReplayResponse,
 )
 from app.services.game_service import game_manager
-from app.services.stats_service import get_player_stats
+from app.services.stats_service import get_player_stats, get_advanced_stats
 from app.services.bot_service import (
     BOT_PLAYER_ID, ensure_bot_player, schedule_bot_turn_if_needed,
     set_bot_difficulty,
@@ -76,6 +77,35 @@ async def player_stats(
             detail="Stats are not available for guest players",
         )
     return await get_player_stats(db, player_id)
+
+
+@router.get(
+    "/players/{player_id}/advanced-stats",
+    response_model=AdvancedStatsResponse,
+)
+async def player_advanced_stats(
+    player_id: str,
+    current_player: Player = Depends(get_current_player),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Return advanced per-player statistics.
+
+    Includes gammon/backgammon rates, per-color win rates, per-time-control
+    win rates, cube action counts, and an ELO rating history series.
+    Guarded the same way as ``/dashboard``: authenticated player must match,
+    guests are rejected since their stats are not persisted.
+    """
+    if current_player.id != player_id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this resource")
+    player = await db.get(Player, player_id)
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    if player.is_guest:
+        raise HTTPException(
+            status_code=403,
+            detail="Advanced stats are not available for guest players",
+        )
+    return await get_advanced_stats(db, player_id)
 
 
 @router.get("/players/{player_id}/dashboard", response_model=DashboardResponse)
