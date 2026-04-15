@@ -13,7 +13,6 @@ export type {
   WsEvent,
   WsAction,
   PayloadFor,
-  UseWebSocketResult,
   Phase,
   BiddingState,
   BiddingResult,
@@ -66,3 +65,9 @@ export { getTableOrder } from "./tableOrder";
 export { ApiError, post, getAuth, postAuth } from "./api";
 
 export { validate } from "./validation";
+
+export {
+  gameReducer,
+  initialGameState,
+} from "./gameReducer";
+export type { GameState, GameAction } from "./gameReducer";

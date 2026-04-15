@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { AppState, AppStateStatus } from "react-native";
-import type { WsEvent, UseWebSocketResult } from "@pinochle/shared";
+import type { WsEvent } from "@pinochle/shared";
 import { RECONNECT_DELAYS, parseWsEvent } from "@pinochle/shared";
 import { WS_BASE } from "../config";
 
@@ -8,55 +8,55 @@ function buildWsUrl(roomCode: string, token: string): string {
   return `${WS_BASE}/ws/${roomCode}?token=${token}`;
 }
 
+export interface UseWebSocketOptions {
+  /** Called synchronously for every parsed WsEvent, directly from ws.onmessage. */
+  onEvent: (event: WsEvent) => void;
+  /** Optional: notified when the connection-status boolean flips. */
+  onStatusChange?: (connected: boolean) => void;
+}
+
+export interface UseWebSocketApi {
+  sendMessage: (msg: Record<string, unknown>) => boolean;
+  connected: boolean;
+}
+
 /**
- * Queue-based WebSocket hook for React Native.
+ * Pub/sub WebSocket hook (React Native).
  *
- * React 18 batches rapid state updates, so if the server sends multiple
- * events in quick succession (e.g. HAND_DEALT + BIDDING_TURN on game start),
- * only the last one would trigger a render with plain setState.
+ * Events are dispatched imperatively to `onEvent` from `ws.onmessage`. No
+ * setState-per-event, no queue drain, no setTimeout shuffle. The only state
+ * this hook owns is the coarse `connected` flag for UI indicators.
  *
- * This hook queues incoming events and processes them one at a time,
- * waiting for each to be consumed (via useEffect) before delivering the next.
+ * Handles app foreground/background transitions by closing cleanly on
+ * background and reconnecting on foreground.
  */
 export function useWebSocket(
   roomCode: string,
   token: string,
-): UseWebSocketResult {
+  { onEvent, onStatusChange }: UseWebSocketOptions,
+): UseWebSocketApi {
   const wsRef = useRef<WebSocket | null>(null);
   const [connected, setConnected] = useState(false);
-  const [lastEvent, setLastEvent] = useState<WsEvent | null>(null);
   const retriesRef = useRef(0);
   const unmountedRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pingRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Event queue to prevent batching loss
-  const queueRef = useRef<WsEvent[]>([]);
-  const processingRef = useRef(false);
   const connectRef = useRef<(() => void) | null>(null);
 
-  function drainQueue() {
-    if (processingRef.current || queueRef.current.length === 0) return;
-    processingRef.current = true;
-    const next = queueRef.current.shift()!;
-    setLastEvent(next);
-  }
-
-  // After each event is consumed by the subscriber's useEffect,
-  // mark processing as done and deliver the next queued event.
+  const onEventRef = useRef(onEvent);
+  const onStatusChangeRef = useRef(onStatusChange);
   useEffect(() => {
-    if (lastEvent === null) return;
-    // Use setTimeout(0) to let the subscriber's useEffect run first
-    // (subscriber also depends on lastEvent, but runs in declaration order)
-    const t = setTimeout(() => {
-      processingRef.current = false;
-      drainQueue();
-    }, 0);
-    return () => clearTimeout(t);
-  }, [lastEvent]);
+    onEventRef.current = onEvent;
+    onStatusChangeRef.current = onStatusChange;
+  });
 
   useEffect(() => {
     unmountedRef.current = false;
+
+    function setStatus(next: boolean) {
+      setConnected(next);
+      onStatusChangeRef.current?.(next);
+    }
 
     function connect() {
       if (unmountedRef.current) return;
@@ -65,7 +65,7 @@ export function useWebSocket(
       wsRef.current = ws;
 
       ws.onopen = () => {
-        setConnected(true);
+        setStatus(true);
         retriesRef.current = 0;
         pingRef.current = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) {
@@ -79,17 +79,14 @@ export function useWebSocket(
         try {
           raw = JSON.parse(e.data);
         } catch {
-          // ignore non-JSON messages
           return;
         }
-        // PONG has no payload — skip schema validation.
         if (raw && typeof raw === "object" && (raw as { event?: string }).event === "PONG") {
           return;
         }
         const parsed = parseWsEvent(raw);
-        if (!parsed) return; // malformed: already logged, drop
-        queueRef.current.push(parsed);
-        drainQueue();
+        if (!parsed) return;
+        onEventRef.current(parsed);
       };
 
       ws.onerror = (event) => {
@@ -98,7 +95,7 @@ export function useWebSocket(
 
       ws.onclose = (event) => {
         if (pingRef.current) { clearInterval(pingRef.current); pingRef.current = null; }
-        setConnected(false);
+        setStatus(false);
         wsRef.current = null;
         if (event.code === 4001) {
           console.warn("[useWebSocket] Authentication failed — not reconnecting");
@@ -145,7 +142,6 @@ export function useWebSocket(
         appStateRef.current = nextAppState;
 
         if (nextAppState === "background" || nextAppState === "inactive") {
-          // Going to background — close cleanly so the server knows we left.
           if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
           if (pingRef.current) { clearInterval(pingRef.current); pingRef.current = null; }
           if (wsRef.current) {
@@ -154,8 +150,8 @@ export function useWebSocket(
             wsRef.current = null;
           }
           setConnected(false);
+          onStatusChangeRef.current?.(false);
         } else if (nextAppState === "active" && prev !== "active") {
-          // Returning to foreground — reconnect.
           retriesRef.current = 0;
           connectRef.current?.();
         }
@@ -173,5 +169,5 @@ export function useWebSocket(
     return true;
   }, []);
 
-  return { sendMessage, lastEvent, connected };
+  return { sendMessage, connected };
 }

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { flushSync } from "react-dom";
-import type { WsEvent, UseWebSocketResult } from "@pinochle/shared";
+import type { WsEvent } from "@pinochle/shared";
 import { RECONNECT_DELAYS, parseWsEvent } from "@pinochle/shared";
 import { WS_BASE } from "../api/client.ts";
 
@@ -11,20 +10,56 @@ function buildWsUrl(roomCode: string, token: string): string {
   return `${proto}//${location.host}${path}`;
 }
 
+export interface UseWebSocketOptions {
+  /** Called synchronously for every parsed WsEvent, directly from ws.onmessage. */
+  onEvent: (event: WsEvent) => void;
+  /** Optional: notified when the connection-status boolean flips. */
+  onStatusChange?: (connected: boolean) => void;
+}
+
+export interface UseWebSocketApi {
+  sendMessage: (msg: Record<string, unknown>) => boolean;
+  connected: boolean;
+}
+
+/**
+ * Pub/sub WebSocket hook.
+ *
+ * Events are dispatched imperatively to `onEvent` from `ws.onmessage` — no
+ * React state per event. The only state this hook owns is the coarse
+ * `connected` flag for UI indicators.
+ *
+ * The consumer's `onEvent` callback is read via a ref on every message, so
+ * passing a new function every render is fine (no need for useCallback).
+ */
 export function useWebSocket(
   roomCode: string,
   token: string,
-): UseWebSocketResult {
+  { onEvent, onStatusChange }: UseWebSocketOptions,
+): UseWebSocketApi {
   const wsRef = useRef<WebSocket | null>(null);
   const [connected, setConnected] = useState(false);
-  const [lastEvent, setLastEvent] = useState<WsEvent | null>(null);
   const retriesRef = useRef(0);
   const unmountedRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Latest callbacks, read at message-dispatch time. Lets callers pass fresh
+  // closures without forcing the socket to reconnect.
+  const onEventRef = useRef(onEvent);
+  const onStatusChangeRef = useRef(onStatusChange);
+  useEffect(() => {
+    onEventRef.current = onEvent;
+    onStatusChangeRef.current = onStatusChange;
+  });
+
   useEffect(() => {
     unmountedRef.current = false;
+
+    function setStatus(next: boolean) {
+      setConnected(next);
+      onStatusChangeRef.current?.(next);
+    }
 
     function connect() {
       if (unmountedRef.current) return;
@@ -33,7 +68,7 @@ export function useWebSocket(
       wsRef.current = ws;
 
       ws.onopen = () => {
-        setConnected(true);
+        setStatus(true);
         retriesRef.current = 0;
         pingRef.current = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) {
@@ -56,14 +91,12 @@ export function useWebSocket(
         }
         const parsed = parseWsEvent(raw);
         if (!parsed) return; // malformed message: already logged, drop it
-        // flushSync prevents React from batching rapid back-to-back events
-        // (e.g. HAND_DEALT + BIDDING_TURN) which would cause the first to be lost
-        flushSync(() => setLastEvent(parsed));
+        onEventRef.current(parsed);
       };
 
       ws.onclose = (event) => {
         if (pingRef.current) { clearInterval(pingRef.current); pingRef.current = null; }
-        setConnected(false);
+        setStatus(false);
         wsRef.current = null;
         if (event.code === 4001) {
           console.warn("[useWebSocket] Authentication failed — not reconnecting");
@@ -105,5 +138,5 @@ export function useWebSocket(
     return true;
   }, []);
 
-  return { sendMessage, lastEvent, connected };
+  return { sendMessage, connected };
 }

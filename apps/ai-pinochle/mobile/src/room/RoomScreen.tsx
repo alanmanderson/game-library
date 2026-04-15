@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useReducer } from "react";
 import {
   View,
   Text,
@@ -7,8 +7,15 @@ import {
   SafeAreaView,
 } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import type { Seats } from "@pinochle/shared";
-import { SEATS, SEAT_LABELS_LOWER, getTableOrder, sendAction } from "@pinochle/shared";
+import type { Seats, WsEvent } from "@pinochle/shared";
+import {
+  SEATS,
+  SEAT_LABELS_LOWER,
+  getTableOrder,
+  sendAction,
+  gameReducer,
+  initialGameState,
+} from "@pinochle/shared";
 import { useAuth } from "../auth/AuthContext";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { GameScreen } from "../game/GameScreen";
@@ -27,10 +34,6 @@ function normalizeSeats(raw: Record<string, string | null>): Seats {
 export function RoomScreen({ route, navigation }: Props) {
   const { roomCode } = route.params;
   const { token } = useAuth();
-  const { sendMessage, lastEvent, connected } = useWebSocket(
-    roomCode,
-    token!,
-  );
 
   const [seats, setSeats] = useState<Seats>({
     north: null,
@@ -41,30 +44,37 @@ export function RoomScreen({ route, navigation }: Props) {
   const [mySeat, setMySeat] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [gameStarted, setGameStarted] = useState(false);
-  const [myHand, setMyHand] = useState<string[]>([]);
 
-  useEffect(() => {
-    if (!lastEvent) return;
+  const [gameState, dispatch] = useReducer(gameReducer, initialGameState([]));
 
-    switch (lastEvent.event) {
+  function handleEvent(event: WsEvent) {
+    switch (event.event) {
       case "LOBBY_STATE_UPDATED": {
-        const p = lastEvent.payload;
+        const p = event.payload;
         setSeats(normalizeSeats(p.seats));
         if (p.your_seat) setMySeat(p.your_seat.toLowerCase());
         setError("");
         return;
       }
       case "SEAT_CLAIM_FAILED":
-        setError(lastEvent.payload.message);
+        setError(event.payload.message);
         return;
       case "HAND_DEALT":
-        setMyHand(lastEvent.payload.cards);
         setGameStarted(true);
+        dispatch({ type: "WS_EVENT", event, mySeat: (mySeat ?? "").toUpperCase() });
+        return;
+      case "LEFT_TO_LOBBY":
+        navigation.goBack();
         return;
       default:
+        dispatch({ type: "WS_EVENT", event, mySeat: (mySeat ?? "").toUpperCase() });
         return;
     }
-  }, [lastEvent]);
+  }
+
+  const { sendMessage, connected } = useWebSocket(roomCode, token!, {
+    onEvent: handleEvent,
+  });
 
   function handleSit(seat: string) {
     setError("");
@@ -81,11 +91,10 @@ export function RoomScreen({ route, navigation }: Props) {
     return (
       <GameScreen
         sendMessage={sendMessage}
-        lastEvent={lastEvent}
         connected={connected}
-        roomCode={roomCode}
+        state={gameState}
+        dispatch={dispatch}
         mySeat={mySeat.toUpperCase()}
-        initialHand={myHand}
         seatPlayers={seats}
         onLeave={() => navigation.goBack()}
       />

@@ -1,6 +1,13 @@
-import { useState, useEffect } from "react";
-import type { Seats } from "@pinochle/shared";
-import { SEATS, SEAT_LABELS_LOWER, getTableOrder, sendAction } from "@pinochle/shared";
+import { useState, useReducer } from "react";
+import type { Seats, WsEvent } from "@pinochle/shared";
+import {
+  SEATS,
+  SEAT_LABELS_LOWER,
+  getTableOrder,
+  sendAction,
+  gameReducer,
+  initialGameState,
+} from "@pinochle/shared";
 import { useAuth } from "../auth/AuthContext.tsx";
 import { useWebSocket } from "../hooks/useWebSocket.ts";
 import { GamePage } from "../game/GamePage.tsx";
@@ -21,10 +28,6 @@ function normalizeSeats(raw: Record<string, string | null>): Seats {
 
 export function RoomPage({ roomCode, onLeave }: Props) {
   const { token } = useAuth();
-  const { sendMessage, lastEvent, connected } = useWebSocket(
-    roomCode,
-    token!,
-  );
 
   const [seats, setSeats] = useState<Seats>({
     north: null,
@@ -35,8 +38,38 @@ export function RoomPage({ roomCode, onLeave }: Props) {
   const [mySeat, setMySeat] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [gameStarted, setGameStarted] = useState(false);
-  const [myHand, setMyHand] = useState<string[]>([]);
   const [copied, setCopied] = useState<"code" | "link" | null>(null);
+
+  const [gameState, dispatch] = useReducer(gameReducer, initialGameState([]));
+
+  function handleEvent(event: WsEvent) {
+    switch (event.event) {
+      case "LOBBY_STATE_UPDATED": {
+        const p = event.payload;
+        setSeats(normalizeSeats(p.seats));
+        if (p.your_seat) setMySeat(p.your_seat.toLowerCase());
+        setError("");
+        return;
+      }
+      case "SEAT_CLAIM_FAILED":
+        setError(event.payload.message);
+        return;
+      case "HAND_DEALT":
+        setGameStarted(true);
+        dispatch({ type: "WS_EVENT", event, mySeat: (mySeat ?? "").toUpperCase() });
+        return;
+      case "LEFT_TO_LOBBY":
+        onLeave();
+        return;
+      default:
+        dispatch({ type: "WS_EVENT", event, mySeat: (mySeat ?? "").toUpperCase() });
+        return;
+    }
+  }
+
+  const { sendMessage, connected } = useWebSocket(roomCode, token!, {
+    onEvent: handleEvent,
+  });
 
   async function copyText(text: string, kind: "code" | "link") {
     try {
@@ -47,30 +80,6 @@ export function RoomPage({ roomCode, onLeave }: Props) {
       // Older browsers without clipboard API — user can still select text manually.
     }
   }
-
-  useEffect(() => {
-    if (!lastEvent) return;
-
-    switch (lastEvent.event) {
-      case "LOBBY_STATE_UPDATED": {
-        const p = lastEvent.payload;
-        setSeats(normalizeSeats(p.seats));
-        if (p.your_seat) setMySeat(p.your_seat.toLowerCase());
-        setError("");
-        return;
-      }
-      case "SEAT_CLAIM_FAILED":
-        setError(lastEvent.payload.message);
-        return;
-      case "HAND_DEALT":
-        setMyHand(lastEvent.payload.cards);
-        setGameStarted(true);
-        return;
-      default:
-        // Other events are handled by GamePage once it mounts.
-        return;
-    }
-  }, [lastEvent]);
 
   function handleSit(seat: string) {
     setError("");
@@ -87,11 +96,10 @@ export function RoomPage({ roomCode, onLeave }: Props) {
     return (
       <GamePage
         sendMessage={sendMessage}
-        lastEvent={lastEvent}
         connected={connected}
-        roomCode={roomCode}
+        state={gameState}
+        dispatch={dispatch}
         mySeat={mySeat.toUpperCase()}
-        initialHand={myHand}
         seatPlayers={seats}
         onLeave={onLeave}
       />

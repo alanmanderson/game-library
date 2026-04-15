@@ -91,13 +91,6 @@ export interface GameForfeitedPayload {
  * imports from `@pinochle/shared` keep working.
  */
 export type { WsEvent, PayloadFor, WsAction } from "./schemas";
-import type { WsEvent as _WsEvent } from "./schemas";
-
-export interface UseWebSocketResult {
-  sendMessage: (msg: Record<string, unknown>) => boolean;
-  lastEvent: _WsEvent | null;
-  connected: boolean;
-}
 
 export type Phase =
   | "LOBBY_WAITING"
