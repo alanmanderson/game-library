@@ -608,11 +608,7 @@ function GameReplay() {
           bestMovePoints={bestMovePoints}
         />
         {replayDice && (
-          <div
-            className={`replay-dice-overlay replay-dice-overlay--${
-              movedByColor === viewColor ? "bottom" : "top"
-            }`}
-          >
+          <div className="replay-dice-overlay">
             <Dice
               dice={replayDice}
               remainingDice={remainingDiceForDisplay}

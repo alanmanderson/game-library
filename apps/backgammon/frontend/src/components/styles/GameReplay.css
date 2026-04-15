@@ -114,12 +114,16 @@
   pointer-events: none; /* read-only */
 }
 
-/* Dice overlay — positioned over the centre bar of the board so the dice
-   appear on the side of whoever rolled them (bottom = viewer's seat). */
+/* Dice overlay — sits in the horizontal band between the top and bottom
+   point triangles on the left half of the board, mirroring the analysis
+   pill on the right. The board's triangles occupy ~42% of the height from
+   each edge, leaving a ~16% central strip where these overlays can live
+   without covering any points or checkers. */
 .replay-dice-overlay {
   position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 50%;
+  left: 25%;
+  transform: translate(-50%, -50%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -127,19 +131,12 @@
   z-index: 1;
 }
 
-.replay-dice-overlay--bottom {
-  bottom: 14%;
-}
-
-.replay-dice-overlay--top {
-  top: 14%;
-}
-
-/* Engine analysis indicator overlaid on the board's centre bar. */
+/* Engine analysis indicator — placed in the centre of the right half of
+   the board, between the points, mirroring the dice overlay on the left. */
 .replay-board-analysis {
   position: absolute;
   top: 50%;
-  left: 50%;
+  left: 75%;
   transform: translate(-50%, -50%);
   display: flex;
   flex-direction: column;
