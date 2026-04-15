@@ -1,5 +1,6 @@
 import type { CardPlayed, TrickResult } from "@pinochle/shared";
 import { SEAT_LABELS, SUITS, cardLabel } from "@pinochle/shared";
+import { CardImage } from "./CardImage";
 import styles from "./TrickPhase.module.css";
 
 interface Props {
@@ -12,10 +13,6 @@ interface Props {
   mySeat: string;
   trumpSuit: string | null;
   gameScores: Record<string, number>;
-}
-
-function cardToImage(code: string): string {
-  return `/img/${code}.png`;
 }
 
 function getPositionForSeat(
@@ -131,8 +128,8 @@ function CardSlot({ entry, isWinner }: { entry: CardPlayed | null; isWinner: boo
   }
 
   return (
-    <img
-      src={cardToImage(entry.card)}
+    <CardImage
+      card={entry.card}
       alt={cardLabel(entry.card)}
       width={60}
       height={84}

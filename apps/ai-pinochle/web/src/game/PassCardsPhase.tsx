@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { TEAM_FOR_SEAT, cardLabel, sendAction } from "@pinochle/shared";
+import { CardImage } from "./CardImage";
 import styles from "./PassCardsPhase.module.css";
 
 interface Props {
@@ -9,15 +10,6 @@ interface Props {
   submittedSeats: string[];
   hasSubmitted: boolean;
   sendMessage: (msg: Record<string, unknown>) => void;
-}
-
-const VALID_CARD_RE = /^(A|10|K|Q|J|9)[CDHS]$/;
-
-function cardToImage(code: string): string {
-  if (!VALID_CARD_RE.test(code)) {
-    return "/img/back.svg";
-  }
-  return `/img/${code}.png`;
 }
 
 export function PassCardsPhase({
@@ -82,9 +74,9 @@ export function PassCardsPhase({
             .filter(Boolean)
             .join(" ");
           return (
-            <img
+            <CardImage
               key={`${card}-${i}`}
-              src={cardToImage(card)}
+              card={card}
               alt={cardLabel(card)}
               className={classes}
               onClick={() => toggleCard(i)}

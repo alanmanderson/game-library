@@ -10,9 +10,12 @@ interface Props {
 }
 
 export function CardImage({ card, width = 60, height = 84, style }: Props) {
+  // WebP: ~4KB vs PNG ~47KB. React Native supports WebP natively on both
+  // iOS 14+ and Android. AVIF support across RN image decoders is still
+  // inconsistent, so mobile sticks with WebP.
   return (
     <Image
-      source={{ uri: `${IMAGE_BASE}/img/${card}.png` }}
+      source={{ uri: `${IMAGE_BASE}/img/${card}.webp` }}
       style={[{ width, height, borderRadius: 4 }, style]}
       resizeMode="contain"
     />

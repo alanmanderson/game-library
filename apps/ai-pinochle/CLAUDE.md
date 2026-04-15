@@ -42,6 +42,8 @@ Card images live in `public/img/` with the naming convention `{Rank}{Suit}.png`,
 
 Example: `public/img/AC.png` = Ace of Clubs, `public/img/10S.png` = Ten of Spades. A `back.svg` is also available for face-down cards. All 24 unique Pinochle cards are present.
 
+Each PNG also has `.avif` and `.webp` siblings (pre-encoded, committed to the repo). The web client uses `<picture>` to serve AVIF first, WebP second, PNG as legacy fallback (see `web/src/game/CardImage.tsx`). Mobile loads `.webp` directly. To regenerate the encoded variants after changing a PNG, run `npm run optimize-cards` from the repo root.
+
 ## Design Decisions
 
 Refer to `docs/design.md` for all architectural and design decisions. It is the source of truth for:

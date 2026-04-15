@@ -1,4 +1,5 @@
 import { cardSuit, cardLabel, sortHand, SUIT_LETTER } from "@pinochle/shared";
+import { CardImage } from "./CardImage";
 import styles from "./HandDisplay.module.css";
 
 interface Props {
@@ -6,10 +7,6 @@ interface Props {
   trumpSuit: string | null;
   onCardClick?: (card: string) => void;
   legalCards?: string[];
-}
-
-function cardToImage(code: string): string {
-  return `/img/${code}.png`;
 }
 
 export function HandDisplay({ cards, trumpSuit, onCardClick, legalCards }: Props) {
@@ -32,9 +29,9 @@ export function HandDisplay({ cards, trumpSuit, onCardClick, legalCards }: Props
         ].filter(Boolean).join(" ");
 
         return (
-          <img
+          <CardImage
             key={`${card}-${i}`}
-            src={cardToImage(card)}
+            card={card}
             alt={cardLabel(card)}
             width={80}
             height={112}

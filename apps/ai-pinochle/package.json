@@ -1,5 +1,15 @@
 {
   "name": "ai-pinochle",
   "private": true,
-  "workspaces": ["mobile", "web", "shared"]
+  "workspaces": [
+    "mobile",
+    "web",
+    "shared"
+  ],
+  "scripts": {
+    "optimize-cards": "node scripts/optimize-card-images.mjs"
+  },
+  "devDependencies": {
+    "sharp": "^0.34.5"
+  }
 }
