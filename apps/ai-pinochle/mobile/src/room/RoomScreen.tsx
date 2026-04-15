@@ -18,6 +18,7 @@ import {
 import { useAuth } from "../auth/AuthContext";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { GameScreen } from "../game/GameScreen";
+import { GameErrorBoundary } from "../game/GameErrorBoundary";
 import type { RootStackParamList } from "../navigation/AppNavigator";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Room">;
@@ -88,14 +89,19 @@ export function RoomScreen({ route, navigation }: Props) {
 
   if (gameStarted && mySeat) {
     return (
-      <GameScreen
-        sendMessage={sendMessage}
-        connected={connected}
-        game={game}
-        mySeat={mySeat.toUpperCase()}
-        seatPlayers={seats}
+      <GameErrorBoundary
+        roomCode={roomCode}
         onLeave={() => navigation.goBack()}
-      />
+      >
+        <GameScreen
+          sendMessage={sendMessage}
+          connected={connected}
+          game={game}
+          mySeat={mySeat.toUpperCase()}
+          seatPlayers={seats}
+          onLeave={() => navigation.goBack()}
+        />
+      </GameErrorBoundary>
     );
   }
 

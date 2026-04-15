@@ -10,6 +10,7 @@ import {
 import { useAuth } from "../auth/AuthContext.tsx";
 import { useWebSocket } from "../hooks/useWebSocket.ts";
 import { GamePage } from "../game/GamePage.tsx";
+import { GameErrorBoundary } from "../game/GameErrorBoundary.tsx";
 import styles from "./RoomPage.module.css";
 
 interface Props {
@@ -93,14 +94,16 @@ export function RoomPage({ roomCode, onLeave }: Props) {
 
   if (gameStarted && mySeat) {
     return (
-      <GamePage
-        sendMessage={sendMessage}
-        connected={connected}
-        game={game}
-        mySeat={mySeat.toUpperCase()}
-        seatPlayers={seats}
-        onLeave={onLeave}
-      />
+      <GameErrorBoundary roomCode={roomCode} onLeave={onLeave}>
+        <GamePage
+          sendMessage={sendMessage}
+          connected={connected}
+          game={game}
+          mySeat={mySeat.toUpperCase()}
+          seatPlayers={seats}
+          onLeave={onLeave}
+        />
+      </GameErrorBoundary>
     );
   }
 
