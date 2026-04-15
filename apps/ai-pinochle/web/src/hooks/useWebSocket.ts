@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { WsEvent } from "@pinochle/shared";
-import { RECONNECT_DELAYS, parseWsEvent } from "@pinochle/shared";
+import { RECONNECT_DELAYS, parseWsEvent, withJitter } from "@pinochle/shared";
 import { WS_BASE } from "../api/client.ts";
 
 function buildWsUrl(roomCode: string, token: string): string {
@@ -110,8 +110,9 @@ export function useWebSocket(
           return;
         }
         if (!unmountedRef.current) {
-          const delay =
+          const base =
             RECONNECT_DELAYS[Math.min(retriesRef.current, RECONNECT_DELAYS.length - 1)];
+          const delay = withJitter(base);
           retriesRef.current += 1;
           timerRef.current = setTimeout(connect, delay);
         }

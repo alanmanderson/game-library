@@ -62,6 +62,8 @@ export {
 
 export { getTableOrder } from "./tableOrder";
 
+export { withJitter } from "./jitter";
+
 export { ApiError, post, getAuth, postAuth } from "./api";
 
 export { validate } from "./validation";

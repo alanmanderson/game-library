@@ -7,7 +7,12 @@ interface Props {
   cardCount: number;
 }
 
-export function OtherPlayerHand({ position, cardCount }: Props) {
+// Memoized: both props are primitives. Avoids re-rendering up to 36 card-back
+// views (3 seats * 12 cards) on every WS event that doesn't change card counts.
+export const OtherPlayerHand = React.memo(function OtherPlayerHand({
+  position,
+  cardCount,
+}: Props) {
   const isHorizontal = position === "top";
   const cards = Array.from({ length: cardCount }, (_, i) => (
     <CardBack
@@ -27,7 +32,7 @@ export function OtherPlayerHand({ position, cardCount }: Props) {
       {cards}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   horizontalFan: {

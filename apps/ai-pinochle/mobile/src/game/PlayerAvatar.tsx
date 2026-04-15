@@ -18,7 +18,9 @@ interface Props {
   username: string;
 }
 
-export function PlayerAvatar({ username }: Props) {
+// Memoized: `username` is a stable string, so unrelated WS events don't
+// re-render any of the four seats around the table.
+export const PlayerAvatar = React.memo(function PlayerAvatar({ username }: Props) {
   const color = PALETTE[hashCode(username) % PALETTE.length];
   const initial = username.charAt(0).toUpperCase();
 
@@ -32,7 +34,7 @@ export function PlayerAvatar({ username }: Props) {
       </Text>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   wrapper: {

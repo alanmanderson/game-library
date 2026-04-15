@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
 import { cardSuit, sortHand, SUIT_LETTER } from "@pinochle/shared";
 import { CardImage } from "./CardImage";
@@ -10,14 +10,17 @@ interface Props {
   legalCards?: string[];
 }
 
-export function HandDisplay({
+// Memoized: see web HandDisplay for the full reasoning. Caller must pass a
+// stable `onCardClick` (useCallback) for the memo to short-circuit during
+// trick play — see GameScreen.
+export const HandDisplay = React.memo(function HandDisplay({
   cards,
   trumpSuit,
   onCardClick,
   legalCards,
 }: Props) {
   const trumpLetter = trumpSuit ? SUIT_LETTER[trumpSuit] ?? null : null;
-  const sorted = sortHand(cards);
+  const sorted = useMemo(() => sortHand(cards), [cards]);
   const interactive = !!(onCardClick && legalCards);
 
   return (
@@ -64,7 +67,7 @@ export function HandDisplay({
       })}
     </ScrollView>
   );
-}
+});
 
 const styles = StyleSheet.create({
   hand: {

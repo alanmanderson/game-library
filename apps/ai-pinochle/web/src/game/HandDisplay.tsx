@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import { cardSuit, cardLabel, sortHand, SUIT_LETTER } from "@pinochle/shared";
 import { CardImage } from "./CardImage";
 import styles from "./HandDisplay.module.css";
@@ -9,9 +10,20 @@ interface Props {
   legalCards?: string[];
 }
 
-export function HandDisplay({ cards, trumpSuit, onCardClick, legalCards }: Props) {
+// Memoized: `cards` and `legalCards` keep reference identity across reducer
+// updates that don't touch them, so most BID/MELD/turn-advance events skip
+// this entire 12-card render. Caller must pass a stable `onCardClick` —
+// `game.playCard` from useGameState is already useCallback-stable.
+export const HandDisplay = memo(function HandDisplay({
+  cards,
+  trumpSuit,
+  onCardClick,
+  legalCards,
+}: Props) {
   const trumpLetter = trumpSuit ? SUIT_LETTER[trumpSuit] ?? null : null;
-  const sorted = sortHand(cards);
+  // Memoize sortHand: `cards` is reference-stable across most renders, so we
+  // skip the per-render allocation + sort of a 12-card array.
+  const sorted = useMemo(() => sortHand(cards), [cards]);
   const interactive = !!(onCardClick && legalCards);
 
   return (
@@ -46,4 +58,4 @@ export function HandDisplay({ cards, trumpSuit, onCardClick, legalCards }: Props
       })}
     </div>
   );
-}
+});
