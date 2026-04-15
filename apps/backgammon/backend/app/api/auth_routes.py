@@ -36,6 +36,8 @@ def _build_auth_response(player: Player, token: str) -> dict:
             "created_at": player.created_at,
             "is_guest": player.is_guest,
             "auth_provider": player.auth_provider,
+            "board_theme": getattr(player, "board_theme", "classic") or "classic",
+            "checker_style": getattr(player, "checker_style", "classic") or "classic",
         },
     }
 

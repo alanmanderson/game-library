@@ -23,6 +23,15 @@ class PlayerResponse(BaseModel):
     auth_provider: str = "local"
     rating: int = 1500
     rating_games: int = 0
+    board_theme: str = "classic"
+    checker_style: str = "classic"
+
+
+class PlayerPreferencesUpdate(BaseModel):
+    """Partial update for a player's cosmetic preferences."""
+
+    board_theme: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    checker_style: Optional[str] = Field(default=None, min_length=1, max_length=64)
 
 
 # ── Auth Schemas ─────────────────────────────────────────────────────────────

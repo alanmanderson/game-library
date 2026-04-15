@@ -43,6 +43,13 @@ class Player(Base):
     cube_accepts: int = Column(Integer, default=0, nullable=False, server_default="0")
     cube_declines: int = Column(Integer, default=0, nullable=False, server_default="0")
 
+    # Cosmetic preferences — selected board theme + checker style.
+    # Validated against known IDs by the preferences endpoint; unknown values
+    # simply fall back to "classic" in the frontend so an old column value
+    # never breaks rendering.
+    board_theme: str = Column(String(64), default="classic", nullable=False, server_default="classic")
+    checker_style: str = Column(String(64), default="classic", nullable=False, server_default="classic")
+
     # Relationships
     white_tables = relationship(
         "Table", foreign_keys="Table.white_player_id", back_populates="white_player"

@@ -9,6 +9,7 @@ from app.database import get_db
 from app.models import Player, Table, MoveRecord, PlayerStats
 from app.schemas import (
     PlayerResponse,
+    PlayerPreferencesUpdate,
     TableCreate,
     TableResponse,
     JoinTableRequest,
@@ -26,6 +27,7 @@ from app.schemas import (
     ReplayMoveRecord,
     ReplayResponse,
 )
+from app.cosmetics import BOARD_THEMES, CHECKER_STYLES
 from app.services.game_service import game_manager
 from app.services.stats_service import get_player_stats, get_advanced_stats
 from app.services.bot_service import (
@@ -54,6 +56,40 @@ async def get_player(
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
     return player
+
+
+@router.patch("/players/me/preferences", response_model=PlayerResponse)
+async def update_my_preferences(
+    data: PlayerPreferencesUpdate,
+    current_player: Player = Depends(get_current_player),
+    db: AsyncSession = Depends(get_db),
+) -> Player:
+    """Update the authenticated player's cosmetic preferences.
+
+    Accepts a partial update (``board_theme`` and/or ``checker_style``).
+    Rejects unknown theme/style IDs with 400. Guests may also call this
+    so their choice lasts for their session — the row will be deleted when
+    the guest record is cleaned up, so persistence is best-effort.
+    """
+    if data.board_theme is not None:
+        if data.board_theme not in BOARD_THEMES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown board_theme: {data.board_theme!r}",
+            )
+        current_player.board_theme = data.board_theme
+
+    if data.checker_style is not None:
+        if data.checker_style not in CHECKER_STYLES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown checker_style: {data.checker_style!r}",
+            )
+        current_player.checker_style = data.checker_style
+
+    await db.flush()
+    await db.refresh(current_player)
+    return current_player
 
 
 @router.get("/players/{player_id}/stats", response_model=StatsOverview)

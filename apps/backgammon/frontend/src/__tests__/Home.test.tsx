@@ -30,6 +30,7 @@ vi.mock("../services/api", () => ({
   getActiveGames: vi.fn(),
   getLeaderboard: vi.fn(),
   listTournaments: vi.fn(),
+  updateMyPreferences: vi.fn(),
 }));
 
 // We need to dynamically import the mocked module so we can configure return values.
@@ -343,12 +344,13 @@ describe("Home – Dashboard section", () => {
 // ---------------------------------------------------------------------------
 
 describe("Home – tabbed content", () => {
-  it("renders all four tabs", () => {
+  it("renders all content tabs", () => {
     render(<Home player={registeredPlayer} />);
     expect(screen.getByRole("tab", { name: "Lobby" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Dashboard" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Leaderboard" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Tournaments" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Settings" })).toBeInTheDocument();
   });
 
   it("starts with Lobby tab active", () => {

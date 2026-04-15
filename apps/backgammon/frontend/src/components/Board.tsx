@@ -1,5 +1,6 @@
 import { useMemo, useCallback, useState, useEffect, useRef } from "react";
 import type { GameState, Color, Move, HintMove } from "../types/game";
+import { resolveBoardTheme, resolveCheckerStyle } from "../constants/themes";
 import "./styles/Board.css";
 
 export interface AnimatingMove {
@@ -20,6 +21,10 @@ interface BoardProps {
   cubeOwner: Color | null;
   animatingMove?: AnimatingMove | null;
   hintMoves?: HintMove[];
+  /** Board theme ID (e.g. "classic", "dark-marble"). Defaults to "classic". */
+  boardTheme?: string;
+  /** Checker style ID (e.g. "classic", "marble"). Defaults to "classic". */
+  checkerStyle?: string;
 }
 
 // ----- Layout constants -----
@@ -65,7 +70,11 @@ function Board({
   cubeOwner,
   animatingMove,
   hintMoves = [],
+  boardTheme,
+  checkerStyle,
 }: BoardProps) {
+  const themeId = resolveBoardTheme(boardTheme);
+  const checkerId = resolveCheckerStyle(checkerStyle);
   // Hover state for ghost checker preview
   const [hoveredPoint, setHoveredPoint] = useState<number | null>(null);
 
@@ -243,7 +252,12 @@ function Board({
   ) {
     const cx = columnX(col);
     const halfWidth = POINT_WIDTH / 2 - 2;
-    const fill = colorIndex % 2 === 0 ? DARK_TRIANGLE : LIGHT_TRIANGLE;
+    const isDark = colorIndex % 2 === 0;
+    // `fill` is kept as a fallback for browsers / tests that don't honour
+    // the CSS override on SVG child elements; the class-based rule in
+    // Board.css takes precedence when themes are active.
+    const fill = isDark ? DARK_TRIANGLE : LIGHT_TRIANGLE;
+    const triClass = isDark ? "point-tri point-tri-dark" : "point-tri point-tri-light";
 
     if (isTop) {
       // Triangle pointing down
@@ -251,6 +265,7 @@ function Board({
       const y1 = MARGIN + TRIANGLE_HEIGHT;
       return (
         <polygon
+          className={triClass}
           points={`${cx - halfWidth},${y0} ${cx + halfWidth},${y0} ${cx},${y1}`}
           fill={fill}
           stroke={BORDER_COLOR}
@@ -263,6 +278,7 @@ function Board({
       const y1 = BOARD_HEIGHT - MARGIN - TRIANGLE_HEIGHT;
       return (
         <polygon
+          className={triClass}
           points={`${cx - halfWidth},${y0} ${cx + halfWidth},${y0} ${cx},${y1}`}
           fill={fill}
           stroke={BORDER_COLOR}
@@ -812,25 +828,30 @@ function Board({
   }
 
   return (
-    <div className="board-container">
+    <div
+      className="board-container"
+      data-theme={themeId}
+      data-checker={checkerId}
+    >
       <svg
         className="board-svg"
         viewBox={`0 0 ${BOARD_WIDTH} ${BOARD_HEIGHT}`}
       >
         <defs>
-          {/* White glass checker gradient */}
+          {/* White glass checker gradient — stops reference CSS vars so
+              checker styles can override them via `[data-checker=...]`. */}
           <radialGradient id="glass-white" cx="40%" cy="35%" r="60%">
-            <stop offset="0%" stopColor="#ffffff" stopOpacity={0.95} />
-            <stop offset="40%" stopColor="#f0e6d3" stopOpacity={0.7} />
-            <stop offset="75%" stopColor="#d4c4a8" stopOpacity={0.55} />
-            <stop offset="100%" stopColor="#b8a88a" stopOpacity={0.45} />
+            <stop className="checker-white-stop-0" offset="0%" stopColor="#ffffff" stopOpacity={0.95} />
+            <stop className="checker-white-stop-1" offset="40%" stopColor="#f0e6d3" stopOpacity={0.7} />
+            <stop className="checker-white-stop-2" offset="75%" stopColor="#d4c4a8" stopOpacity={0.55} />
+            <stop className="checker-white-stop-3" offset="100%" stopColor="#b8a88a" stopOpacity={0.45} />
           </radialGradient>
           {/* Black glass checker gradient */}
           <radialGradient id="glass-black" cx="40%" cy="35%" r="60%">
-            <stop offset="0%" stopColor="#888888" stopOpacity={0.85} />
-            <stop offset="40%" stopColor="#4a4a4a" stopOpacity={0.65} />
-            <stop offset="75%" stopColor="#2b2b2b" stopOpacity={0.55} />
-            <stop offset="100%" stopColor="#1a1a1a" stopOpacity={0.5} />
+            <stop className="checker-black-stop-0" offset="0%" stopColor="#888888" stopOpacity={0.85} />
+            <stop className="checker-black-stop-1" offset="40%" stopColor="#4a4a4a" stopOpacity={0.65} />
+            <stop className="checker-black-stop-2" offset="75%" stopColor="#2b2b2b" stopOpacity={0.55} />
+            <stop className="checker-black-stop-3" offset="100%" stopColor="#1a1a1a" stopOpacity={0.5} />
           </radialGradient>
           {/* Specular highlight for glass */}
           <radialGradient id="glass-shine" cx="35%" cy="30%" r="35%">
@@ -856,6 +877,7 @@ function Board({
 
         {/* Board background - total width is always the same regardless of orientation */}
         <rect
+          className="board-bg"
           x={MARGIN}
           y={MARGIN}
           width={BEAROFF_WIDTH + 12 * POINT_WIDTH + BAR_WIDTH}
@@ -868,6 +890,7 @@ function Board({
 
         {/* Bar */}
         <rect
+          className="board-bar"
           x={layout.barX}
           y={MARGIN}
           width={BAR_WIDTH}
@@ -879,6 +902,7 @@ function Board({
 
         {/* Bear-off trough */}
         <rect
+          className="board-bearoff"
           x={layout.bearoffX}
           y={MARGIN}
           width={BEAROFF_WIDTH}

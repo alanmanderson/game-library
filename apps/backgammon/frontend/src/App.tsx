@@ -85,7 +85,7 @@ function App() {
           path="/"
           element={
             player ? (
-              <Home player={player} />
+              <Home player={player} onPlayerUpdate={handleAuthenticated} />
             ) : (
               <div className="landing">
                 <h1>Backgammon Online</h1>

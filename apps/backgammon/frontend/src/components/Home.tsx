@@ -6,22 +6,26 @@ import Dashboard from "./Dashboard";
 import Lobby from "./Lobby";
 import Leaderboard from "./Leaderboard";
 import { TournamentList } from "./Tournament";
+import Cosmetics from "./Cosmetics";
 import "./styles/Home.css";
 
 interface HomeProps {
   player: Player;
+  /** Optional callback invoked when the player's profile (e.g. cosmetics) is updated. */
+  onPlayerUpdate?: (p: Player) => void;
 }
 
-type HomeTab = "lobby" | "dashboard" | "leaderboard" | "tournaments";
+type HomeTab = "lobby" | "dashboard" | "leaderboard" | "tournaments" | "settings";
 
 const TAB_LABELS: Record<HomeTab, string> = {
   lobby: "Lobby",
   dashboard: "Dashboard",
   leaderboard: "Leaderboard",
   tournaments: "Tournaments",
+  settings: "Settings",
 };
 
-function Home({ player }: HomeProps) {
+function Home({ player, onPlayerUpdate }: HomeProps) {
   const navigate = useNavigate();
   const [joinTableId, setJoinTableId] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -221,7 +225,7 @@ function Home({ player }: HomeProps) {
         {/* Right: Tabbed Content */}
         <div className="content-panel">
           <div className="content-tabs" role="tablist">
-            {(["lobby", "dashboard", "leaderboard", "tournaments"] as HomeTab[]).map((tab) => (
+            {(["lobby", "dashboard", "leaderboard", "tournaments", "settings"] as HomeTab[]).map((tab) => (
               <button
                 key={tab}
                 role="tab"
@@ -262,6 +266,9 @@ function Home({ player }: HomeProps) {
             )}
             {activeTab === "tournaments" && (
               <TournamentList player={player} embedded />
+            )}
+            {activeTab === "settings" && (
+              <Cosmetics player={player} onPlayerUpdate={onPlayerUpdate} />
             )}
           </div>
         </div>

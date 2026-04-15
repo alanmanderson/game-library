@@ -7,6 +7,7 @@
 
 import type {
   Player,
+  PlayerPreferencesUpdate,
   Table,
   LobbyTable,
   ActiveGame,
@@ -157,6 +158,16 @@ export function getPlayerStats(playerId: string): Promise<StatsOverview> {
 /** Fetch the player's dashboard with game history and stats. */
 export function getPlayerDashboard(playerId: string): Promise<DashboardData> {
   return request<DashboardData>(`/api/players/${playerId}/dashboard`);
+}
+
+/** Persist the authenticated player's cosmetic preferences. */
+export function updateMyPreferences(
+  prefs: PlayerPreferencesUpdate,
+): Promise<Player> {
+  return request<Player>("/api/players/me/preferences", {
+    method: "PATCH",
+    body: JSON.stringify(prefs),
+  });
 }
 
 /** Fetch advanced per-player stats (gammon/backgammon rates, cube, rating history). */

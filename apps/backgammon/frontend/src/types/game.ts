@@ -33,6 +33,16 @@ export interface Player {
   auth_provider?: string;
   rating?: number;
   rating_games?: number;
+  /** Cosmetic preference: board theme ID (see `constants/themes.ts`). */
+  board_theme?: string;
+  /** Cosmetic preference: checker style ID (see `constants/themes.ts`). */
+  checker_style?: string;
+}
+
+/** Partial update payload for PATCH /api/players/me/preferences. */
+export interface PlayerPreferencesUpdate {
+  board_theme?: string;
+  checker_style?: string;
 }
 
 /** Response from auth endpoints (register, login, google, guest). */
