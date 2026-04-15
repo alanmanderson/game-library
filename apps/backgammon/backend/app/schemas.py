@@ -298,6 +298,8 @@ class ReplayMoveRecord(BaseModel):
 class ReplayResponse(BaseModel):
     table_id: str
     status: str
+    white_player_id: Optional[str] = None
+    black_player_id: Optional[str] = None
     white_player_nickname: Optional[str] = None
     black_player_nickname: Optional[str] = None
     winner_color: Optional[str] = None  # "white" | "black" | None

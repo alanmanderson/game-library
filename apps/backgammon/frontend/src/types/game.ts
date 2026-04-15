@@ -213,6 +213,8 @@ export interface ReplayMoveRecord {
 export interface ReplayData {
   table_id: string;
   status: string;
+  white_player_id?: string | null;
+  black_player_id?: string | null;
   white_player_nickname: string | null;
   black_player_nickname: string | null;
   winner_color?: "white" | "black" | null;

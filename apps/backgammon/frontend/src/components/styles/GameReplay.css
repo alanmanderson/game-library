@@ -108,9 +108,57 @@
 
 /* Board wrapper */
 .replay-board-wrapper {
+  position: relative;
   width: 100%;
   max-width: 860px;
   pointer-events: none; /* read-only */
+}
+
+/* Engine analysis indicator overlaid on the board's centre bar. */
+.replay-board-analysis {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 10px;
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.replay-board-analysis-quality {
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+}
+
+.replay-board-analysis-prob {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary, #9a9ab0);
+}
+
+.replay-board-analysis--best { color: #2ecc71; border-color: rgba(46, 204, 113, 0.5); }
+.replay-board-analysis--good { color: #78c8ff; border-color: rgba(120, 200, 255, 0.5); }
+.replay-board-analysis--inaccuracy { color: #f1c40f; border-color: rgba(241, 196, 15, 0.5); }
+.replay-board-analysis--mistake { color: #e67e22; border-color: rgba(230, 126, 34, 0.5); }
+.replay-board-analysis--blunder { color: #e74c3c; border-color: rgba(231, 76, 60, 0.55); }
+
+@media (max-width: 768px) {
+  .replay-board-analysis {
+    padding: 0.3rem 0.55rem;
+  }
+  .replay-board-analysis-quality { font-size: 0.8rem; }
+  .replay-board-analysis-prob { font-size: 0.7rem; }
 }
 
 /* Move info bar */

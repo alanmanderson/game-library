@@ -711,6 +711,8 @@ async def get_game_replay(
     return ReplayResponse(
         table_id=table_id,
         status=table.status,
+        white_player_id=table.white_player_id,
+        black_player_id=table.black_player_id,
         white_player_nickname=white_nickname,
         black_player_nickname=black_nickname,
         winner_color=winner_color,

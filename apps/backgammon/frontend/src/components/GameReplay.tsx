@@ -24,7 +24,20 @@ import type {
 } from "../types/game";
 import { getAnalysis, getReplay } from "../services/api";
 import Board from "./Board";
+import { STORAGE_KEY } from "../constants";
 import "./styles/GameReplay.css";
+
+/** Read the logged-in player from localStorage, if present. */
+function readStoredPlayerId(): string | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return typeof parsed?.id === "string" ? parsed.id : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Display label for each move-quality level.
@@ -328,11 +341,8 @@ function GameReplay() {
     }
   }, [autoPlaying, moveIndex, totalMoves, stopAutoPlay]);
 
-  const handleToggleAnalysis = useCallback(async () => {
-    // Toggle visibility; fetch the first time we open it.
-    const next = !analysisOpen;
-    setAnalysisOpen(next);
-    if (!next || analysis || !tableId) return;
+  const fetchAnalysis = useCallback(async () => {
+    if (analysis || !tableId) return;
     setAnalysisLoading(true);
     setAnalysisError(null);
     try {
@@ -345,7 +355,20 @@ function GameReplay() {
     } finally {
       setAnalysisLoading(false);
     }
-  }, [analysisOpen, analysis, tableId]);
+  }, [analysis, tableId]);
+
+  // Fetch analysis as soon as the replay loads so the on-board quality
+  // indicator is available without requiring the user to open the panel.
+  useEffect(() => {
+    if (!replayData) return;
+    fetchAnalysis();
+  }, [replayData, fetchAnalysis]);
+
+  const handleToggleAnalysis = useCallback(async () => {
+    const next = !analysisOpen;
+    setAnalysisOpen(next);
+    if (next) await fetchAnalysis();
+  }, [analysisOpen, fetchAnalysis]);
 
   /** Top-3 key moments: moves with the largest equity_loss. */
   const keyMoments = useMemo<MoveAnalysis[]>(() => {
@@ -372,6 +395,28 @@ function GameReplay() {
     }
     return null;
   }, [analysis]);
+
+  // Orient the board to the logged-in player's perspective when they were
+  // one of the two seats. Fall back to white for spectators/unauthed viewers.
+  const storedPlayerId = useMemo(() => readStoredPlayerId(), []);
+  const viewColor: "white" | "black" =
+    storedPlayerId && replayData?.black_player_id === storedPlayerId
+      ? "black"
+      : "white";
+
+  // Analysis entry for the move we just reached (moveIndex === move_number).
+  const currentAnalysis = useMemo<MoveAnalysis | null>(() => {
+    if (!analysis || moveIndex === 0) return null;
+    return (
+      analysis.move_analyses.find((m) => m.move_number === moveIndex) ?? null
+    );
+  }, [analysis, moveIndex]);
+
+  const currentWinPct = currentAnalysis
+    ? formatPct(
+        currentAnalysis.chosen_win_prob ?? currentAnalysis.chosen_probs?.win,
+      )
+    : null;
 
   const toggleMoveDetails = useCallback((moveNumber: number) => {
     setExpandedMoves((prev) => {
@@ -445,9 +490,6 @@ function GameReplay() {
       ? "white"
       : "black";
 
-  // Use white perspective by default (board flips with myColor)
-  const viewColor = "white";
-
   const cubeValue = displayState.cube_value ?? 1;
   const cubeOwner = displayState.cube_owner ?? null;
 
@@ -499,6 +541,22 @@ function GameReplay() {
           cubeValue={cubeValue}
           cubeOwner={cubeOwner}
         />
+        {currentAnalysis && (
+          <div
+            className={`replay-board-analysis replay-board-analysis--${QUALITY_CSS_CLASS[currentAnalysis.quality]}`}
+            role="status"
+            aria-live="polite"
+          >
+            <span className="replay-board-analysis-quality">
+              {QUALITY_LABEL[currentAnalysis.quality]}
+            </span>
+            {currentWinPct && (
+              <span className="replay-board-analysis-prob">
+                {currentWinPct} win
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Current move info */}
