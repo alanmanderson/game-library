@@ -60,6 +60,13 @@ class TestAdvancedStatsContent:
             "accepted": 0,
             "declined": 0,
             "accept_rate": 0.0,
+            "accuracy": None,
+            "by_verdict": {
+                "best": 0,
+                "borderline": 0,
+                "mistake": 0,
+                "blunder": 0,
+            },
         }
         assert data["rating_history"] == []
 

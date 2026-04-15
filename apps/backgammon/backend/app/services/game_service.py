@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
-from app.models import Table, MoveRecord, Player
+from app.models import Table, MoveRecord, Player, CubeActionRecord
 from app.game_engine import (
     BackgammonEngine, Color, DiceRoll, Move, GameStatus, WinType,
 )
@@ -42,6 +42,55 @@ async def _increment_cube_counter(
     if not player:
         return
     setattr(player, field, (getattr(player, field) or 0) + 1)
+
+
+async def _record_cube_action(
+    db: AsyncSession,
+    table_id: str,
+    player_id: str,
+    action: str,
+    engine,
+    color,
+    cube_value_before: int,
+) -> None:
+    """Persist a CubeActionRecord with ML-evaluated equity + verdict.
+
+    Runs the ML equity evaluation before any state mutation so the
+    verdict reflects the position as-offered / as-considered. Any ML
+    failure leaves ``equity_before/correct/verdict`` NULL and still writes
+    the row so the aggregate counts stay consistent with the Player cube
+    counters. Skipped for the bot player.
+    """
+    from app.services.bot_service import BOT_PLAYER_ID
+    from app.services.cube_analysis import (
+        evaluate_cube_equity,
+        classify_cube_action,
+    )
+
+    if not player_id or player_id == BOT_PLAYER_ID:
+        return
+
+    equity: float | None = None
+    verdict: str | None = None
+    correct: bool | None = None
+    try:
+        equity = evaluate_cube_equity(engine, color)
+        if equity is not None:
+            verdict, correct = classify_cube_action(action, equity)
+    except Exception as exc:  # Defensive: never fail the cube action
+        logger.warning("Cube-action scoring failed for %s: %s", action, exc)
+
+    db.add(
+        CubeActionRecord(
+            table_id=table_id,
+            player_id=player_id,
+            action=action,
+            cube_value_before=cube_value_before,
+            equity_before=equity,
+            correct=correct,
+            verdict=verdict,
+        )
+    )
 
 
 class GameManager:
@@ -645,12 +694,17 @@ class GameManager:
         color = self.get_player_color(table_id, player_id)
         if not color:
             raise ValueError("Not a player at this table")
+        # Snapshot cube value + evaluate equity BEFORE the engine mutates.
+        cube_value_before = engine.state.cube_value
         if not engine.offer_double(color):
             raise ValueError("Cannot double now")
         table = await db.get(Table, table_id)
         if table:
             table.game_state = engine.get_state_snapshot()
         await _increment_cube_counter(db, player_id, "cube_offers")
+        await _record_cube_action(
+            db, table_id, player_id, "offer", engine, color, cube_value_before
+        )
         return True
 
     async def accept_double(self, db: AsyncSession, table_id: str, player_id: str) -> bool:
@@ -661,12 +715,18 @@ class GameManager:
         color = self.get_player_color(table_id, player_id)
         if not color:
             raise ValueError("Not a player at this table")
+        # Pre-action snapshot: cube value is the value BEFORE it doubles
+        # (i.e. what the taker is considering taking from).
+        cube_value_before = engine.state.cube_value
         if not engine.accept_double(color):
             raise ValueError("No double to accept")
         table = await db.get(Table, table_id)
         if table:
             table.game_state = engine.get_state_snapshot()
         await _increment_cube_counter(db, player_id, "cube_accepts")
+        await _record_cube_action(
+            db, table_id, player_id, "accept", engine, color, cube_value_before
+        )
         return True
 
     async def decline_double(self, db: AsyncSession, table_id: str, player_id: str) -> dict:
@@ -677,6 +737,13 @@ class GameManager:
         color = self.get_player_color(table_id, player_id)
         if not color:
             raise ValueError("Not a player at this table")
+        cube_value_before = engine.state.cube_value
+        # Evaluate equity BEFORE _finish_game mutates engine state.
+        from app.services.cube_analysis import (
+            evaluate_cube_equity,
+            classify_cube_action,
+        )
+        equity = evaluate_cube_equity(engine, color)
         success, winner = engine.decline_double(color)
         if not success:
             raise ValueError("No double to decline")
@@ -685,6 +752,30 @@ class GameManager:
         if table:
             table.game_state = engine.get_state_snapshot()
         await _increment_cube_counter(db, player_id, "cube_declines")
+        # Persist the CubeActionRecord using the pre-decline equity we
+        # captured above. We inline the write here (rather than calling
+        # _record_cube_action) so the post-finish engine state doesn't
+        # feed the ML model.
+        from app.services.bot_service import BOT_PLAYER_ID
+        if player_id and player_id != BOT_PLAYER_ID:
+            verdict: str | None = None
+            correct: bool | None = None
+            if equity is not None:
+                try:
+                    verdict, correct = classify_cube_action("decline", equity)
+                except Exception as exc:  # Defensive
+                    logger.warning("Decline scoring failed: %s", exc)
+            db.add(
+                CubeActionRecord(
+                    table_id=table_id,
+                    player_id=player_id,
+                    action="decline",
+                    cube_value_before=cube_value_before,
+                    equity_before=equity,
+                    correct=correct,
+                    verdict=verdict,
+                )
+            )
         return {"winner": winner.value if winner else None}
 
     async def undo_turn(self, db: AsyncSession, table_id: str, player_id: str) -> bool:

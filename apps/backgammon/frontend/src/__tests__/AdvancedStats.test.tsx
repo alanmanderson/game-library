@@ -36,6 +36,13 @@ const sampleStats: AdvancedStatsData = {
     accepted: 3,
     declined: 2,
     accept_rate: 60.0,
+    accuracy: 75.0,
+    by_verdict: {
+      best: 6,
+      borderline: 1,
+      mistake: 1,
+      blunder: 0,
+    },
   },
   rating_history: [
     { played_at: "2026-01-01T00:00:00", rating_after: 1500, rating_change: 0 },
@@ -135,6 +142,43 @@ describe("AdvancedStats – rating graph", () => {
       expect(
         screen.getByText(/Play a rated match to start building/i),
       ).toBeInTheDocument();
+    });
+  });
+});
+
+describe("AdvancedStats – cube decision accuracy", () => {
+  it("renders the cube accuracy card and verdict breakdown chips", async () => {
+    vi.mocked(api.getPlayerAdvancedStats).mockResolvedValue(sampleStats);
+    render(<AdvancedStats playerId="p1" />);
+    await waitFor(() => {
+      expect(screen.getByText("Cube Decision Accuracy")).toBeInTheDocument();
+      expect(screen.getByText("Cube Decision Breakdown")).toBeInTheDocument();
+      // Chip labels
+      expect(screen.getByText("Best")).toBeInTheDocument();
+      expect(screen.getByText("Borderline")).toBeInTheDocument();
+      expect(screen.getByText("Mistake")).toBeInTheDocument();
+      expect(screen.getByText("Blunder")).toBeInTheDocument();
+      // Chip values for best/borderline/mistake/blunder.
+      expect(screen.getAllByText("6").length).toBeGreaterThan(0);
+    });
+  });
+
+  it("shows a 'Not enough data yet' hint when accuracy is null", async () => {
+    vi.mocked(api.getPlayerAdvancedStats).mockResolvedValue({
+      ...sampleStats,
+      cube_stats: {
+        ...sampleStats.cube_stats,
+        accuracy: null,
+        by_verdict: { best: 0, borderline: 0, mistake: 0, blunder: 0 },
+      },
+    });
+    render(<AdvancedStats playerId="p1" />);
+    await waitFor(() => {
+      expect(screen.getByText(/Not enough data yet/i)).toBeInTheDocument();
+      // The verdict chips section should NOT render in the null case.
+      expect(
+        screen.queryByText("Cube Decision Breakdown"),
+      ).not.toBeInTheDocument();
     });
   });
 });

@@ -8,6 +8,7 @@ from sqlalchemy import (
     CheckConstraint,
     Column,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     JSON,
@@ -440,4 +441,53 @@ class PlayerChallenge(Base):
             f"challenge_id={self.challenge_id!r}, "
             f"period_key={self.period_key!r}, "
             f"progress={self.progress!r})>"
+        )
+
+
+
+class CubeActionRecord(Base):
+    """Per-action record of a cube decision (offer / accept / decline).
+
+    Captures the acting player, the cube value before the action, and the
+    ML-evaluated equity in the acting player's perspective just before the
+    action. A classification (``verdict`` plus ``correct`` boolean) is
+    derived at record time from standard cube-theory equity thresholds so
+    that aggregate accuracy can be computed with a simple COUNT query on
+    :meth:`app.services.stats_service.get_advanced_stats`.
+
+    When the ML model is unavailable (or encoding fails), the row is still
+    persisted with ``equity_before``, ``correct``, and ``verdict`` set to
+    NULL so that raw cube-action counts stay consistent with the Player
+    counter columns.
+    """
+
+    __tablename__ = "cube_action_records"
+
+    id: int = Column(Integer, primary_key=True, autoincrement=True)
+    table_id: str | None = Column(
+        String(8), ForeignKey("tables.id", ondelete="SET NULL"), nullable=True
+    )
+    player_id: str = Column(
+        String(36),
+        ForeignKey("players.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    action: str = Column(String(16), nullable=False)  # "offer" | "accept" | "decline"
+    cube_value_before: int = Column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    equity_before: float | None = Column(Float, nullable=True)
+    correct: bool | None = Column(Boolean, nullable=True)
+    verdict: str | None = Column(String(16), nullable=True)
+    created_at: datetime = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<CubeActionRecord(player_id={self.player_id!r}, "
+            f"action={self.action!r}, verdict={self.verdict!r})>"
         )

@@ -217,7 +217,60 @@ function AdvancedStats({ playerId }: AdvancedStatsProps) {
             {data.cube_stats.declined} dropped
           </div>
         </div>
+        <div className="adv-stat-card">
+          <div className="adv-stat-value adv-stat-accent">
+            {data.cube_stats.accuracy === null
+              ? "—"
+              : pct(data.cube_stats.accuracy)}
+          </div>
+          <div className="adv-stat-label">Cube Decision Accuracy</div>
+          <div className="adv-stat-sub">
+            {data.cube_stats.accuracy === null ? (
+              <>Not enough data yet</>
+            ) : (
+              <>
+                {data.cube_stats.by_verdict.best} best ·{" "}
+                {data.cube_stats.by_verdict.borderline} borderline ·{" "}
+                {data.cube_stats.by_verdict.mistake} mistake ·{" "}
+                {data.cube_stats.by_verdict.blunder} blunder
+              </>
+            )}
+          </div>
+        </div>
       </div>
+
+      {/* Cube verdict breakdown chips */}
+      {data.cube_stats.accuracy !== null && (
+        <section className="adv-section">
+          <h3 className="adv-section-title">Cube Decision Breakdown</h3>
+          <div className="adv-cube-chips">
+            <span className="adv-cube-chip adv-cube-chip--best">
+              <span className="adv-cube-chip-label">Best</span>
+              <span className="adv-cube-chip-value">
+                {data.cube_stats.by_verdict.best}
+              </span>
+            </span>
+            <span className="adv-cube-chip adv-cube-chip--borderline">
+              <span className="adv-cube-chip-label">Borderline</span>
+              <span className="adv-cube-chip-value">
+                {data.cube_stats.by_verdict.borderline}
+              </span>
+            </span>
+            <span className="adv-cube-chip adv-cube-chip--mistake">
+              <span className="adv-cube-chip-label">Mistake</span>
+              <span className="adv-cube-chip-value">
+                {data.cube_stats.by_verdict.mistake}
+              </span>
+            </span>
+            <span className="adv-cube-chip adv-cube-chip--blunder">
+              <span className="adv-cube-chip-label">Blunder</span>
+              <span className="adv-cube-chip-value">
+                {data.cube_stats.by_verdict.blunder}
+              </span>
+            </span>
+          </div>
+        </section>
+      )}
 
       {/* Win rate by color */}
       <section className="adv-section">

@@ -352,12 +352,21 @@ export interface ColorWinRate {
   win_rate: number;
 }
 
-/** Cube action counters and derived accept rate. */
+/** Cube action counters and ML-derived decision accuracy. */
 export interface CubeStats {
   offered: number;
   accepted: number;
   declined: number;
   accept_rate: number;
+  /** Percent of scored cube actions that match the ML-optimal decision. */
+  accuracy: number | null;
+  /** Count of cube actions by verdict class. */
+  by_verdict: {
+    best: number;
+    borderline: number;
+    mistake: number;
+    blunder: number;
+  };
 }
 
 /** One data point on the player's ELO rating graph. */

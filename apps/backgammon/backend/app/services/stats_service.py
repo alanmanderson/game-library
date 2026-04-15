@@ -5,7 +5,7 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
 
-from app.models import PlayerStats, Player, Table, RatingHistory
+from app.models import PlayerStats, Player, Table, RatingHistory, CubeActionRecord
 from app.game_engine import WinType
 
 
@@ -201,6 +201,23 @@ async def get_advanced_stats(db: AsyncSession, player_id: str) -> dict:
     accept_denom = cube_accepts + cube_declines
     accept_rate = (cube_accepts / accept_denom * 100.0) if accept_denom > 0 else 0.0
 
+    # Cube-decision accuracy from the per-action record table.
+    cube_rows_result = await db.execute(
+        select(CubeActionRecord).where(CubeActionRecord.player_id == player_id)
+    )
+    cube_rows = cube_rows_result.scalars().all()
+    by_verdict = {"best": 0, "borderline": 0, "mistake": 0, "blunder": 0}
+    scored = 0
+    correct_count = 0
+    for r in cube_rows:
+        if r.verdict in by_verdict:
+            by_verdict[r.verdict] += 1
+        if r.correct is not None:
+            scored += 1
+            if r.correct:
+                correct_count += 1
+    cube_accuracy = (correct_count / scored * 100.0) if scored > 0 else None
+
     # Rating history, chronological.
     rh_result = await db.execute(
         select(RatingHistory)
@@ -242,6 +259,8 @@ async def get_advanced_stats(db: AsyncSession, player_id: str) -> dict:
             "accepted": cube_accepts,
             "declined": cube_declines,
             "accept_rate": accept_rate,
+            "accuracy": cube_accuracy,
+            "by_verdict": by_verdict,
         },
         "rating_history": rating_history,
     }

@@ -178,6 +178,73 @@
 }
 
 /* ------------------------------------------------------------------
+   Cube decision verdict chips
+   ------------------------------------------------------------------ */
+
+.adv-cube-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.adv-cube-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  background: var(--bg-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+.adv-cube-chip-label {
+  color: var(--text-secondary);
+}
+
+.adv-cube-chip-value {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.adv-cube-chip--best {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.adv-cube-chip--best .adv-cube-chip-value {
+  color: var(--success);
+}
+
+.adv-cube-chip--borderline {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.adv-cube-chip--borderline .adv-cube-chip-value {
+  color: var(--accent);
+}
+
+.adv-cube-chip--mistake {
+  border-color: #e67e22;
+  color: #e67e22;
+}
+
+.adv-cube-chip--mistake .adv-cube-chip-value {
+  color: #e67e22;
+}
+
+.adv-cube-chip--blunder {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.adv-cube-chip--blunder .adv-cube-chip-value {
+  color: var(--danger);
+}
+
+/* ------------------------------------------------------------------
    Responsive
    ------------------------------------------------------------------ */
 

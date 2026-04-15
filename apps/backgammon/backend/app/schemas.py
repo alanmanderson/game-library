@@ -256,8 +256,18 @@ class CubeStats(BaseModel):
     accepted: int
     declined: int
     accept_rate: float  # accepted / (accepted + declined)
-    # NOTE: "cube decision accuracy" (offers/takes vs ML-optimal equity) is not
-    # yet computed. Raw counts are a meaningful first step.
+    # Cube-decision accuracy (offers/takes/drops vs ML-optimal equity).
+    # `accuracy` is the fraction of scored actions classified as the
+    # best decision, as a percentage (0–100). `None` when no actions
+    # have been scored yet (e.g. ML model not loaded, or no cube use).
+    accuracy: float | None = None
+    # Count of actions by verdict: best / borderline / mistake / blunder.
+    by_verdict: dict[str, int] = {
+        "best": 0,
+        "borderline": 0,
+        "mistake": 0,
+        "blunder": 0,
+    }
 
 
 class RatingHistoryPoint(BaseModel):
