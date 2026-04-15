@@ -11,6 +11,8 @@ from app.api.auth import router as auth_router
 from app.api.games import router as games_router
 from app.config import settings
 from app.websocket.background import maintenance_loop
+from app.websocket.broker import RedisBroker
+from app.websocket.connection_manager import manager
 from app.websocket.routes import router as ws_router
 
 logger = logging.getLogger(__name__)
@@ -18,6 +20,14 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    broker: RedisBroker | None = None
+    if settings.redis_url:
+        broker = RedisBroker(settings.redis_url, manager.deliver_remote)
+        manager.set_broker(broker)
+        logger.info("Redis broker enabled for WS fan-out (url=%s)", settings.redis_url)
+    else:
+        logger.info("REDIS_URL unset — WebSocket fan-out is in-process only")
+
     task = asyncio.create_task(maintenance_loop(), name="ws_maintenance")
     try:
         yield
@@ -27,6 +37,9 @@ async def lifespan(app: FastAPI):
             await task
         except (asyncio.CancelledError, Exception):
             pass
+        if broker is not None:
+            manager.set_broker(None)
+            await broker.close()
 
 
 app = FastAPI(title="Pinochle API", lifespan=lifespan)

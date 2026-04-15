@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     # How often an authenticated WebSocket re-checks its JWT. A connection that
     # stays open longer than its token lifetime gets closed at the next tick.
     ws_jwt_revalidate_seconds: int = 60
+    # Optional — when set, WebSocket room events are published to Redis so
+    # multiple app instances (workers/containers) share fan-out. Unset =
+    # in-process-only broadcast (fine for single-instance dev/test).
+    redis_url: str = ""
 
     @model_validator(mode="after")
     def _warn_default_secret(self) -> "Settings":

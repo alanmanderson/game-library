@@ -5,6 +5,8 @@ services:
     env_file: .env
     expose:
       - "8000"
+    depends_on:
+      - redis
 
   caddy:
     image: caddy:2-alpine
@@ -20,6 +22,17 @@ services:
     env_file: .env
     depends_on:
       - fastapi
+
+  # Pub/sub bus for multi-instance WebSocket fan-out.
+  # Point FastAPI at it by setting REDIS_URL=redis://redis:6379/0 in .env.
+  # Leaving REDIS_URL unset keeps the server in single-instance in-process
+  # broadcast mode — the Redis container still runs but is ignored.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    expose:
+      - "6379"
 
 volumes:
   caddy_data:

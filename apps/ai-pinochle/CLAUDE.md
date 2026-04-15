@@ -158,6 +158,16 @@ ssh -i ~/.ssh/id_ed25519 azureuser@20.151.4.179 \
   "cd /opt/pinochle && docker build -t pinochle-server:latest . && docker compose up -d"
 ```
 
+## Redis for WebSocket fan-out
+
+The server supports horizontal scaling via an optional Redis pub/sub broker
+(`server/app/websocket/broker.py`). When `REDIS_URL` is set (e.g.
+`redis://redis:6379/0`), every room broadcast is published to Redis and
+delivered to other app instances that have local subscribers in the same
+room; ref-counted SUBSCRIBE/UNSUBSCRIBE means only active rooms incur
+traffic. When `REDIS_URL` is unset the server falls back to in-process
+broadcast — tests and local dev don't require Redis.
+
 ## Pinochle Rules Reference
 
 This game implements **4-player partnership Pinochle** (North/South vs East/West). Standard double-deck: 48 cards (two copies each of 9, 10, J, Q, K, A in all four suits). See `docs/RULES.md` for full rules and `docs/design.md` Section 3 for meld values, scoring, and legal card rules as implemented.
