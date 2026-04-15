@@ -210,7 +210,7 @@ class GameManager:
     # Table lifecycle
     # ------------------------------------------------------------------
 
-    async def create_table(self, db: AsyncSession, player_id: str, preferred_color: Optional[str] = None, match_points: int = 5, is_public: bool = False, time_control: str = "unlimited") -> Table:
+    async def create_table(self, db: AsyncSession, player_id: str, preferred_color: Optional[str] = None, match_points: int = 5, is_public: bool = False, time_control: str = "unlimited", is_ranked: bool = True) -> Table:
         """Create a new table. The creating player is assigned based on preferred_color."""
         table_id = self.generate_table_id()
 
@@ -220,9 +220,9 @@ class GameManager:
         total_time_ms, _increment_ms = TIME_CONTROL_PRESETS[time_control]
 
         if preferred_color == "black":
-            table = Table(id=table_id, black_player_id=player_id, status="waiting", match_points=match_points, is_public=is_public, time_control=time_control)
+            table = Table(id=table_id, black_player_id=player_id, status="waiting", match_points=match_points, is_public=is_public, time_control=time_control, is_ranked=is_ranked)
         else:
-            table = Table(id=table_id, white_player_id=player_id, status="waiting", match_points=match_points, is_public=is_public, time_control=time_control)
+            table = Table(id=table_id, white_player_id=player_id, status="waiting", match_points=match_points, is_public=is_public, time_control=time_control, is_ranked=is_ranked)
 
         # Initialize time banks if timed game
         if total_time_ms is not None:
@@ -833,8 +833,8 @@ class GameManager:
             cube_value=engine.state.cube_value,
         )
 
-        # Update ELO ratings (only for match completion between registered players)
-        if match_over and table.winner_id:
+        # Update ELO ratings (only for ranked matches between registered players)
+        if match_over and table.winner_id and table.is_ranked:
             loser_id = (
                 table.black_player_id
                 if table.winner_id == table.white_player_id

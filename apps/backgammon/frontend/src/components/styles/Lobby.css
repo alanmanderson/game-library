@@ -201,6 +201,21 @@
   font-size: 0.75rem;
 }
 
+.lobby-casual-badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--text-secondary);
+  border-radius: 999px;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
 /* Embedded mode (inside tab panel) */
 
 .lobby--embedded {

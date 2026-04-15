@@ -36,26 +36,28 @@ function Home({ player, onPlayerUpdate }: HomeProps) {
   const [matchPoints, setMatchPoints] = useState(5);
   const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>("hard");
   const [timeControl, setTimeControl] = useState<TimeControl>("unlimited");
+  const [isRanked, setIsRanked] = useState(true);
   const [activeTab, setActiveTab] = useState<HomeTab>("lobby");
 
   const handleCreateTable = useCallback(async () => {
     setCreatingTable(true);
     setError(null);
     try {
-      const table = await createTable(player.id, preferredColor, matchPoints, false, timeControl);
+      const table = await createTable(player.id, preferredColor, matchPoints, false, timeControl, isRanked);
       navigate(`/game/${table.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create table.");
     } finally {
       setCreatingTable(false);
     }
-  }, [player.id, navigate, preferredColor, matchPoints, timeControl]);
+  }, [player.id, navigate, preferredColor, matchPoints, timeControl, isRanked]);
 
   const handlePlayBot = useCallback(async () => {
     setCreatingBotGame(true);
     setError(null);
     try {
-      const table = await createTable(player.id, preferredColor, matchPoints, false, timeControl);
+      // Bot games never affect ELO, so isRanked is always false for bot games.
+      const table = await createTable(player.id, preferredColor, matchPoints, false, timeControl, false);
       await inviteBot(table.id, botDifficulty);
       navigate(`/game/${table.id}`);
     } catch (err) {
@@ -168,6 +170,27 @@ function Home({ player, onPlayerUpdate }: HomeProps) {
               </div>
             </div>
 
+            {/* Ranked vs Casual — only affects human-vs-human games. */}
+            <div className="config-row">
+              <span className="config-label">Mode</span>
+              <div className="config-pill-bar">
+                <button
+                  className={`config-pill-option${isRanked ? " selected" : ""}`}
+                  onClick={() => setIsRanked(true)}
+                  title="Updates your ELO rating"
+                >
+                  Ranked
+                </button>
+                <button
+                  className={`config-pill-option${!isRanked ? " selected" : ""}`}
+                  onClick={() => setIsRanked(false)}
+                  title="No rating changes"
+                >
+                  Casual
+                </button>
+              </div>
+            </div>
+
             {/* Bot Difficulty */}
             <div className="config-row">
               <span className="config-label">Bot level</span>
@@ -245,6 +268,7 @@ function Home({ player, onPlayerUpdate }: HomeProps) {
                 onBack={() => {}}
                 preferredColor={preferredColor}
                 matchPoints={matchPoints}
+                isRanked={isRanked}
                 embedded
               />
             )}

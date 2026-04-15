@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import type { DashboardData, GameHistoryItem } from "../types/game";
 import { getPlayerDashboard, exportGame } from "../services/api";
+import { TIER_COLORS, tierForRating, type Tier } from "../constants/tiers";
 import AdvancedStats from "./AdvancedStats";
 import "./styles/Dashboard.css";
 
@@ -150,13 +151,30 @@ function Dashboard({ playerId }: DashboardProps) {
     return <div className="dashboard-empty">No games played yet.</div>;
   }
 
+  const tier = (data.tier ?? tierForRating(data.rating)) as Tier;
+
   return (
     <div className="dashboard">
+      {data.active_season && (
+        <div className="dashboard-season-banner">
+          <span className="dashboard-season-label">Current Season</span>
+          <span className="dashboard-season-name">{data.active_season.name}</span>
+        </div>
+      )}
+
       {/* Summary stat cards */}
       <div className="dashboard-overview">
         <div className="stat-card">
           <div className="stat-value dashboard-rating">{data.rating}</div>
-          <div className="stat-label">Rating</div>
+          <div className="stat-label">
+            Rating
+            <span
+              className="dashboard-tier-badge"
+              style={{ color: TIER_COLORS[tier], borderColor: TIER_COLORS[tier] }}
+            >
+              {tier}
+            </span>
+          </div>
         </div>
         <div className="stat-card">
           <div className="stat-value">{data.total_games}</div>

@@ -9,10 +9,11 @@ interface LobbyProps {
   onBack: () => void;
   preferredColor?: string;
   matchPoints: number;
+  isRanked?: boolean;
   embedded?: boolean;
 }
 
-function Lobby({ player, onBack, preferredColor, matchPoints, embedded }: LobbyProps) {
+function Lobby({ player, onBack, preferredColor, matchPoints, isRanked = true, embedded }: LobbyProps) {
   const navigate = useNavigate();
   const [tables, setTables] = useState<LobbyTable[]>([]);
   const [activeGames, setActiveGames] = useState<ActiveGame[]>([]);
@@ -80,14 +81,14 @@ function Lobby({ player, onBack, preferredColor, matchPoints, embedded }: LobbyP
     setActionInProgress("create-public");
     setError(null);
     try {
-      const table = await createTable(player.id, preferredColor, matchPoints, true);
+      const table = await createTable(player.id, preferredColor, matchPoints, true, undefined, isRanked);
       navigate(`/game/${table.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create table");
     } finally {
       setActionInProgress(null);
     }
-  }, [player.id, navigate, preferredColor, matchPoints]);
+  }, [player.id, navigate, preferredColor, matchPoints, isRanked]);
 
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -144,7 +145,12 @@ function Lobby({ player, onBack, preferredColor, matchPoints, embedded }: LobbyP
         {tables.map((table) => (
           <div key={table.id} className="lobby-table-item">
             <div className="lobby-table-info">
-              <span className="lobby-table-creator">{table.creator_nickname}</span>
+              <span className="lobby-table-creator">
+                {table.creator_nickname}
+                {table.is_ranked === false && (
+                  <span className="lobby-casual-badge">Casual</span>
+                )}
+              </span>
               <span className="lobby-table-details">
                 Match to {table.match_points ?? 5}
                 {table.preferred_color && ` \u00B7 Creator plays ${table.preferred_color}`}

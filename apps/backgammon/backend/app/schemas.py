@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, computed_field
 
 
 # ── Player Schemas ───────────────────────────────────────────────────────────
@@ -25,6 +25,13 @@ class PlayerResponse(BaseModel):
     rating_games: int = 0
     board_theme: str = "classic"
     checker_style: str = "classic"
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def tier(self) -> str:
+        """League tier derived from rating."""
+        from app.tiers import tier_for_rating
+        return tier_for_rating(self.rating)
 
 
 class PlayerPreferencesUpdate(BaseModel):
@@ -71,6 +78,7 @@ class TableCreate(BaseModel):
     match_points: int = Field(default=5, ge=1, le=10)
     is_public: bool = False
     time_control: str = Field(default="unlimited")
+    is_ranked: bool = True
 
 
 class TableResponse(BaseModel):
@@ -89,6 +97,7 @@ class TableResponse(BaseModel):
     time_control: str = "unlimited"
     white_time_remaining_ms: Optional[int] = None
     black_time_remaining_ms: Optional[int] = None
+    is_ranked: bool = True
 
 
 class InviteBotRequest(BaseModel):
@@ -101,6 +110,7 @@ class LobbyTable(BaseModel):
     match_points: Optional[int] = None
     preferred_color: Optional[str] = None
     created_at: datetime
+    is_ranked: bool = True
 
 
 class ActiveGame(BaseModel):
@@ -113,6 +123,7 @@ class ActiveGame(BaseModel):
     black_match_score: int = 0
     spectator_count: int = 0
     created_at: datetime
+    is_ranked: bool = True
 
 
 class JoinTableRequest(BaseModel):
@@ -213,6 +224,14 @@ class DashboardResponse(BaseModel):
     games: list[GameHistoryItem]
     rating: int = 1500
     rating_games: int = 0
+    active_season: Optional["SeasonResponse"] = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def tier(self) -> str:
+        """League tier derived from rating."""
+        from app.tiers import tier_for_rating
+        return tier_for_rating(self.rating)
 
 
 # ── Advanced Stats Schemas ──────────────────────────────────────────────
@@ -303,10 +322,30 @@ class LeaderboardEntry(BaseModel):
     total_games: int
     win_rate: float
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def tier(self) -> str:
+        """League tier derived from rating."""
+        from app.tiers import tier_for_rating
+        return tier_for_rating(self.rating)
+
 
 class LeaderboardResponse(BaseModel):
     entries: list[LeaderboardEntry]
     total: int
+
+
+# ── Season Schemas ────────────────────────────────────────────────────────
+
+
+class SeasonResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    start_date: datetime
+    end_date: datetime
+    is_active: bool
 
 
 class TournamentCreate(BaseModel):

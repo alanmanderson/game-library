@@ -102,6 +102,8 @@ class Table(Base):
     white_time_remaining_ms: int | None = Column(Integer, nullable=True)
     black_time_remaining_ms: int | None = Column(Integer, nullable=True)
     turn_started_at: datetime | None = Column(DateTime(timezone=True), nullable=True)
+    # Ranked vs casual — ranked games update ELO ratings, casual games do not.
+    is_ranked: bool = Column(Boolean, default=True, nullable=False, server_default="true")
 
     # Relationships
     white_player = relationship(
@@ -311,3 +313,27 @@ class RatingHistory(Base):
             f"<RatingHistory(player_id={self.player_id!r}, "
             f"rating={self.rating!r}, created_at={self.created_at!r})>"
         )
+
+
+class Season(Base):
+    """A ranked-play season with defined start and end dates.
+
+    Exactly one season should have ``is_active = True`` at a time. A future
+    scheduler (not implemented) will flip the flag at the season boundary
+    and seed a new row for the next season. For now the active season is
+    maintained by hand in the migration.
+    """
+
+    __tablename__ = "seasons"
+
+    id: int = Column(Integer, primary_key=True, autoincrement=True)
+    name: str = Column(String(64), nullable=False, unique=True)
+    start_date: datetime = Column(DateTime(timezone=True), nullable=False)
+    end_date: datetime = Column(DateTime(timezone=True), nullable=False)
+    is_active: bool = Column(Boolean, default=False, nullable=False, server_default="false")
+    created_at: datetime = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+    def __repr__(self) -> str:
+        return f"<Season(id={self.id!r}, name={self.name!r}, is_active={self.is_active!r})>"

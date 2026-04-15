@@ -1,12 +1,14 @@
 """REST API routes for the backgammon application."""
 
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, func
 
 from app.database import get_db
-from app.models import Player, Table, MoveRecord, PlayerStats
+from app.models import Player, Table, MoveRecord, PlayerStats, Season
 from app.schemas import (
     PlayerResponse,
     PlayerPreferencesUpdate,
@@ -26,6 +28,7 @@ from app.schemas import (
     LeaderboardResponse,
     ReplayMoveRecord,
     ReplayResponse,
+    SeasonResponse,
 )
 from app.cosmetics import BOARD_THEMES, CHECKER_STYLES
 from app.services.game_service import game_manager
@@ -267,6 +270,12 @@ async def player_dashboard(
     total_games = wins + losses
     win_rate = (wins / total_games * 100) if total_games > 0 else 0.0
 
+    # Look up the currently active season, if any, so the dashboard can show it.
+    active_season_row = await db.execute(
+        select(Season).where(Season.is_active.is_(True)).limit(1)
+    )
+    active_season = active_season_row.scalars().first()
+
     return DashboardResponse(
         total_games=total_games,
         wins=wins,
@@ -277,6 +286,9 @@ async def player_dashboard(
         games=games,
         rating=player.rating,
         rating_games=player.rating_games,
+        active_season=(
+            SeasonResponse.model_validate(active_season) if active_season else None
+        ),
     )
 
 
@@ -292,7 +304,7 @@ async def create_table(
     db: AsyncSession = Depends(get_db),
 ) -> Table:
     """Create a new game table. The creating player waits for an opponent."""
-    table = await game_manager.create_table(db, current_player.id, data.preferred_color, data.match_points, data.is_public, data.time_control)
+    table = await game_manager.create_table(db, current_player.id, data.preferred_color, data.match_points, data.is_public, data.time_control, data.is_ranked)
     await db.refresh(table)
     # Eagerly load the player relationship for the response
     if table.white_player_id == current_player.id:
@@ -428,6 +440,7 @@ async def get_lobby(db: AsyncSession = Depends(get_db)):
                 match_points=table.match_points,
                 preferred_color=preferred_color,
                 created_at=table.created_at,
+                is_ranked=table.is_ranked,
             )
         )
 
@@ -479,6 +492,7 @@ async def get_active_games(db: AsyncSession = Depends(get_db)):
                 black_match_score=table.black_match_score,
                 spectator_count=ws_manager.get_spectator_count(table.id),
                 created_at=table.created_at,
+                is_ranked=table.is_ranked,
             )
         )
 
@@ -757,6 +771,21 @@ async def export_game(
             "Content-Disposition": f'attachment; filename="game_{table_id}.mat"',
         },
     )
+
+
+# ------------------------------------------------------------------
+# Seasons
+# ------------------------------------------------------------------
+
+
+@router.get("/seasons/active", response_model=Optional[SeasonResponse])
+async def get_active_season(db: AsyncSession = Depends(get_db)):
+    """Return the currently active season, or null if none is active."""
+    result = await db.execute(
+        select(Season).where(Season.is_active.is_(True)).limit(1)
+    )
+    season = result.scalars().first()
+    return season
 
 
 # ------------------------------------------------------------------

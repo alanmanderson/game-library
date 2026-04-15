@@ -18,6 +18,7 @@ import type {
   AuthResponse,
   LeaderboardData,
   ReplayData,
+  Season,
   Tournament,
   TournamentBracket,
 } from "../types/game";
@@ -184,7 +185,14 @@ export function getPlayerAdvancedStats(
 // ---------------------------------------------------------------------------
 
 /** Create a new table (game room). The creating player is identified by `playerId`. */
-export function createTable(playerId: string, preferredColor?: string, matchPoints?: number, isPublic?: boolean, timeControl?: string): Promise<Table> {
+export function createTable(
+  playerId: string,
+  preferredColor?: string,
+  matchPoints?: number,
+  isPublic?: boolean,
+  timeControl?: string,
+  isRanked?: boolean,
+): Promise<Table> {
   return request<Table>("/api/tables", {
     method: "POST",
     body: JSON.stringify({
@@ -193,6 +201,7 @@ export function createTable(playerId: string, preferredColor?: string, matchPoin
       match_points: matchPoints ?? 5,
       is_public: isPublic ?? false,
       time_control: timeControl ?? "unlimited",
+      is_ranked: isRanked ?? true,
     }),
   });
 }
@@ -295,6 +304,15 @@ export function getLeaderboard(
   return request<LeaderboardData>(
     `/api/leaderboard?metric=${metric}&limit=${limit}&offset=${offset}`,
   );
+}
+
+// ---------------------------------------------------------------------------
+// Season endpoints
+// ---------------------------------------------------------------------------
+
+/** Fetch the currently active season, or null if none is active. */
+export function getActiveSeason(): Promise<Season | null> {
+  return request<Season | null>("/api/seasons/active");
 }
 
 // ---------------------------------------------------------------------------

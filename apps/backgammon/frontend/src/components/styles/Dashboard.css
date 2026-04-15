@@ -227,3 +227,40 @@
     height: 12px;
   }
 }
+
+.dashboard-season-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  margin-bottom: 1rem;
+}
+
+.dashboard-season-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.dashboard-season-name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.dashboard-tier-badge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.4rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  text-transform: uppercase;
+  vertical-align: middle;
+}

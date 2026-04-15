@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import type { LeaderboardEntry } from "../types/game";
 import { getLeaderboard } from "../services/api";
+import { TIER_COLORS, tierForRating, type Tier } from "../constants/tiers";
 import "./styles/Leaderboard.css";
 
 type Metric = "wins" | "win_rate" | "rating";
@@ -133,7 +134,20 @@ function Leaderboard({ playerId, onBack, embedded }: LeaderboardProps) {
                       <td>{entry.total_wins}</td>
                       <td>{entry.total_games}</td>
                       <td>{entry.win_rate.toFixed(1)}%</td>
-                      {metric === "rating" && <td>{entry.rating}</td>}
+                      {metric === "rating" && (
+                        <td>
+                          {entry.rating}
+                          <span
+                            className="leaderboard-tier-badge"
+                            style={{
+                              color: TIER_COLORS[(entry.tier ?? tierForRating(entry.rating)) as Tier],
+                              borderColor: TIER_COLORS[(entry.tier ?? tierForRating(entry.rating)) as Tier],
+                            }}
+                          >
+                            {entry.tier ?? tierForRating(entry.rating)}
+                          </span>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}

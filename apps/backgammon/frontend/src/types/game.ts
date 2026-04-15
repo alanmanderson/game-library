@@ -33,6 +33,8 @@ export interface Player {
   auth_provider?: string;
   rating?: number;
   rating_games?: number;
+  /** League tier derived from rating (Bronze/Silver/Gold/Platinum/Diamond). */
+  tier?: string;
   /** Cosmetic preference: board theme ID (see `constants/themes.ts`). */
   board_theme?: string;
   /** Cosmetic preference: checker style ID (see `constants/themes.ts`). */
@@ -123,6 +125,7 @@ export interface Table {
   white_time_remaining_ms?: number | null;
   black_time_remaining_ms?: number | null;
   spectator_count?: number;
+  is_ranked?: boolean;
 }
 
 /** A public table shown in the game lobby. */
@@ -132,6 +135,7 @@ export interface LobbyTable {
   match_points: number | null;
   preferred_color: string | null;
   created_at: string;
+  is_ranked?: boolean;
 }
 
 /** A table with an active game in progress, shown in the spectator lobby. */
@@ -144,6 +148,16 @@ export interface ActiveGame {
   black_match_score: number;
   spectator_count: number;
   created_at: string;
+  is_ranked?: boolean;
+}
+
+/** A ranked-play season with defined start/end dates. */
+export interface Season {
+  id: number;
+  name: string;
+  start_date: string;
+  end_date: string;
+  is_active: boolean;
 }
 
 /** A single row in the move-history log for a completed turn. */
@@ -230,6 +244,8 @@ export interface DashboardData {
   games: GameHistoryItem[];
   rating: number;
   rating_games: number;
+  tier?: string;
+  active_season?: Season | null;
 }
 
 /** Win/loss split for a subset of games (e.g. as white, blitz time control). */
@@ -280,6 +296,7 @@ export interface LeaderboardEntry {
   total_wins: number;
   total_games: number;
   win_rate: number;
+  tier?: string;
 }
 
 /** Response from the leaderboard endpoint. */

@@ -196,3 +196,16 @@
   max-width: none;
   align-items: stretch;
 }
+
+.leaderboard-tier-badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
