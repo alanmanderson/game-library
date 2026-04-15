@@ -732,6 +732,7 @@ async def get_game_analysis(
     table_id: str,
     limit: int = Query(100, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
+    current_player: Player = Depends(get_current_player),
 ) -> AnalysisResponse:
     """Return per-move quality analysis for a completed game.
 
@@ -743,9 +744,12 @@ async def get_game_analysis(
     requests return instantly.  The first request for a game can be slow
     (seconds-to-tens-of-seconds depending on game length).
 
-    TODO: gate this behind participation — currently any caller can view
-    any finished game's analysis.  Replays are already public so we
-    accept the same policy for now.
+    Policy: only participants (the human white or black player of the
+    table) may view the analysis.  Replays remain public, but move-quality
+    data is skill-profile information we keep private to the two players
+    at the board.  The ``BOT`` seat is excluded — when one side is a bot,
+    only the human opponent qualifies.  Callers without a valid JWT get
+    401; authenticated non-participants get 403.
     """
     import asyncio
 
@@ -755,6 +759,16 @@ async def get_game_analysis(
     table = await db.get(Table, table_id)
     if not table:
         raise HTTPException(status_code=404, detail="Table not found")
+
+    # Participation gate: the caller must be one of the seated players.
+    # The BOT player id never matches a human's player id, so when one
+    # seat is the bot only the human at the other seat passes this check.
+    participant_ids = {table.white_player_id, table.black_player_id}
+    if current_player.id not in participant_ids:
+        raise HTTPException(
+            status_code=403,
+            detail="Only players who participated in this game may view its analysis.",
+        )
 
     if table.status == "playing":
         raise HTTPException(

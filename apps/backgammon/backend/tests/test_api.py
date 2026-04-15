@@ -497,13 +497,53 @@ class TestGameReplay:
 class TestGameAnalysis:
     async def test_analysis_not_found(self, client):
         """Analysis for a nonexistent table returns 404."""
-        resp = await client.get("/api/tables/XXXXXX/analysis")
+        auth = await create_test_player(client, "Alice")
+        resp = await client.get(
+            "/api/tables/XXXXXX/analysis",
+            headers=auth_headers(auth["token"]),
+        )
         assert resp.status_code == 404
 
-    async def test_analysis_blocks_in_progress_game(self, client):
-        """Analysis endpoint refuses to serve in-progress games."""
+    async def test_analysis_requires_auth(self, client):
+        """Unauthenticated requests to the analysis endpoint are rejected with 401."""
         table, _, _ = await create_and_join_table(client)
         resp = await client.get(f"/api/tables/{table['id']}/analysis")
+        assert resp.status_code == 401
+
+    async def test_analysis_rejects_bad_token(self, client):
+        """Malformed/expired tokens are rejected with 401."""
+        table, _, _ = await create_and_join_table(client)
+        resp = await client.get(
+            f"/api/tables/{table['id']}/analysis",
+            headers=auth_headers("not-a-real-jwt"),
+        )
+        assert resp.status_code == 401
+
+    async def test_analysis_rejects_non_participant(self, client, db_session):
+        """An authenticated non-participant gets 403."""
+        from app.models import Table
+
+        table, _, _ = await create_and_join_table(client, "Alice", "Bob")
+        db_table = await db_session.get(Table, table["id"])
+        db_table.status = "finished"
+        await db_session.commit()
+
+        # Third player who had nothing to do with the game
+        outsider = await create_test_player(client, "Carol")
+        resp = await client.get(
+            f"/api/tables/{table['id']}/analysis",
+            headers=auth_headers(outsider["token"]),
+        )
+        assert resp.status_code == 403
+        assert "participat" in resp.json()["detail"].lower()
+
+    async def test_analysis_blocks_in_progress_game(self, client):
+        """Analysis endpoint refuses to serve in-progress games (for participants)."""
+        table, creator_auth, _ = await create_and_join_table(client)
+        resp = await client.get(
+            f"/api/tables/{table['id']}/analysis",
+            headers=auth_headers(creator_auth["token"]),
+        )
         assert resp.status_code == 403
         assert "completed" in resp.json()["detail"].lower()
 
@@ -511,12 +551,15 @@ class TestGameAnalysis:
         """A finished table with no moves returns an empty analyses list."""
         from app.models import Table
 
-        table, _, _ = await create_and_join_table(client)
+        table, creator_auth, _ = await create_and_join_table(client)
         db_table = await db_session.get(Table, table["id"])
         db_table.status = "finished"
         await db_session.commit()
 
-        resp = await client.get(f"/api/tables/{table['id']}/analysis")
+        resp = await client.get(
+            f"/api/tables/{table['id']}/analysis",
+            headers=auth_headers(creator_auth["token"]),
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["table_id"] == table["id"]
@@ -529,7 +572,7 @@ class TestGameAnalysis:
         from app.models import MoveRecord, Table
         from app.game_engine import BackgammonEngine, Color, DiceRoll, Move
 
-        table, _, _ = await create_and_join_table(client, "A", "B")
+        table, creator_auth, _ = await create_and_join_table(client, "A", "B")
         db_table = await db_session.get(Table, table["id"])
         db_table.status = "finished"
 
@@ -551,7 +594,10 @@ class TestGameAnalysis:
         db_session.add(rec)
         await db_session.commit()
 
-        resp = await client.get(f"/api/tables/{table['id']}/analysis")
+        resp = await client.get(
+            f"/api/tables/{table['id']}/analysis",
+            headers=auth_headers(creator_auth["token"]),
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["total_moves"] == 1
@@ -570,7 +616,7 @@ class TestGameAnalysis:
         from app.models import GameAnalysis, MoveRecord, Table
         from app.game_engine import BackgammonEngine, Color, DiceRoll, Move
 
-        table, _, _ = await create_and_join_table(client, "A", "B")
+        table, creator_auth, _ = await create_and_join_table(client, "A", "B")
         db_table = await db_session.get(Table, table["id"])
         db_table.status = "finished"
 
@@ -593,7 +639,10 @@ class TestGameAnalysis:
         await db_session.commit()
 
         # First call: computes + caches
-        resp1 = await client.get(f"/api/tables/{table['id']}/analysis")
+        resp1 = await client.get(
+            f"/api/tables/{table['id']}/analysis",
+            headers=auth_headers(creator_auth["token"]),
+        )
         assert resp1.status_code == 200
 
         cached = await db_session.get(GameAnalysis, table["id"])
@@ -601,7 +650,10 @@ class TestGameAnalysis:
         assert cached.moves_analysed == 1
 
         # Second call: served from cache
-        resp2 = await client.get(f"/api/tables/{table['id']}/analysis")
+        resp2 = await client.get(
+            f"/api/tables/{table['id']}/analysis",
+            headers=auth_headers(creator_auth["token"]),
+        )
         assert resp2.status_code == 200
         assert resp2.json() == resp1.json()
 
