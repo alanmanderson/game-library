@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import uuid
 
@@ -40,6 +41,21 @@ async def _authenticate(token: str, db: AsyncSession) -> User | None:
 
     result = await db.execute(select(User).where(User.id == user_id))
     return result.scalar_one_or_none()
+
+
+def _token_is_valid(token: str) -> bool:
+    """Re-check a JWT's signature + expiry without a DB round-trip.
+
+    Used by the long-lived-connection revalidation loop. We intentionally
+    don't re-load the user: the initial `_authenticate` call already bound
+    the connection to a user_id. If the token still decodes under our key
+    and hasn't expired, the original authorization decision stands.
+    """
+    try:
+        jwt.decode(token, settings.secret_key, algorithms=["HS256"])
+    except PyJWTError:
+        return False
+    return True
 
 
 @router.websocket("/{room_code}")
@@ -108,10 +124,31 @@ async def _run_websocket(
 
     await _send_game_state_on_reconnect(websocket, game, user.id, db)
 
+    revalidate_interval = max(1, settings.ws_jwt_revalidate_seconds)
+
     try:
         while True:
             try:
-                data = await websocket.receive_json()
+                data = await asyncio.wait_for(
+                    websocket.receive_json(),
+                    timeout=revalidate_interval,
+                )
+            except asyncio.TimeoutError:
+                if not _token_is_valid(token):
+                    try:
+                        await manager.send_personal(websocket, {
+                            "event": "REAUTH_REQUIRED",
+                            "payload": {
+                                "reason": "token_expired",
+                                "message": "Session token expired; reconnect with a fresh token.",
+                            },
+                        })
+                    except Exception:
+                        logger.debug("Failed to send REAUTH_REQUIRED to user %s", user.id)
+                    await websocket.close(code=4401, reason="Token expired")
+                    log_event(room_code, user.username, "reauth_required")
+                    return
+                continue
             except ValueError:
                 await manager.send_personal(websocket, {
                     "event": "ERROR",

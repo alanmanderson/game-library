@@ -293,6 +293,14 @@ const LeftToLobbyEvent = z.object({
   payload: z.object({}).loose(),
 });
 
+const ReauthRequiredEvent = z.object({
+  event: z.literal("REAUTH_REQUIRED"),
+  payload: z.object({
+    reason: z.string(),
+    message: z.string(),
+  }),
+});
+
 export const WsEventSchema = z.discriminatedUnion("event", [
   ErrorEvent,
   LobbyStateUpdatedEvent,
@@ -318,6 +326,7 @@ export const WsEventSchema = z.discriminatedUnion("event", [
   RematchStartedEvent,
   GameForfeitedEvent,
   LeftToLobbyEvent,
+  ReauthRequiredEvent,
 ]);
 
 export type WsEvent = z.infer<typeof WsEventSchema>;

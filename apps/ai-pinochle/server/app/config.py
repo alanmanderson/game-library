@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     allowed_origins: str = "http://localhost:3000"
     access_token_expire_minutes: int = 60 * 24  # 24 hours
     google_client_id: str = ""
+    # How often an authenticated WebSocket re-checks its JWT. A connection that
+    # stays open longer than its token lifetime gets closed at the next tick.
+    ws_jwt_revalidate_seconds: int = 60
 
     @model_validator(mode="after")
     def _warn_default_secret(self) -> "Settings":
