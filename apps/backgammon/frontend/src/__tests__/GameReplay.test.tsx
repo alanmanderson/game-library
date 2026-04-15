@@ -18,6 +18,7 @@ import type { ReplayData } from "../types/game";
 
 vi.mock("../services/api", () => ({
   getReplay: vi.fn(),
+  getAnalysis: vi.fn(),
 }));
 
 import * as api from "../services/api";
@@ -363,6 +364,90 @@ describe("GameReplay – OG meta tags", () => {
     expect(ogTitle?.getAttribute("content")).toContain("Alice");
     expect(ogDesc?.getAttribute("content")).toContain("Alice");
     expect(ogType?.getAttribute("content")).toBe("website");
+  });
+});
+
+describe("GameReplay – analysis panel", () => {
+  it("shows the toggle button but no panel by default", async () => {
+    vi.mocked(api.getReplay).mockResolvedValue(replayWithMoves);
+    renderReplay("TABLE001");
+    await waitFor(() => screen.getByText("Starting position"));
+    expect(
+      screen.getByRole("button", { name: /show move analysis/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/analysing game/i)).not.toBeInTheDocument();
+  });
+
+  it("fetches and renders analysis when the panel is opened", async () => {
+    vi.mocked(api.getReplay).mockResolvedValue(replayWithMoves);
+    vi.mocked(api.getAnalysis).mockResolvedValue({
+      table_id: "TABLE001",
+      ml_available: true,
+      moves_analysed: 2,
+      total_moves: 2,
+      move_analyses: [
+        {
+          move_number: 1,
+          player_color: "white",
+          player_nickname: "Alice",
+          dice_roll: "3-1",
+          moves_notation: "8/5 6/5",
+          equity_before: 0.0,
+          equity_after: 0.1,
+          best_equity: 0.1,
+          equity_loss: 0.0,
+          quality: "best",
+          best_move_notation: "8/5 6/5",
+        },
+        {
+          move_number: 2,
+          player_color: "black",
+          player_nickname: "Bob",
+          dice_roll: "4-2",
+          moves_notation: "24/20 13/11",
+          equity_before: -0.1,
+          equity_after: -0.3,
+          best_equity: -0.1,
+          equity_loss: 0.2,
+          quality: "blunder",
+          best_move_notation: "8/4 6/4",
+        },
+      ],
+    });
+
+    renderReplay("TABLE001");
+    await waitFor(() => screen.getByText("Starting position"));
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /show move analysis/i }),
+    );
+
+    await waitFor(() => {
+      expect(api.getAnalysis).toHaveBeenCalledWith("TABLE001");
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/key moments/i)).toBeInTheDocument();
+    });
+
+    // The blunder should show up in both the key-moments and move list
+    expect(screen.getAllByText(/blunder/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/best: 8\/4 6\/4/)).toBeInTheDocument();
+  });
+
+  it("shows an error banner if analysis fails", async () => {
+    vi.mocked(api.getReplay).mockResolvedValue(replayWithMoves);
+    vi.mocked(api.getAnalysis).mockRejectedValue(new Error("Analysis crashed"));
+    renderReplay("TABLE001");
+    await waitFor(() => screen.getByText("Starting position"));
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /show move analysis/i }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/analysis crashed/i)).toBeInTheDocument();
+    });
   });
 });
 

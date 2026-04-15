@@ -18,6 +18,7 @@ import type {
   AuthResponse,
   LeaderboardData,
   ReplayData,
+  AnalysisData,
   Season,
   Tournament,
   TournamentBracket,
@@ -242,6 +243,19 @@ export function getGameHistory(
 /** Retrieve full replay data (initial state + per-move snapshots) for a game. */
 export function getReplay(tableId: string): Promise<ReplayData> {
   return request<ReplayData>(`/api/tables/${tableId}/replay`);
+}
+
+/**
+ * Retrieve ML-based per-move analysis for a completed game.
+ *
+ * The first call for a game triggers the analysis computation on the
+ * server and can take several seconds for long games. Subsequent calls
+ * return instantly from the cache.
+ */
+export function getAnalysis(tableId: string, limit = 100): Promise<AnalysisData> {
+  return request<AnalysisData>(
+    `/api/tables/${tableId}/analysis?limit=${limit}`,
+  );
 }
 
 /**

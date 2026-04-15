@@ -311,6 +311,35 @@ class ReplayResponse(BaseModel):
     moves: list[ReplayMoveRecord]
 
 
+# ── Analysis Schemas ─────────────────────────────────────────────────────
+
+
+class MoveAnalysis(BaseModel):
+    """Per-move analysis of a completed game."""
+
+    move_number: int
+    player_color: str          # "white" | "black"
+    player_nickname: Optional[str] = None
+    dice_roll: str
+    moves_notation: str
+    equity_before: float       # equity of the board BEFORE the move
+    equity_after: float        # equity AFTER the actual move chosen
+    best_equity: float         # equity if the player had played the best turn
+    equity_loss: float         # max(0, best_equity - equity_after)
+    quality: str               # "best" | "good" | "inaccuracy" | "mistake" | "blunder"
+    best_move_notation: Optional[str] = None
+
+
+class AnalysisResponse(BaseModel):
+    """Full game analysis payload."""
+
+    table_id: str
+    ml_available: bool
+    moves_analysed: int
+    total_moves: int
+    move_analyses: list[MoveAnalysis]
+
+
 # ── Leaderboard Schemas ───────────────────────────────────────────────────
 
 

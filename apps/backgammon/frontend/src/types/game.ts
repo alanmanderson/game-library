@@ -226,6 +226,33 @@ export interface ReplayData {
   moves: ReplayMoveRecord[];
 }
 
+/** Quality classification for a single move. */
+export type MoveQuality = "best" | "good" | "inaccuracy" | "mistake" | "blunder";
+
+/** Per-move analysis entry produced by the backend analysis service. */
+export interface MoveAnalysis {
+  move_number: number;
+  player_color: "white" | "black";
+  player_nickname: string | null;
+  dice_roll: string;
+  moves_notation: string;
+  equity_before: number;
+  equity_after: number;
+  best_equity: number;
+  equity_loss: number;
+  quality: MoveQuality;
+  best_move_notation: string | null;
+}
+
+/** Full analysis payload for a completed game. */
+export interface AnalysisData {
+  table_id: string;
+  ml_available: boolean;
+  moves_analysed: number;
+  total_moves: number;
+  move_analyses: MoveAnalysis[];
+}
+
 /** Win/loss record against a single opponent. */
 export interface PlayerStats {
   opponent_nickname: string;

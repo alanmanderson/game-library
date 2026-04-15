@@ -488,6 +488,123 @@ class TestGameReplay:
 
 
 # -----------------------------------------------------------------------
+# Game analysis
+# -----------------------------------------------------------------------
+
+
+class TestGameAnalysis:
+    async def test_analysis_not_found(self, client):
+        """Analysis for a nonexistent table returns 404."""
+        resp = await client.get("/api/tables/XXXXXX/analysis")
+        assert resp.status_code == 404
+
+    async def test_analysis_blocks_in_progress_game(self, client):
+        """Analysis endpoint refuses to serve in-progress games."""
+        table, _, _ = await create_and_join_table(client)
+        resp = await client.get(f"/api/tables/{table['id']}/analysis")
+        assert resp.status_code == 403
+        assert "completed" in resp.json()["detail"].lower()
+
+    async def test_analysis_empty_game_returns_empty_list(self, client, db_session):
+        """A finished table with no moves returns an empty analyses list."""
+        from app.models import Table
+
+        table, _, _ = await create_and_join_table(client)
+        db_table = await db_session.get(Table, table["id"])
+        db_table.status = "finished"
+        await db_session.commit()
+
+        resp = await client.get(f"/api/tables/{table['id']}/analysis")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["table_id"] == table["id"]
+        assert data["move_analyses"] == []
+        assert data["total_moves"] == 0
+        assert data["moves_analysed"] == 0
+
+    async def test_analysis_scores_recorded_moves(self, client, db_session):
+        """Analysis produces one entry per recorded move with a quality label."""
+        from app.models import MoveRecord, Table
+        from app.game_engine import BackgammonEngine, Color, DiceRoll, Move
+
+        table, _, _ = await create_and_join_table(client, "A", "B")
+        db_table = await db_session.get(Table, table["id"])
+        db_table.status = "finished"
+
+        # Synthesise one recorded move for the white player
+        engine = BackgammonEngine()
+        engine.start_game(first_player=Color.WHITE, dice=DiceRoll(3, 1))
+        engine.make_move(Move(from_point=8, to_point=5))
+        engine.make_move(Move(from_point=6, to_point=5))
+        state_after = engine.get_state_snapshot()
+
+        rec = MoveRecord(
+            table_id=table["id"],
+            player_id=db_table.white_player_id,
+            move_number=1,
+            dice_roll="3-1",
+            moves_notation="8/5 6/5",
+            game_state_after=state_after,
+        )
+        db_session.add(rec)
+        await db_session.commit()
+
+        resp = await client.get(f"/api/tables/{table['id']}/analysis")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_moves"] == 1
+        assert data["moves_analysed"] == 1
+        assert len(data["move_analyses"]) == 1
+        a = data["move_analyses"][0]
+        assert a["player_color"] == "white"
+        assert a["dice_roll"] == "3-1"
+        assert a["quality"] in {"best", "good", "inaccuracy", "mistake", "blunder"}
+        assert a["equity_loss"] >= 0.0
+        assert "equity_before" in a and "equity_after" in a
+        assert "best_equity" in a
+
+    async def test_analysis_is_cached(self, client, db_session):
+        """Second request is served from the game_analyses cache table."""
+        from app.models import GameAnalysis, MoveRecord, Table
+        from app.game_engine import BackgammonEngine, Color, DiceRoll, Move
+
+        table, _, _ = await create_and_join_table(client, "A", "B")
+        db_table = await db_session.get(Table, table["id"])
+        db_table.status = "finished"
+
+        engine = BackgammonEngine()
+        engine.start_game(first_player=Color.WHITE, dice=DiceRoll(5, 3))
+        engine.make_move(Move(from_point=8, to_point=3))
+        engine.make_move(Move(from_point=8, to_point=3))
+        state_after = engine.get_state_snapshot()
+
+        db_session.add(
+            MoveRecord(
+                table_id=table["id"],
+                player_id=db_table.white_player_id,
+                move_number=1,
+                dice_roll="5-3",
+                moves_notation="8/3 8/3",
+                game_state_after=state_after,
+            )
+        )
+        await db_session.commit()
+
+        # First call: computes + caches
+        resp1 = await client.get(f"/api/tables/{table['id']}/analysis")
+        assert resp1.status_code == 200
+
+        cached = await db_session.get(GameAnalysis, table["id"])
+        assert cached is not None
+        assert cached.moves_analysed == 1
+
+        # Second call: served from cache
+        resp2 = await client.get(f"/api/tables/{table['id']}/analysis")
+        assert resp2.status_code == 200
+        assert resp2.json() == resp1.json()
+
+
+# -----------------------------------------------------------------------
 # Active games endpoint
 # -----------------------------------------------------------------------
 

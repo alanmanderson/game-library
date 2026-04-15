@@ -8,8 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, func
 
 from app.database import get_db
-from app.models import Player, Table, MoveRecord, PlayerStats, Season
+from app.models import GameAnalysis, Player, Table, MoveRecord, PlayerStats, Season
 from app.schemas import (
+    AnalysisResponse,
+    MoveAnalysis,
     PlayerResponse,
     PlayerPreferencesUpdate,
     TableCreate,
@@ -719,6 +721,125 @@ async def get_game_replay(
         match_points=table.match_points,
         initial_state=initial_state,
         moves=moves,
+    )
+
+
+@router.get("/tables/{table_id}/analysis", response_model=AnalysisResponse)
+async def get_game_analysis(
+    table_id: str,
+    limit: int = Query(100, ge=1, le=500),
+    db: AsyncSession = Depends(get_db),
+) -> AnalysisResponse:
+    """Return per-move quality analysis for a completed game.
+
+    Compares each move the player actually made against the ML model's
+    best move at that position and assigns a quality label (best, good,
+    inaccuracy, mistake, blunder) based on equity loss.
+
+    Results are cached in the ``game_analyses`` table so subsequent
+    requests return instantly.  The first request for a game can be slow
+    (seconds-to-tens-of-seconds depending on game length).
+
+    TODO: gate this behind participation — currently any caller can view
+    any finished game's analysis.  Replays are already public so we
+    accept the same policy for now.
+    """
+    import asyncio
+
+    from app.game_engine import BackgammonEngine
+    from app.services.analysis_service import compute_analysis
+
+    table = await db.get(Table, table_id)
+    if not table:
+        raise HTTPException(status_code=404, detail="Table not found")
+
+    if table.status == "playing":
+        raise HTTPException(
+            status_code=403,
+            detail="Analysis is only available for completed games.",
+        )
+
+    # --- Count total moves (for display) up front ---
+    total_result = await db.execute(
+        select(func.count(MoveRecord.id)).where(MoveRecord.table_id == table_id)
+    )
+    total_moves = int(total_result.scalar() or 0)
+
+    # --- Return cached analysis if it covers at least the requested range ---
+    cached = await db.get(GameAnalysis, table_id)
+    if cached is not None and cached.moves_analysed >= min(limit, total_moves):
+        analyses = list(cached.move_analyses or [])[:limit]
+        return AnalysisResponse(
+            table_id=table_id,
+            ml_available=bool(cached.ml_available),
+            moves_analysed=len(analyses),
+            total_moves=total_moves,
+            move_analyses=[MoveAnalysis(**a) for a in analyses],
+        )
+
+    # --- Load initial board + records needed for computation ---
+    records_result = await db.execute(
+        select(MoveRecord)
+        .where(MoveRecord.table_id == table_id)
+        .order_by(MoveRecord.move_number)
+    )
+    records = records_result.scalars().all()
+
+    # Batch-load player nicknames for the move players we'll report on.
+    player_ids = {r.player_id for r in records if r.player_id}
+    nickname_map: dict[str, str] = {}
+    if player_ids:
+        players_result = await db.execute(
+            select(Player).where(Player.id.in_(player_ids))
+        )
+        for p in players_result.scalars().all():
+            nickname_map[p.id] = p.nickname
+
+    initial_state = BackgammonEngine().get_state_snapshot()
+
+    record_dicts = [
+        {
+            "player_id": r.player_id,
+            "dice_roll": r.dice_roll,
+            "moves_notation": r.moves_notation,
+            "move_number": r.move_number,
+            "game_state_after": r.game_state_after,
+        }
+        for r in records
+    ]
+
+    # Analysis is CPU-bound (torch forward passes) — offload to a thread.
+    analyses, ml_available, moves_analysed = await asyncio.to_thread(
+        compute_analysis,
+        initial_state,
+        record_dicts,
+        table.white_player_id,
+        table.black_player_id,
+        nickname_map,
+        limit,
+    )
+
+    # --- Cache the result ---
+    if cached is None:
+        cached = GameAnalysis(
+            table_id=table_id,
+            move_analyses=analyses,
+            ml_available=ml_available,
+            moves_analysed=moves_analysed,
+        )
+        db.add(cached)
+    else:
+        cached.move_analyses = analyses
+        cached.ml_available = ml_available
+        cached.moves_analysed = moves_analysed
+    await db.commit()
+
+    return AnalysisResponse(
+        table_id=table_id,
+        ml_available=ml_available,
+        moves_analysed=moves_analysed,
+        total_moves=total_moves,
+        move_analyses=[MoveAnalysis(**a) for a in analyses],
     )
 
 

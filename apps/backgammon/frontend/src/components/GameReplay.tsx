@@ -11,12 +11,28 @@
  * viewer can be embedded on external sites.
  */
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
-import type { GameState, ReplayData, ReplayMoveRecord } from "../types/game";
-import { getReplay } from "../services/api";
+import type {
+  AnalysisData,
+  GameState,
+  MoveAnalysis,
+  MoveQuality,
+  ReplayData,
+  ReplayMoveRecord,
+} from "../types/game";
+import { getAnalysis, getReplay } from "../services/api";
 import Board from "./Board";
 import "./styles/GameReplay.css";
+
+/** Display label for each move-quality level. */
+const QUALITY_LABEL: Record<MoveQuality, string> = {
+  best: "Best",
+  good: "Good",
+  inaccuracy: "Inaccuracy",
+  mistake: "Mistake",
+  blunder: "Blunder",
+};
 
 /** Parse a dice_roll string like "3-5" into { die1, die2 }. */
 function parseDiceRoll(diceRoll: string): { die1: number; die2: number } | null {
@@ -94,6 +110,12 @@ function GameReplay() {
   const [autoPlaying, setAutoPlaying] = useState(false);
   const [playSpeed, setPlaySpeed] = useState(1500); // ms between moves
   const autoPlayRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Analysis panel state
+  const [analysisOpen, setAnalysisOpen] = useState(false);
+  const [analysis, setAnalysis] = useState<AnalysisData | null>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   // Speed slider constants: the slider is inverted so right = faster.
   // Slider range is [SPEED_SLIDER_MIN, SPEED_SLIDER_MAX]; actual delay = SPEED_OFFSET - sliderValue.
@@ -215,6 +237,34 @@ function GameReplay() {
       stopAutoPlay();
     }
   }, [autoPlaying, moveIndex, totalMoves, stopAutoPlay]);
+
+  const handleToggleAnalysis = useCallback(async () => {
+    // Toggle visibility; fetch the first time we open it.
+    const next = !analysisOpen;
+    setAnalysisOpen(next);
+    if (!next || analysis || !tableId) return;
+    setAnalysisLoading(true);
+    setAnalysisError(null);
+    try {
+      const data = await getAnalysis(tableId);
+      setAnalysis(data);
+    } catch (err) {
+      setAnalysisError(
+        err instanceof Error ? err.message : "Failed to load analysis.",
+      );
+    } finally {
+      setAnalysisLoading(false);
+    }
+  }, [analysisOpen, analysis, tableId]);
+
+  /** Top-3 key moments: moves with the largest equity_loss. */
+  const keyMoments = useMemo<MoveAnalysis[]>(() => {
+    if (!analysis) return [];
+    return [...analysis.move_analyses]
+      .sort((a, b) => b.equity_loss - a.equity_loss)
+      .slice(0, 3)
+      .filter((m) => m.equity_loss > 0);
+  }, [analysis]);
 
   const handleCopyShareLink = useCallback(async () => {
     if (!tableId) return;
@@ -411,6 +461,122 @@ function GameReplay() {
           ⏭
         </button>
       </div>
+
+      {/* Analysis toggle */}
+      {!embed && (
+        <button
+          type="button"
+          className={`replay-analysis-toggle${analysisOpen ? " replay-analysis-toggle--open" : ""}`}
+          onClick={handleToggleAnalysis}
+          aria-expanded={analysisOpen}
+          aria-controls="replay-analysis-panel"
+        >
+          {analysisOpen ? "▼ Hide analysis" : "▶ Show move analysis"}
+        </button>
+      )}
+
+      {analysisOpen && (
+        <div id="replay-analysis-panel" className="replay-analysis">
+          {analysisLoading && (
+            <div className="replay-analysis-status">Analysing game…</div>
+          )}
+          {analysisError && !analysisLoading && (
+            <div className="replay-analysis-status replay-analysis-status--error">
+              {analysisError}
+            </div>
+          )}
+          {!analysisLoading && !analysisError && analysis && (
+            <>
+              {!analysis.ml_available && (
+                <div className="replay-analysis-banner">
+                  ML model unavailable — showing pip-count fallback analysis.
+                </div>
+              )}
+
+              {keyMoments.length > 0 && (
+                <div className="replay-analysis-section">
+                  <h3 className="replay-analysis-heading">Key moments</h3>
+                  <ol className="replay-key-moments">
+                    {keyMoments.map((m) => (
+                      <li key={`key-${m.move_number}`}>
+                        <button
+                          type="button"
+                          className="replay-key-moment"
+                          onClick={() => {
+                            stopAutoPlay();
+                            goTo(m.move_number);
+                          }}
+                        >
+                          <span
+                            className={`replay-quality replay-quality--${m.quality}`}
+                          >
+                            {QUALITY_LABEL[m.quality]}
+                          </span>
+                          <span className="replay-key-moment-move">
+                            Move {m.move_number} · {m.dice_roll} ·{" "}
+                            {m.moves_notation}
+                          </span>
+                          <span className="replay-key-moment-loss">
+                            −{m.equity_loss.toFixed(2)}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+
+              <div className="replay-analysis-section">
+                <h3 className="replay-analysis-heading">
+                  Move list ({analysis.moves_analysed}
+                  {analysis.total_moves > analysis.moves_analysed
+                    ? ` of ${analysis.total_moves}`
+                    : ""}
+                  )
+                </h3>
+                <ul className="replay-move-list">
+                  {analysis.move_analyses.map((m) => (
+                    <li
+                      key={m.move_number}
+                      className={`replay-move-item${m.move_number === moveIndex ? " replay-move-item--active" : ""}`}
+                    >
+                      <button
+                        type="button"
+                        className="replay-move-item-btn"
+                        onClick={() => {
+                          stopAutoPlay();
+                          goTo(m.move_number);
+                        }}
+                      >
+                        <span className="replay-move-item-num">
+                          {m.move_number}
+                        </span>
+                        <span
+                          className={`replay-quality replay-quality--${m.quality}`}
+                          title={`Equity loss: ${m.equity_loss.toFixed(3)}`}
+                        >
+                          {QUALITY_LABEL[m.quality]}
+                        </span>
+                        <span className="replay-move-item-player">
+                          {m.player_color === "white" ? "⚪" : "⚫"} {m.dice_roll}
+                        </span>
+                        <span className="replay-move-item-notation">
+                          {m.moves_notation}
+                        </span>
+                        {m.quality !== "best" && m.best_move_notation && (
+                          <span className="replay-move-item-best">
+                            best: {m.best_move_notation}
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Speed control */}
       <div className="replay-speed">

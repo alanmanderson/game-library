@@ -246,6 +246,39 @@ class TournamentMatch(Base):
         )
 
 
+class GameAnalysis(Base):
+    """Cached per-move game analysis for a finished table.
+
+    A single row holds the analysis payload (a JSON list of per-move
+    analyses) for one table.  Computing analysis is expensive
+    (hundreds of ML evaluations per game), so we cache the result
+    and serve it directly on subsequent requests.
+    """
+
+    __tablename__ = "game_analyses"
+
+    table_id: str = Column(
+        String(8), ForeignKey("tables.id", ondelete="CASCADE"), primary_key=True
+    )
+    # JSON list of per-move analysis dicts — see schemas.MoveAnalysis.
+    move_analyses: list = Column(JSON, nullable=False)
+    # True if the analysis was produced with the ML model; False if we
+    # fell back to a simple heuristic (e.g. model not installed).
+    ml_available: bool = Column(Boolean, nullable=False, default=True)
+    moves_analysed: int = Column(Integer, nullable=False, default=0)
+    created_at: datetime = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+    table = relationship("Table", foreign_keys=[table_id])
+
+    def __repr__(self) -> str:
+        return (
+            f"<GameAnalysis(table_id={self.table_id!r}, "
+            f"moves_analysed={self.moves_analysed!r})>"
+        )
+
+
 class PlayerStats(Base):
     __tablename__ = "player_stats"
     __table_args__ = (
