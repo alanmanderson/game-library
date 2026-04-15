@@ -4,6 +4,7 @@ import type { DashboardData, GameHistoryItem } from "../types/game";
 import { getPlayerDashboard, exportGame } from "../services/api";
 import { TIER_COLORS, tierForRating, type Tier } from "../constants/tiers";
 import AdvancedStats from "./AdvancedStats";
+import SeasonHistory from "./SeasonHistory";
 import "./styles/Dashboard.css";
 
 type DashboardTab = "history" | "stats";
@@ -226,7 +227,12 @@ function Dashboard({ playerId }: DashboardProps) {
         <div className="dashboard-empty">{exportError}</div>
       )}
 
-      {tab === "stats" && <AdvancedStats playerId={playerId} />}
+      {tab === "stats" && (
+        <>
+          <AdvancedStats playerId={playerId} />
+          <SeasonHistory playerId={playerId} />
+        </>
+      )}
 
       {/* Game history table */}
       {tab === "history" && data.games.length > 0 && (

@@ -32,12 +32,14 @@ from app.schemas import (
     ReplayMoveRecord,
     ReplayResponse,
     SeasonResponse,
+    PlayerSeasonHistoryEntry,
     ChallengesResponse,
     ChallengeProgress,
 )
 from app.cosmetics import BOARD_THEMES, CHECKER_STYLES
 from app.services.game_service import game_manager
 from app.services.stats_service import get_player_stats, get_advanced_stats
+from app.services.season_stats_service import get_season_history
 from app.services.bot_service import (
     BOT_PLAYER_ID, ensure_bot_player, schedule_bot_turn_if_needed,
     set_bot_difficulty,
@@ -150,6 +152,37 @@ async def player_advanced_stats(
             detail="Advanced stats are not available for guest players",
         )
     return await get_advanced_stats(db, player_id)
+
+
+@router.get(
+    "/players/{player_id}/season-history",
+    response_model=list[PlayerSeasonHistoryEntry],
+)
+async def player_season_history(
+    player_id: str,
+    current_player: Player = Depends(get_current_player),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    """Return the player's per-season history snapshots.
+
+    One row per season they've played at least one rated game in, ordered
+    with the active / most recent season first. Guarded identically to
+    ``/advanced-stats``: the requester must be the player themselves and
+    guests are rejected (no season stats are persisted for guests).
+    """
+    if current_player.id != player_id:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to access this resource"
+        )
+    player = await db.get(Player, player_id)
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    if player.is_guest:
+        raise HTTPException(
+            status_code=403,
+            detail="Season history is not available for guest players",
+        )
+    return await get_season_history(db, player_id)
 
 
 @router.get("/challenges/me", response_model=ChallengesResponse)

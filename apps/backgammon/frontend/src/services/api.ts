@@ -20,6 +20,7 @@ import type {
   ReplayData,
   AnalysisData,
   Season,
+  PlayerSeasonHistoryEntry,
   Tournament,
   TournamentBracket,
   ChallengesData,
@@ -179,6 +180,15 @@ export function getPlayerAdvancedStats(
 ): Promise<AdvancedStatsData> {
   return request<AdvancedStatsData>(
     `/api/players/${playerId}/advanced-stats`,
+  );
+}
+
+/** Fetch per-season history snapshots for a player. */
+export function getPlayerSeasonHistory(
+  playerId: string,
+): Promise<PlayerSeasonHistoryEntry[]> {
+  return request<PlayerSeasonHistoryEntry[]>(
+    `/api/players/${playerId}/season-history`,
   );
 }
 

@@ -403,6 +403,25 @@ class SeasonResponse(BaseModel):
     is_active: bool
 
 
+class PlayerSeasonHistoryEntry(BaseModel):
+    """One row of a player's season history (snapshot per season)."""
+
+    season_id: int
+    season_name: str
+    start_date: datetime
+    end_date: datetime
+    is_active: bool
+    end_rating: int
+    peak_rating: int
+    wins: int
+    losses: int
+    gammons_won: int
+    gammons_lost: int
+    tier_final: str
+    games_played: int
+    updated_at: datetime
+
+
 # ── Challenge Schemas ────────────────────────────────────────────────────
 
 

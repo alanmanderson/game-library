@@ -28,6 +28,7 @@ function renderDashboard(playerId: string) {
 vi.mock("../services/api", () => ({
   getPlayerDashboard: vi.fn(),
   getPlayerAdvancedStats: vi.fn(),
+  getPlayerSeasonHistory: vi.fn(),
 }));
 
 import * as api from "../services/api";

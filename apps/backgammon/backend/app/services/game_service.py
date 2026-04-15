@@ -938,6 +938,14 @@ class GameManager:
             )
             await update_ratings(db, table.winner_id, loser_id, table_id=table_id)
 
+            # Upsert per-season history row for each participant. Runs AFTER
+            # update_ratings so player.rating reflects the post-match value.
+            # The service swallows its own exceptions so season bookkeeping
+            # never blocks a game finalize.
+            from app.services.season_stats_service import record_match_result
+
+            await record_match_result(db, table.winner_id, loser_id, win_type)
+
         # Advance tournament bracket if this table is part of a tournament match
         if match_over and table.winner_id:
             await self._process_tournament_advancement(db, table_id, table.winner_id)

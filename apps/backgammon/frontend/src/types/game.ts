@@ -187,6 +187,24 @@ export interface Season {
   is_active: boolean;
 }
 
+/** A single entry in a player's per-season history. */
+export interface PlayerSeasonHistoryEntry {
+  season_id: number;
+  season_name: string;
+  start_date: string;
+  end_date: string;
+  is_active: boolean;
+  end_rating: number;
+  peak_rating: number;
+  wins: number;
+  losses: number;
+  gammons_won: number;
+  gammons_lost: number;
+  tier_final: string;
+  games_played: number;
+  updated_at: string;
+}
+
 /** A single row in the move-history log for a completed turn. */
 export interface MoveRecord {
   move_number: number;

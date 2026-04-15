@@ -376,6 +376,69 @@ class Season(Base):
         return f"<Season(id={self.id!r}, name={self.name!r}, is_active={self.is_active!r})>"
 
 
+class PlayerSeasonStats(Base):
+    """Per-player, per-season snapshot of ranked play.
+
+    A single row per (player_id, season_id) accumulates wins, losses,
+    gammons, peak rating, and ``tier_final`` (derived from ``end_rating``
+    after every update) over the life of a season. ``end_rating`` always
+    reflects the player's rating AFTER the most recent rated game finish
+    within the season, so for the currently-active season it doubles as
+    "rating right now".
+
+    Upserted by :func:`app.services.game_service._finish_game` on every
+    rated game that completes between two registered humans. Exposed via
+    ``GET /api/players/{player_id}/season-history``.
+    """
+
+    __tablename__ = "player_season_stats"
+    __table_args__ = (
+        UniqueConstraint(
+            "player_id", "season_id", name="uq_player_season_stats_player_season"
+        ),
+    )
+
+    id: int = Column(Integer, primary_key=True, autoincrement=True)
+    player_id: str = Column(
+        String(36),
+        ForeignKey("players.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    season_id: int = Column(
+        Integer,
+        ForeignKey("seasons.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    end_rating: int = Column(Integer, nullable=False, default=1500, server_default="1500")
+    peak_rating: int = Column(Integer, nullable=False, default=1500, server_default="1500")
+    wins: int = Column(Integer, nullable=False, default=0, server_default="0")
+    losses: int = Column(Integer, nullable=False, default=0, server_default="0")
+    gammons_won: int = Column(Integer, nullable=False, default=0, server_default="0")
+    gammons_lost: int = Column(Integer, nullable=False, default=0, server_default="0")
+    tier_final: str = Column(
+        String(16), nullable=False, default="Silver", server_default="Silver"
+    )
+    games_played: int = Column(Integer, nullable=False, default=0, server_default="0")
+    updated_at: datetime = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    player = relationship("Player", foreign_keys=[player_id])
+    season = relationship("Season", foreign_keys=[season_id])
+
+    def __repr__(self) -> str:
+        return (
+            f"<PlayerSeasonStats(player_id={self.player_id!r}, "
+            f"season_id={self.season_id!r}, end_rating={self.end_rating!r}, "
+            f"tier_final={self.tier_final!r})>"
+        )
+
+
 class Challenge(Base):
     """A daily or weekly challenge template.
 

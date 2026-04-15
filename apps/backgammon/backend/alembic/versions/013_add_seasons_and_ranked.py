@@ -69,9 +69,10 @@ def upgrade() -> None:
         ),
     )
 
-    # TODO: Season history — a PlayerSeasonStats table (player_id, season_id,
-    # end_rating, peak_rating, wins, losses, tier_final) is intentionally
-    # deferred. Until it exists, season history UI has no data to show.
+    # Per-player per-season history snapshots (end_rating, peak_rating, wins,
+    # losses, gammons, tier_final) are tracked by the `player_season_stats`
+    # table introduced in migration 017 and surfaced at
+    # `GET /api/players/{player_id}/season-history`.
 
 
 def downgrade() -> None:
