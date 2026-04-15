@@ -3,6 +3,7 @@ import { type FormEvent, useState } from "react";
 import type { AuthResponse } from "@pinochle/shared";
 import { ApiError, post } from "../api/client.ts";
 import { useAuth } from "./AuthContext.tsx";
+import { Button, TextInput } from "../ui";
 import styles from "./LoginPage.module.css";
 
 interface LoginPageProps {
@@ -75,13 +76,24 @@ export function LoginPage({ onSwitchToRegister }: LoginPageProps) {
 
   return (
     <div className={styles.container}>
+      <div className={styles.brand}>
+        <img
+          className={styles.monogram}
+          src="/logo-monogram.svg"
+          alt=""
+          width={64}
+          height={64}
+        />
+        <span className={styles.wordmark}>Pinochle</span>
+        <p className={styles.tagline}>Partnership Pinochle, Online</p>
+      </div>
+
       <form className={styles.form} onSubmit={handleSubmit}>
         <h1 className={styles.title}>Sign In</h1>
 
         <label className={styles.label}>
           Email
-          <input
-            className={styles.input}
+          <TextInput
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -91,8 +103,7 @@ export function LoginPage({ onSwitchToRegister }: LoginPageProps) {
 
         <label className={styles.label}>
           Password
-          <input
-            className={styles.input}
+          <TextInput
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -100,11 +111,15 @@ export function LoginPage({ onSwitchToRegister }: LoginPageProps) {
           />
         </label>
 
-        {serverError && <p className={styles.serverError}>{serverError}</p>}
+        {serverError && (
+          <p className="alert alert--error" role="alert">
+            {serverError}
+          </p>
+        )}
 
-        <button className={styles.button} type="submit" disabled={submitting}>
+        <Button type="submit" disabled={submitting} block>
           {submitting ? "Signing in..." : "Sign In"}
-        </button>
+        </Button>
       </form>
 
       <div className={styles.divider}>

@@ -11,6 +11,7 @@ import { useAuth } from "../auth/AuthContext.tsx";
 import { useWebSocket } from "../hooks/useWebSocket.ts";
 import { GameErrorBoundary } from "../game/GameErrorBoundary.tsx";
 import { Loading } from "../ui/Loading.tsx";
+import { Button } from "../ui";
 import styles from "./RoomPage.module.css";
 
 // GamePage + the seven phase components are the heaviest slice of the bundle;
@@ -128,20 +129,22 @@ export function RoomPage({ roomCode, onLeave }: Props) {
       <div className={styles.codeRow}>
         <p className={styles.roomCodeDisplay}>{roomCode}</p>
         <div className={styles.codeActions}>
-          <button
-            className={styles.copyButton}
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => copyText(roomCode, "code")}
             aria-label="Copy room code"
           >
             {copied === "code" ? "Copied!" : "Copy code"}
-          </button>
-          <button
-            className={styles.copyButton}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => copyText(`${window.location.origin}/${roomCode}`, "link")}
             aria-label="Copy join link"
           >
             {copied === "link" ? "Copied!" : "Copy link"}
-          </button>
+          </Button>
         </div>
       </div>
       <p className={styles.roomLabel}>Share this code with other players</p>
@@ -153,7 +156,11 @@ export function RoomPage({ roomCode, onLeave }: Props) {
         {connected ? "Connected" : "Disconnected"}
       </p>
 
-      {error && <p className={styles.error}>{error}</p>}
+      {error && (
+        <p className={`alert alert--error ${styles.error}`} role="alert">
+          {error}
+        </p>
+      )}
 
       <div className={styles.table}>
         {positions.map(({ seat, position }) => {
@@ -172,12 +179,9 @@ export function RoomPage({ roomCode, onLeave }: Props) {
               ) : (
                 <>
                   <p className={styles.seatEmpty}>Empty</p>
-                  <button
-                    className={styles.sitButton}
-                    onClick={() => handleSit(seat)}
-                  >
+                  <Button size="sm" onClick={() => handleSit(seat)}>
                     Sit here
-                  </button>
+                  </Button>
                 </>
               )}
             </div>
@@ -186,14 +190,14 @@ export function RoomPage({ roomCode, onLeave }: Props) {
       </div>
 
       {allSeated && (
-        <button className={styles.startButton} onClick={handleStart}>
+        <Button size="lg" onClick={handleStart} style={{ marginBottom: "1rem" }}>
           Start Game
-        </button>
+        </Button>
       )}
 
-      <button className={styles.leaveButton} onClick={onLeave}>
+      <Button variant="ghost" size="sm" onClick={onLeave}>
         Leave Room
-      </button>
+      </Button>
     </div>
   );
 }

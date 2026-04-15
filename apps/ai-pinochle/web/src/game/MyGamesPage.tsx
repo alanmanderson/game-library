@@ -3,6 +3,7 @@ import type { GameSummary } from "@pinochle/shared";
 import { SEATS } from "@pinochle/shared";
 import { useAuth } from "../auth/AuthContext.tsx";
 import { getAuth, ApiError } from "../api/client.ts";
+import { Button } from "../ui";
 import styles from "./MyGamesPage.module.css";
 
 const PHASE_LABELS: Record<string, string> = {
@@ -64,17 +65,23 @@ export function MyGamesPage({ onBack, onOpenGame }: Props) {
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <button className={styles.backButton} onClick={onBack}>
+        <Button variant="secondary" size="sm" onClick={onBack}>
           Back
-        </button>
+        </Button>
         <h2>My Games</h2>
       </div>
 
       {loading && <p className={styles.loading}>Loading...</p>}
-      {error && <p className={styles.error}>{error}</p>}
+      {error && (
+        <p className="alert alert--error" role="alert">
+          {error}
+        </p>
+      )}
 
       {!loading && !error && games.length === 0 && (
-        <p className={styles.empty}>No games yet. Create or join a room to get started!</p>
+        <p className={styles.empty}>
+          No games yet. Create or join a room to get started!
+        </p>
       )}
 
       {!loading && !error && games.length > 0 && (

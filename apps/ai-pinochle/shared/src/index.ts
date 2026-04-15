@@ -76,3 +76,16 @@ export type { GameState, GameAction } from "./gameReducer";
 
 export { useGameState } from "./hooks/useGameState";
 export type { UseGameStateApi, UseGameStateOptions } from "./hooks/useGameState";
+
+export {
+  tokens,
+  colors,
+  confettiPalette,
+  fonts,
+  fontSizes,
+  lineHeights,
+  radii,
+  shadows,
+  space,
+} from "./tokens";
+export type { Tokens } from "./tokens";

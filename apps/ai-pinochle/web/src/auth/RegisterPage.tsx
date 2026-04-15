@@ -4,6 +4,7 @@ import type { AuthResponse, FieldErrors } from "@pinochle/shared";
 import { validate } from "@pinochle/shared";
 import { ApiError, post } from "../api/client.ts";
 import { useAuth } from "./AuthContext.tsx";
+import { Button, TextInput } from "../ui";
 import styles from "./RegisterPage.module.css";
 
 interface RegisterPageProps {
@@ -80,13 +81,23 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
 
   return (
     <div className={styles.container}>
+      <div className={styles.brand}>
+        <img
+          className={styles.monogram}
+          src="/logo-monogram.svg"
+          alt=""
+          width={64}
+          height={64}
+        />
+        <span className={styles.wordmark}>Pinochle</span>
+      </div>
+
       <form className={styles.form} onSubmit={handleSubmit}>
         <h1 className={styles.title}>Create Account</h1>
 
         <label className={styles.label}>
           First Name
-          <input
-            className={styles.input}
+          <TextInput
             type="text"
             value={firstName}
             onChange={(e) => setFirstName(e.target.value)}
@@ -99,8 +110,7 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
 
         <label className={styles.label}>
           Last Name
-          <input
-            className={styles.input}
+          <TextInput
             type="text"
             value={lastName}
             onChange={(e) => setLastName(e.target.value)}
@@ -113,8 +123,7 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
 
         <label className={styles.label}>
           Email
-          <input
-            className={styles.input}
+          <TextInput
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -127,8 +136,7 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
 
         <label className={styles.label}>
           Password
-          <input
-            className={styles.input}
+          <TextInput
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -139,11 +147,15 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
           )}
         </label>
 
-        {serverError && <p className={styles.serverError}>{serverError}</p>}
+        {serverError && (
+          <p className="alert alert--error" role="alert">
+            {serverError}
+          </p>
+        )}
 
-        <button className={styles.button} type="submit" disabled={submitting}>
+        <Button type="submit" disabled={submitting} block>
           {submitting ? "Creating account..." : "Register"}
-        </button>
+        </Button>
       </form>
 
       <div className={styles.divider}>

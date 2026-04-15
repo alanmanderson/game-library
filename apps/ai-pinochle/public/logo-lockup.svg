@@ -1,10 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Pinochle monogram">
-  <!-- Rounded square plaque, felt green with brass inner stroke -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 64" role="img" aria-label="Pinochle">
+  <!-- Monogram plaque -->
   <rect x="2" y="2" width="60" height="60" rx="12" ry="12" fill="#0F4A2E"/>
   <rect x="5" y="5" width="54" height="54" rx="9.5" ry="9.5" fill="none" stroke="#C9871F" stroke-width="1.25" opacity="0.85"/>
 
-  <!-- Spade + heart pair forming a stylized "P".
-       Both pips sit on a common vertical axis, cream-colored to pop on felt. -->
   <g fill="#FAF6EF">
     <!-- Spade (upper bowl of the P) -->
     <path d="M32 12
@@ -19,11 +17,20 @@
              C31.5 28.4, 30.8 27, 31.1 25.5
              C31.4 24, 32.6 23, 34 23.1
              C33 19.6, 32 15.6, 32 12 Z"/>
-    <!-- Heart (stem/base accent, anchors the P's vertical line) -->
+    <!-- Heart -->
     <path d="M32 46
              C30 44, 26 43, 26 47
              C26 50, 30 53, 32 55
              C34 53, 38 50, 38 47
              C38 43, 34 44, 32 46 Z"/>
   </g>
+
+  <!-- Wordmark: Fraunces 700. Using system fallback so this SVG stays
+       standalone; when inlined in the page the Google font is loaded. -->
+  <text x="76" y="44"
+        font-family='"Fraunces","Georgia",serif'
+        font-weight="700"
+        font-size="32"
+        fill="#1B1A17"
+        letter-spacing="0.01em">Pinochle</text>
 </svg>

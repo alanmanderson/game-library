@@ -170,6 +170,10 @@ room; ref-counted SUBSCRIBE/UNSUBSCRIBE means only active rooms incur
 traffic. When `REDIS_URL` is unset the server falls back to in-process
 broadcast — tests and local dev don't require Redis.
 
+## Branding
+
+Branding tokens live in `shared/src/tokens.ts` and mirror the CSS vars in `web/src/index.css` — keep in sync. Any color, font, radius, shadow, or spacing change must be made in both places. Mobile (`StyleSheet`) consumes the `tokens` object directly; web consumes the CSS custom properties.
+
 ## Pinochle Rules Reference
 
 This game implements **4-player partnership Pinochle** (North/South vs East/West). Standard double-deck: 48 cards (two copies each of 9, 10, J, Q, K, A in all four suits). See `docs/RULES.md` for full rules and `docs/design.md` Section 3 for meld values, scoring, and legal card rules as implemented.

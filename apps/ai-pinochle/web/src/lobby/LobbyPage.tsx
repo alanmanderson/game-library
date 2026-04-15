@@ -3,6 +3,7 @@ import type { CreateResponse, JoinResponse } from "@pinochle/shared";
 import { useAuth } from "../auth/AuthContext.tsx";
 import { postAuth, ApiError } from "../api/client.ts";
 import { Loading } from "../ui/Loading.tsx";
+import { BrandHeader, Button, TextInput } from "../ui";
 import styles from "./LobbyPage.module.css";
 
 // RoomPage transitively pulls in the game surface (cards, phase components,
@@ -142,55 +143,69 @@ export function LobbyPage() {
 
   return (
     <div className={styles.container}>
-      <p className={styles.header}>Welcome, {user!.first_name}!</p>
-
-      <div className={styles.sections}>
-        <div className={styles.section}>
-          <h2 className={styles.sectionTitle}>Create Room</h2>
-          <button
-            className={styles.button}
-            onClick={handleCreate}
-            disabled={createLoading}
+      <BrandHeader
+        userName={user!.first_name}
+        onLogout={logout}
+        extras={
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowMyGames(true)}
           >
-            {createLoading ? "Creating..." : "Create Room"}
-          </button>
-          {createError && <p className={styles.error}>{createError}</p>}
-        </div>
+            My Games
+          </Button>
+        }
+      />
 
-        <div className={styles.section}>
-          <h2 className={styles.sectionTitle}>Join Room</h2>
-          <div className={styles.joinRow}>
-            <label className={styles.srOnly} htmlFor="joinCodeInput">
-              Room code
-            </label>
-            <input
-              id="joinCodeInput"
-              className={styles.input}
-              type="text"
-              placeholder="Room code"
-              maxLength={4}
-              value={joinCode}
-              onChange={(e) => setJoinCode(e.target.value)}
-            />
-            <button
-              className={styles.button}
-              onClick={handleJoin}
-              disabled={joinLoading || !joinCode.trim()}
+      <main className={styles.main}>
+        <p className={styles.welcome}>Welcome back.</p>
+
+        <div className={styles.sections}>
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>Create Room</h2>
+            <Button
+              onClick={handleCreate}
+              disabled={createLoading}
+              block
             >
-              {joinLoading ? "Joining..." : "Join"}
-            </button>
-          </div>
-          {joinError && <p className={styles.error}>{joinError}</p>}
+              {createLoading ? "Creating..." : "Create Room"}
+            </Button>
+            {createError && (
+              <p className="alert alert--error" role="alert">
+                {createError}
+              </p>
+            )}
+          </section>
+
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>Join Room</h2>
+            <div className={styles.joinRow}>
+              <label className={styles.srOnly} htmlFor="joinCodeInput">
+                Room code
+              </label>
+              <TextInput
+                id="joinCodeInput"
+                type="text"
+                placeholder="ROOM"
+                maxLength={4}
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value)}
+              />
+              <Button
+                onClick={handleJoin}
+                disabled={joinLoading || !joinCode.trim()}
+              >
+                {joinLoading ? "Joining..." : "Join"}
+              </Button>
+            </div>
+            {joinError && (
+              <p className="alert alert--error" role="alert">
+                {joinError}
+              </p>
+            )}
+          </section>
         </div>
-      </div>
-
-      <button className={styles.myGamesButton} onClick={() => setShowMyGames(true)}>
-        My Games
-      </button>
-
-      <button className={styles.logoutButton} onClick={logout}>
-        Log out
-      </button>
+      </main>
     </div>
   );
 }
