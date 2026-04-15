@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { flushSync } from "react-dom";
 import type { WsEvent, UseWebSocketResult } from "@pinochle/shared";
-import { RECONNECT_DELAYS } from "@pinochle/shared";
+import { RECONNECT_DELAYS, parseWsEvent } from "@pinochle/shared";
 import { WS_BASE } from "../api/client.ts";
 
 function buildWsUrl(roomCode: string, token: string): string {
@@ -43,14 +43,22 @@ export function useWebSocket(
       };
 
       ws.onmessage = (e) => {
+        let raw: unknown;
         try {
-          const data = JSON.parse(e.data) as WsEvent;
-          // flushSync prevents React from batching rapid back-to-back events
-          // (e.g. HAND_DEALT + BIDDING_TURN) which would cause the first to be lost
-          flushSync(() => setLastEvent(data));
+          raw = JSON.parse(e.data);
         } catch {
-          // ignore non-JSON messages
+          // ignore non-JSON messages (including server PONGs without JSON body)
+          return;
         }
+        // PONG has no payload field — let it through without schema validation.
+        if (raw && typeof raw === "object" && (raw as { event?: string }).event === "PONG") {
+          return;
+        }
+        const parsed = parseWsEvent(raw);
+        if (!parsed) return; // malformed message: already logged, drop it
+        // flushSync prevents React from batching rapid back-to-back events
+        // (e.g. HAND_DEALT + BIDDING_TURN) which would cause the first to be lost
+        flushSync(() => setLastEvent(parsed));
       };
 
       ws.onclose = (event) => {

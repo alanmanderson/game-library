@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, TouchableOpacity, Switch, StyleSheet } from "react-native";
 import type { BiddingResult } from "@pinochle/shared";
-import { SUITS, SEAT_LABELS } from "@pinochle/shared";
+import { SUITS, SEAT_LABELS, sendAction } from "@pinochle/shared";
 
 interface Props {
   biddingResult: BiddingResult;
@@ -18,7 +18,7 @@ export function TrumpPhase({
   const [pendingSuit, setPendingSuit] = useState<string | null>(null);
 
   function submit(suit: string, moon: boolean) {
-    sendMessage({
+    sendAction(sendMessage, {
       action: "DECLARE_TRUMP",
       payload: { suit, shoot_the_moon: moon },
     });

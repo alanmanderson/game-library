@@ -8,7 +8,7 @@ import {
 } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { Seats } from "@pinochle/shared";
-import { SEATS, SEAT_LABELS_LOWER, getTableOrder } from "@pinochle/shared";
+import { SEATS, SEAT_LABELS_LOWER, getTableOrder, sendAction } from "@pinochle/shared";
 import { useAuth } from "../auth/AuthContext";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { GameScreen } from "../game/GameScreen";
@@ -46,30 +46,33 @@ export function RoomScreen({ route, navigation }: Props) {
   useEffect(() => {
     if (!lastEvent) return;
 
-    if (lastEvent.event === "LOBBY_STATE_UPDATED") {
-      const payload = lastEvent.payload as { seats: Seats; your_seat: string | null };
-      setSeats(normalizeSeats(payload.seats));
-      if (payload.your_seat) {
-        setMySeat(payload.your_seat.toLowerCase());
+    switch (lastEvent.event) {
+      case "LOBBY_STATE_UPDATED": {
+        const p = lastEvent.payload;
+        setSeats(normalizeSeats(p.seats));
+        if (p.your_seat) setMySeat(p.your_seat.toLowerCase());
+        setError("");
+        return;
       }
-      setError("");
-    } else if (lastEvent.event === "SEAT_CLAIM_FAILED") {
-      const payload = lastEvent.payload as { message: string };
-      setError(payload.message);
-    } else if (lastEvent.event === "HAND_DEALT") {
-      const payload = lastEvent.payload as { cards: string[] };
-      setMyHand(payload.cards);
-      setGameStarted(true);
+      case "SEAT_CLAIM_FAILED":
+        setError(lastEvent.payload.message);
+        return;
+      case "HAND_DEALT":
+        setMyHand(lastEvent.payload.cards);
+        setGameStarted(true);
+        return;
+      default:
+        return;
     }
   }, [lastEvent]);
 
   function handleSit(seat: string) {
     setError("");
-    sendMessage({ action: "SELECT_SEAT", payload: { seat } });
+    sendAction(sendMessage, { action: "SELECT_SEAT", payload: { seat } });
   }
 
   function handleStart() {
-    sendMessage({ action: "START_GAME" });
+    sendAction(sendMessage, { action: "START_GAME", payload: {} });
   }
 
   const allSeated = SEATS.every((s) => seats[s]);

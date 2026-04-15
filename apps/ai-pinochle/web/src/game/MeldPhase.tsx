@@ -1,5 +1,5 @@
 import type { MeldData, Meld } from "@pinochle/shared";
-import { SEAT_LABELS, SUIT_SYMBOLS, SEAT_ORDER } from "@pinochle/shared";
+import { SEAT_LABELS, SUIT_SYMBOLS, SEAT_ORDER, sendAction } from "@pinochle/shared";
 import styles from "./MeldPhase.module.css";
 
 interface Props {
@@ -34,7 +34,7 @@ export function MeldPhase({
   sendMessage,
 }: Props) {
   function handleAcknowledge() {
-    sendMessage({ action: "ACKNOWLEDGE_MELD", payload: {} });
+    sendAction(sendMessage, { action: "ACKNOWLEDGE_MELD", payload: {} });
   }
 
   const waitingOn = SEAT_ORDER

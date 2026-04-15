@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { AppState, AppStateStatus } from "react-native";
 import type { WsEvent, UseWebSocketResult } from "@pinochle/shared";
-import { RECONNECT_DELAYS } from "@pinochle/shared";
+import { RECONNECT_DELAYS, parseWsEvent } from "@pinochle/shared";
 import { WS_BASE } from "../config";
 
 function buildWsUrl(roomCode: string, token: string): string {
@@ -75,13 +75,21 @@ export function useWebSocket(
       };
 
       ws.onmessage = (e) => {
+        let raw: unknown;
         try {
-          const data = JSON.parse(e.data) as WsEvent;
-          queueRef.current.push(data);
-          drainQueue();
+          raw = JSON.parse(e.data);
         } catch {
           // ignore non-JSON messages
+          return;
         }
+        // PONG has no payload — skip schema validation.
+        if (raw && typeof raw === "object" && (raw as { event?: string }).event === "PONG") {
+          return;
+        }
+        const parsed = parseWsEvent(raw);
+        if (!parsed) return; // malformed: already logged, drop
+        queueRef.current.push(parsed);
+        drainQueue();
       };
 
       ws.onerror = (event) => {

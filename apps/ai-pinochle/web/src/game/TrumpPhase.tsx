@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { BiddingResult } from "@pinochle/shared";
-import { SUITS, SEAT_LABELS } from "@pinochle/shared";
+import { SUITS, SEAT_LABELS, sendAction } from "@pinochle/shared";
 import styles from "./TrumpPhase.module.css";
 
 interface Props {
@@ -14,7 +14,7 @@ export function TrumpPhase({ biddingResult, isBidWinner, sendMessage }: Props) {
   const [pendingSuit, setPendingSuit] = useState<string | null>(null);
 
   function submit(suit: string, moon: boolean) {
-    sendMessage({
+    sendAction(sendMessage, {
       action: "DECLARE_TRUMP",
       payload: { suit, shoot_the_moon: moon },
     });

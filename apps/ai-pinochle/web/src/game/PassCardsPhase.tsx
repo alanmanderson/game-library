@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { TEAM_FOR_SEAT, cardLabel } from "@pinochle/shared";
+import { TEAM_FOR_SEAT, cardLabel, sendAction } from "@pinochle/shared";
 import styles from "./PassCardsPhase.module.css";
 
 interface Props {
@@ -67,7 +67,7 @@ export function PassCardsPhase({
 
   function handleSubmit() {
     const cards = Array.from(selectedIndices).map((i) => hand[i]);
-    sendMessage({ action: "PASS_CARDS", payload: { cards } });
+    sendAction(sendMessage, { action: "PASS_CARDS", payload: { cards } });
   }
 
   return (

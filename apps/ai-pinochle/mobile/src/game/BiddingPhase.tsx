@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import type { BiddingState } from "@pinochle/shared";
-import { SEAT_LABELS } from "@pinochle/shared";
+import { SEAT_LABELS, sendAction } from "@pinochle/shared";
 
 interface Props {
   biddingState: BiddingState;
@@ -35,11 +35,11 @@ export function BiddingPhase({ biddingState, mySeat, sendMessage }: Props) {
   }
 
   function handleBid() {
-    sendMessage({ action: "SUBMIT_BID", payload: { amount: clamp(bidAmount) } });
+    sendAction(sendMessage, { action: "SUBMIT_BID", payload: { amount: clamp(bidAmount) } });
   }
 
   function handlePass() {
-    sendMessage({ action: "SUBMIT_BID", payload: {} });
+    sendAction(sendMessage, { action: "SUBMIT_BID", payload: {} });
   }
 
   const canDecrement = bidAmount - 1 >= minimum_valid_bid;

@@ -5,7 +5,14 @@ export type {
   AuthState,
   ServerEvent,
   ClientAction,
+  ErrorCode,
+  WsErrorPayload,
+  RematchRequestedPayload,
+  RematchStartedPayload,
+  GameForfeitedPayload,
   WsEvent,
+  WsAction,
+  PayloadFor,
   UseWebSocketResult,
   Phase,
   BiddingState,
@@ -24,6 +31,13 @@ export type {
   JoinResponse,
   GameSummary,
 } from "./types";
+
+export {
+  WsEventSchema,
+  WsActionSchema,
+  parseWsEvent,
+  sendAction,
+} from "./schemas";
 
 export {
   SEAT_LABELS,

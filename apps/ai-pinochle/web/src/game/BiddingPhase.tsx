@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import type { BiddingState } from "@pinochle/shared";
-import { SEAT_LABELS } from "@pinochle/shared";
+import { SEAT_LABELS, sendAction } from "@pinochle/shared";
 import styles from "./BiddingPhase.module.css";
 
 interface Props {
@@ -39,11 +39,11 @@ export function BiddingPhase({ biddingState, mySeat, sendMessage }: Props) {
 
   function handleBid() {
     const amount = clamp(Math.trunc(bidAmount));
-    sendMessage({ action: "SUBMIT_BID", payload: { amount } });
+    sendAction(sendMessage, { action: "SUBMIT_BID", payload: { amount } });
   }
 
   function handlePass() {
-    sendMessage({ action: "SUBMIT_BID", payload: {} });
+    sendAction(sendMessage, { action: "SUBMIT_BID", payload: {} });
   }
 
   const canDecrement = bidAmount - 1 >= minimum_valid_bid;

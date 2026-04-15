@@ -85,14 +85,17 @@ export interface GameForfeitedPayload {
   final_scores: Record<"NS" | "EW", number>;
 }
 
-export interface WsEvent {
-  event: ServerEvent;
-  payload: Record<string, unknown>;
-}
+/**
+ * WsEvent is a discriminated union defined in `schemas.ts` (via `z.infer`) so
+ * the Zod schema and the TS type cannot drift. Re-export here so existing
+ * imports from `@pinochle/shared` keep working.
+ */
+export type { WsEvent, PayloadFor, WsAction } from "./schemas";
+import type { WsEvent as _WsEvent } from "./schemas";
 
 export interface UseWebSocketResult {
   sendMessage: (msg: Record<string, unknown>) => boolean;
-  lastEvent: WsEvent | null;
+  lastEvent: _WsEvent | null;
   connected: boolean;
 }
 
