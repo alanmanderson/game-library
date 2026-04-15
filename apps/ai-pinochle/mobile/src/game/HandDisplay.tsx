@@ -1,7 +1,11 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { View, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
 import { cardSuit, sortHand, SUIT_LETTER } from "@pinochle/shared";
 import { CardImage } from "./CardImage";
+import { triggerHaptic } from "../haptics";
+
+// Matches the web HandDisplay DEAL_STAGGER_MS so mobile cadence feels similar.
+const DEAL_STAGGER_MS = 40;
 
 interface Props {
   cards: string[];
@@ -22,6 +26,38 @@ export const HandDisplay = React.memo(function HandDisplay({
   const trumpLetter = trumpSuit ? SUIT_LETTER[trumpSuit] ?? null : null;
   const sorted = useMemo(() => sortHand(cards), [cards]);
   const interactive = !!(onCardClick && legalCards);
+
+  // Fire a short haptic pulse for each newly-dealt card, staggered to mirror
+  // the web audio cadence. Same multiset-diff logic as web HandDisplay —
+  // Pinochle has duplicate cards, so a plain Set won't catch "one more 10S".
+  const prevCountsRef = useRef<Map<string, number>>(new Map());
+  useEffect(() => {
+    const prev = prevCountsRef.current;
+    const remaining = new Map(prev);
+    let newCount = 0;
+
+    for (const card of sorted) {
+      const left = remaining.get(card) ?? 0;
+      if (left > 0) {
+        remaining.set(card, left - 1);
+      } else {
+        newCount += 1;
+      }
+    }
+
+    for (let i = 0; i < newCount; i++) {
+      const delay = i * DEAL_STAGGER_MS;
+      if (delay === 0) {
+        triggerHaptic("light");
+      } else {
+        setTimeout(() => triggerHaptic("light"), delay);
+      }
+    }
+
+    const next = new Map<string, number>();
+    for (const c of sorted) next.set(c, (next.get(c) ?? 0) + 1);
+    prevCountsRef.current = next;
+  }, [sorted]);
 
   return (
     <ScrollView

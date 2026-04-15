@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import type { BiddingState } from "@pinochle/shared";
 import { SEAT_LABELS, sendAction } from "@pinochle/shared";
+import { triggerHaptic } from "../haptics";
 
 interface Props {
   biddingState: BiddingState;
@@ -23,6 +24,20 @@ export function BiddingPhase({ biddingState, mySeat, sendMessage }: Props) {
   useEffect(() => {
     setBidAmount((prev) => (prev < minimum_valid_bid ? minimum_valid_bid : prev));
   }, [minimum_valid_bid]);
+
+  // Haptic cue whenever the highest bid value changes — any player (us
+  // included) placed a new winning bid. Mirrors the web bid-chime logic:
+  // passes don't move the value, so no buzz there.
+  const prevHighestRef = useRef<number | null>(current_highest_bid);
+  useEffect(() => {
+    if (
+      current_highest_bid !== null &&
+      current_highest_bid !== prevHighestRef.current
+    ) {
+      triggerHaptic("light");
+    }
+    prevHighestRef.current = current_highest_bid;
+  }, [current_highest_bid]);
 
   function clamp(n: number): number {
     if (n < minimum_valid_bid) return minimum_valid_bid;

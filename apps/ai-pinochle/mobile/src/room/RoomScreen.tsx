@@ -19,6 +19,7 @@ import { useAuth } from "../auth/AuthContext";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { GameScreen } from "../game/GameScreen";
 import { GameErrorBoundary } from "../game/GameErrorBoundary";
+import { HapticsToggle } from "../ui/HapticsToggle";
 import type { RootStackParamList } from "../navigation/AppNavigator";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Room">;
@@ -128,6 +129,7 @@ export function RoomScreen({ route, navigation }: Props) {
         <Text style={styles.connectionText}>
           {connected ? "Connected" : "Disconnected"}
         </Text>
+        <HapticsToggle />
       </View>
 
       {error !== "" && <Text style={styles.error}>{error}</Text>}

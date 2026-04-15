@@ -1,8 +1,9 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import type { CardPlayed, TrickResult } from "@pinochle/shared";
 import { SEAT_LABELS, SUITS } from "@pinochle/shared";
 import { CardImage } from "./CardImage";
+import { triggerHaptic } from "../haptics";
 
 interface Props {
   trickNumber: number;
@@ -54,6 +55,34 @@ export function TrickPhase({
   const winnerPosition = trickResult
     ? getPositionForSeat(trickResult.winner_seat, mySeat)
     : null;
+
+  // Play-thump + sweep-success haptics. Mirrors the web TrickPhase audio
+  // cues: one medium tap when a new card lands in a slot, one success
+  // notification when the winner is announced.
+  const prevCardsRef = useRef<Record<string, string | null>>({
+    top: null,
+    left: null,
+    bottom: null,
+    right: null,
+  });
+  const prevWinnerRef = useRef<string | null>(null);
+  useEffect(() => {
+    let playedThumpThisPass = false;
+    for (const pos of ["top", "left", "bottom", "right"] as const) {
+      const nowCard = positionCards[pos]?.card ?? null;
+      const wasCard = prevCardsRef.current[pos];
+      if (nowCard && nowCard !== wasCard && !playedThumpThisPass) {
+        triggerHaptic("medium");
+        playedThumpThisPass = true;
+      }
+      prevCardsRef.current[pos] = nowCard;
+    }
+
+    if (winnerPosition && prevWinnerRef.current !== winnerPosition) {
+      triggerHaptic("success");
+    }
+    prevWinnerRef.current = winnerPosition;
+  });
 
   return (
     <View style={styles.container}>

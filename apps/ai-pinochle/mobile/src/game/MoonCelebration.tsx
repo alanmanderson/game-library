@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { confettiPalette, colors } from "@pinochle/shared";
 import type { MoonOutcome } from "@pinochle/shared";
+import { triggerHaptic } from "../haptics";
 
 interface Props {
   outcome: Extract<MoonOutcome, { kind: "success" } | { kind: "fail" }>;
@@ -97,10 +98,18 @@ export function MoonCelebration({ outcome, onDismiss }: Props) {
     Animated.parallel(animations).start();
   }, [isSuccess, reduced]);
 
-  // TODO(mobile): sound — web ships a procedural moon-chime cue (see
-  // web/src/audio/sounds.ts) but mobile has no audio dep yet. When
-  // expo-av (or the new expo-audio) lands, mirror the isSuccess effect
-  // from web/src/game/MoonCelebration.tsx.
+  // Haptic payoff for a successful moon shot. A short heavy-then-success
+  // sequence stands in for the web moon-chime arpeggio — distinct from the
+  // per-card-play medium cue so it reads as "big deal, you did it". The
+  // fail branch intentionally stays silent (losing should feel subdued).
+  // Sound parity with web's procedural moon-chime is still open — issue #1
+  // only shipped web audio.
+  useEffect(() => {
+    if (!isSuccess) return;
+    triggerHaptic("heavy");
+    const id = setTimeout(() => triggerHaptic("success"), 180);
+    return () => clearTimeout(id);
+  }, [isSuccess]);
 
   useEffect(() => {
     const id = setTimeout(onDismiss, AUTO_DISMISS_MS);
