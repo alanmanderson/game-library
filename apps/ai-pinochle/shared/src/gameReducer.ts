@@ -404,5 +404,9 @@ function applyEvent(state: GameState, evt: WsEvent, mySeat: string): GameState {
     case "LOBBY_STATE_UPDATED":
     case "SEAT_CLAIM_FAILED":
       return state;
+
+    // Handled by useWebSocket (it triggers the reauth flow); no reducer change.
+    case "REAUTH_REQUIRED":
+      return state;
   }
 }

@@ -1,7 +1,12 @@
+import { useLayoutEffect, useRef } from "react";
 import type { CardPlayed, TrickResult } from "@pinochle/shared";
 import { SEAT_LABELS, SUITS, cardLabel } from "@pinochle/shared";
 import { CardImage } from "./CardImage";
+import { flyFromSeatToSlot, sweepToWinner } from "./animations";
+import { useReducedMotion } from "../hooks/useReducedMotion";
 import styles from "./TrickPhase.module.css";
+
+type Position = "bottom" | "left" | "top" | "right";
 
 interface Props {
   trickNumber: number;
@@ -15,10 +20,7 @@ interface Props {
   gameScores: Record<string, number>;
 }
 
-function getPositionForSeat(
-  seat: string,
-  mySeat: string,
-): "bottom" | "left" | "top" | "right" {
+function getPositionForSeat(seat: string, mySeat: string): Position {
   const order = ["NORTH", "EAST", "SOUTH", "WEST"];
   const myIdx = order.indexOf(mySeat.toUpperCase());
   const seatIdx = order.indexOf(seat.toUpperCase());
@@ -38,21 +40,52 @@ export function TrickPhase({
   gameScores,
 }: Props) {
   const trumpInfo = trumpSuit ? SUITS.find((s) => s.key === trumpSuit) : null;
-  const positionCards: Record<string, CardPlayed | null> = {
+  const positionCards: Record<Position, CardPlayed | null> = {
     top: null,
     left: null,
     bottom: null,
     right: null,
   };
   for (const entry of currentTrick) {
-    const pos = getPositionForSeat(entry.seat, mySeat);
-    positionCards[pos] = entry;
+    positionCards[getPositionForSeat(entry.seat, mySeat)] = entry;
   }
 
   const isMyTurn = nextToActSeat === mySeat;
   const winnerPosition = trickResult
     ? getPositionForSeat(trickResult.winner_seat, mySeat)
     : null;
+
+  const reduced = useReducedMotion();
+  const slotRefs = useRef<Record<Position, HTMLElement | null>>({
+    top: null, left: null, bottom: null, right: null,
+  });
+  const prevCardsRef = useRef<Record<Position, string | null>>({
+    top: null, left: null, bottom: null, right: null,
+  });
+  const prevWinnerRef = useRef<Position | null>(null);
+
+  // Play-flight: when a new card appears in a slot, slide it in from that
+  // seat's fan origin. Trick sweep: when the winner is announced, fly all
+  // four cards off toward the winning side.
+  useLayoutEffect(() => {
+    (Object.keys(slotRefs.current) as Position[]).forEach((pos) => {
+      const nowCard = positionCards[pos]?.card ?? null;
+      const wasCard = prevCardsRef.current[pos];
+      if (nowCard && nowCard !== wasCard) {
+        const el = slotRefs.current[pos];
+        if (el) flyFromSeatToSlot(el, pos, reduced);
+      }
+      prevCardsRef.current[pos] = nowCard;
+    });
+
+    if (winnerPosition && prevWinnerRef.current !== winnerPosition) {
+      (Object.keys(slotRefs.current) as Position[]).forEach((pos) => {
+        const el = slotRefs.current[pos];
+        if (el && positionCards[pos]) sweepToWinner(el, winnerPosition, reduced);
+      });
+    }
+    prevWinnerRef.current = winnerPosition;
+  });
 
   return (
     <div className={styles.container}>
@@ -88,10 +121,18 @@ export function TrickPhase({
 
       <div className={styles.trickTable}>
         <div className={styles.topSlot}>
-          <CardSlot entry={positionCards.top} isWinner={winnerPosition === "top"} />
+          <CardSlot
+            entry={positionCards.top}
+            isWinner={winnerPosition === "top"}
+            imgRef={(el) => { slotRefs.current.top = el; }}
+          />
         </div>
         <div className={styles.leftSlot}>
-          <CardSlot entry={positionCards.left} isWinner={winnerPosition === "left"} />
+          <CardSlot
+            entry={positionCards.left}
+            isWinner={winnerPosition === "left"}
+            imgRef={(el) => { slotRefs.current.left = el; }}
+          />
         </div>
         <div className={styles.centerSlot}>
           {trickResult && (
@@ -102,10 +143,18 @@ export function TrickPhase({
           )}
         </div>
         <div className={styles.rightSlot}>
-          <CardSlot entry={positionCards.right} isWinner={winnerPosition === "right"} />
+          <CardSlot
+            entry={positionCards.right}
+            isWinner={winnerPosition === "right"}
+            imgRef={(el) => { slotRefs.current.right = el; }}
+          />
         </div>
         <div className={styles.bottomSlot}>
-          <CardSlot entry={positionCards.bottom} isWinner={winnerPosition === "bottom"} />
+          <CardSlot
+            entry={positionCards.bottom}
+            isWinner={winnerPosition === "bottom"}
+            imgRef={(el) => { slotRefs.current.bottom = el; }}
+          />
         </div>
       </div>
 
@@ -122,13 +171,20 @@ export function TrickPhase({
   );
 }
 
-function CardSlot({ entry, isWinner }: { entry: CardPlayed | null; isWinner: boolean }) {
+interface CardSlotProps {
+  entry: CardPlayed | null;
+  isWinner: boolean;
+  imgRef: (el: HTMLImageElement | null) => void;
+}
+
+function CardSlot({ entry, isWinner, imgRef }: CardSlotProps) {
   if (!entry) {
     return <div className={styles.emptySlot} />;
   }
 
   return (
     <CardImage
+      ref={imgRef}
       card={entry.card}
       alt={cardLabel(entry.card)}
       width={60}

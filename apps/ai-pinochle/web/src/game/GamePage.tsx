@@ -119,12 +119,13 @@ export function GamePage({
         </button>
       </div>
 
-      <div className={styles.topArea}>
+      <div className={styles.topArea} data-seat-origin="top">
+        <span className={styles.deckMarker} data-deck-origin aria-hidden="true" />
         <OtherPlayerHand position="top" cardCount={getOtherCardCount(top)} seatLabel={topPlayer ?? undefined} />
         {topPlayer && <PlayerAvatar username={topPlayer} />}
       </div>
 
-      <div className={styles.leftArea}>
+      <div className={styles.leftArea} data-seat-origin="left">
         {leftPlayer && <PlayerAvatar username={leftPlayer} />}
         <OtherPlayerHand position="left" cardCount={getOtherCardCount(left)} seatLabel={leftPlayer ?? undefined} />
       </div>
@@ -208,12 +209,12 @@ export function GamePage({
         )}
       </div>
 
-      <div className={styles.rightArea}>
+      <div className={styles.rightArea} data-seat-origin="right">
         <OtherPlayerHand position="right" cardCount={getOtherCardCount(right)} seatLabel={rightPlayer ?? undefined} />
         {rightPlayer && <PlayerAvatar username={rightPlayer} />}
       </div>
 
-      <div className={styles.bottomArea}>
+      <div className={styles.bottomArea} data-seat-origin="bottom">
         {bottomPlayer && <PlayerAvatar username={bottomPlayer} />}
         {phase !== "PASSING_CARDS" && (
           <HandDisplay

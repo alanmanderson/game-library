@@ -1,6 +1,8 @@
-import { memo, useMemo } from "react";
+import { memo, useLayoutEffect, useMemo, useRef } from "react";
 import { cardSuit, cardLabel, sortHand, SUIT_LETTER } from "@pinochle/shared";
 import { CardImage } from "./CardImage";
+import { dealFromDeck } from "./animations";
+import { useReducedMotion } from "../hooks/useReducedMotion";
 import styles from "./HandDisplay.module.css";
 
 interface Props {
@@ -26,12 +28,47 @@ export const HandDisplay = memo(function HandDisplay({
   const sorted = useMemo(() => sortHand(cards), [cards]);
   const interactive = !!(onCardClick && legalCards);
 
+  const reduced = useReducedMotion();
+  // Multiset counts of cards held last render — Pinochle has duplicates (two
+  // of each rank+suit) so a plain Set doesn't work. A card is "new" only if
+  // this render has more copies of it than the previous render did.
+  const prevCountsRef = useRef<Map<string, number>>(new Map());
+  const cardRefs = useRef<Map<string, HTMLElement>>(new Map());
+
+  // After paint, animate any cards that are new this render. Newly-dealt
+  // hands (12 cards at once) cascade in with a stagger; a single replacement
+  // card (e.g. from a pass) animates in alone. Cards the user just played
+  // simply disappear from `sorted` — no exit animation needed since the
+  // play-flight on the trick slot conveys the motion.
+  useLayoutEffect(() => {
+    const prev = prevCountsRef.current;
+    const remaining = new Map(prev);
+    const incoming: HTMLElement[] = [];
+
+    sorted.forEach((card, i) => {
+      const left = remaining.get(card) ?? 0;
+      if (left > 0) {
+        remaining.set(card, left - 1);
+      } else {
+        const el = cardRefs.current.get(`${card}-${i}`);
+        if (el) incoming.push(el);
+      }
+    });
+
+    incoming.forEach((el, i) => dealFromDeck(el, i, reduced));
+
+    const next = new Map<string, number>();
+    for (const c of sorted) next.set(c, (next.get(c) ?? 0) + 1);
+    prevCountsRef.current = next;
+  }, [sorted, reduced]);
+
   return (
     <div className={styles.hand}>
       {sorted.map((card, i) => {
         const isTrump = trumpLetter && cardSuit(card) === trumpLetter;
         const isLegal = !legalCards || legalCards.includes(card);
         const clickable = interactive && isLegal;
+        const key = `${card}-${i}`;
 
         const classes = [
           styles.card,
@@ -42,7 +79,11 @@ export const HandDisplay = memo(function HandDisplay({
 
         return (
           <CardImage
-            key={`${card}-${i}`}
+            key={key}
+            ref={(el) => {
+              if (el) cardRefs.current.set(key, el);
+              else cardRefs.current.delete(key);
+            }}
             card={card}
             alt={cardLabel(card)}
             width={80}

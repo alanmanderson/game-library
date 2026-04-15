@@ -26,6 +26,19 @@
   justify-content: center;
   gap: 6px;
   padding-top: var(--space-2);
+  position: relative;
+}
+
+/* Invisible origin point for the deal animation — cards fly out from this
+ * position (center-top of the table) into the player's hand. The element has
+ * zero visual footprint; only its bounding rect matters. */
+.deckMarker {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
 }
 
 .leftArea {
