@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Button } from "./Button.tsx";
+import { MuteToggle } from "./MuteToggle.tsx";
 import styles from "./BrandHeader.module.css";
 
 interface BrandHeaderProps {
@@ -34,22 +35,21 @@ export function BrandHeader({
         <span className={styles.wordmark}>Pinochle</span>
       </button>
 
-      {(userName || extras || onLogout) && (
-        <div className={styles.user}>
-          {extras}
-          {userName && (
-            <span>
-              Welcome,{" "}
-              <span className={styles.userName}>{userName}</span>
-            </span>
-          )}
-          {onLogout && (
-            <Button variant="ghost" size="sm" onClick={onLogout}>
-              Log out
-            </Button>
-          )}
-        </div>
-      )}
+      <div className={styles.user}>
+        <MuteToggle />
+        {extras}
+        {userName && (
+          <span>
+            Welcome,{" "}
+            <span className={styles.userName}>{userName}</span>
+          </span>
+        )}
+        {onLogout && (
+          <Button variant="ghost" size="sm" onClick={onLogout}>
+            Log out
+          </Button>
+        )}
+      </div>
     </header>
   );
 }

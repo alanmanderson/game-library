@@ -97,8 +97,10 @@ export function MoonCelebration({ outcome, onDismiss }: Props) {
     Animated.parallel(animations).start();
   }, [isSuccess, reduced]);
 
-  // TODO(#1): play moon chime here — see web/src/game/MoonCelebration.tsx
-  // for the canonical integration-point comment.
+  // TODO(mobile): sound — web ships a procedural moon-chime cue (see
+  // web/src/audio/sounds.ts) but mobile has no audio dep yet. When
+  // expo-av (or the new expo-audio) lands, mirror the isSuccess effect
+  // from web/src/game/MoonCelebration.tsx.
 
   useEffect(() => {
     const id = setTimeout(onDismiss, AUTO_DISMISS_MS);

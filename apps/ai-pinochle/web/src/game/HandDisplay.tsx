@@ -3,7 +3,12 @@ import { cardSuit, cardLabel, sortHand, SUIT_LETTER } from "@pinochle/shared";
 import { CardImage } from "./CardImage";
 import { dealFromDeck } from "./animations";
 import { useReducedMotion } from "../hooks/useReducedMotion";
+import { playSound } from "../audio/sounds";
 import styles from "./HandDisplay.module.css";
+
+// Must match DEAL_STAGGER_MS in ./animations.ts so each audible flip lines up
+// with its visual counterpart.
+const DEAL_STAGGER_MS = 40;
 
 interface Props {
   cards: string[];
@@ -55,7 +60,21 @@ export const HandDisplay = memo(function HandDisplay({
       }
     });
 
-    incoming.forEach((el, i) => dealFromDeck(el, i, reduced));
+    incoming.forEach((el, i) => {
+      dealFromDeck(el, i, reduced);
+      // Schedule the click/flip sound at the same stagger; a single replacement
+      // from a pass fires immediately (i=0). The deal sound cue is short
+      // (~100ms) so even a full 12-card cascade finishes cleanly.
+      const delay = i * DEAL_STAGGER_MS;
+      if (delay === 0) {
+        playSound("card_flip", { gain: 0.5 });
+      } else {
+        window.setTimeout(
+          () => playSound("card_flip", { gain: 0.5 }),
+          delay,
+        );
+      }
+    });
 
     const next = new Map<string, number>();
     for (const c of sorted) next.set(c, (next.get(c) ?? 0) + 1);

@@ -17,6 +17,7 @@ import { GameOverScreen } from "./GameOverScreen.tsx";
 import { MoonCelebration } from "./MoonCelebration.tsx";
 import { PlayerAvatar } from "./PlayerAvatar.tsx";
 import { OtherPlayerHand } from "./OtherPlayerHand.tsx";
+import { MuteToggle } from "../ui";
 import styles from "./GamePage.module.css";
 
 type SendMessage = (msg: Record<string, unknown>) => boolean | void;
@@ -141,6 +142,7 @@ export function GamePage({
           aria-label={connected ? "Connected" : "Disconnected"}
           role="status"
         />
+        <MuteToggle />
         <button className={styles.leaveButton} onClick={onLeave}>
           Leave
         </button>

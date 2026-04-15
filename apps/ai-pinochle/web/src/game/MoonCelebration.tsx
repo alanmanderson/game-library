@@ -3,6 +3,7 @@ import { confettiPalette } from "@pinochle/shared";
 import type { MoonOutcome } from "@pinochle/shared";
 import { runConfetti } from "./confetti";
 import { useReducedMotion } from "../hooks/useReducedMotion";
+import { playSound } from "../audio/sounds";
 import styles from "./MoonCelebration.module.css";
 
 interface Props {
@@ -19,18 +20,22 @@ const AUTO_DISMISS_MS = 4000;
  * (see ./confetti.ts) and is replaced with a static banner when the user
  * has `prefers-reduced-motion: reduce`.
  *
- * Sound is intentionally NOT wired here — see TODO below; issue #1 covers
- * the audio system.
+ * Audio: success plays a moon-chime arpeggio (see ../audio/sounds.ts);
+ * fail is silent by design — the banner and the hand-result point penalty
+ * communicate the outcome.
  */
 export function MoonCelebration({ outcome, onDismiss }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const reduced = useReducedMotion();
   const isSuccess = outcome.kind === "success";
 
-  // TODO(#1): play moon chime here — success and fail want different cues.
-  // Audio system lands in issue #1; the single integration point is this
-  // effect so a follow-up only needs to add a `sounds.moonSuccess.play()`
-  // (and a fail variant) plus respect a user mute toggle.
+  // On success we play a triumphant arpeggio; on fail we stay silent
+  // intentionally — the visual "Moon Shot Failed" banner + point penalty in
+  // the hand result screen do the job and a sad-trombone cue would be
+  // gratuitous. The mute toggle in the BrandHeader controls the success cue.
+  useEffect(() => {
+    if (isSuccess) playSound("moon_chime");
+  }, [isSuccess]);
 
   useEffect(() => {
     if (!isSuccess || reduced) return;

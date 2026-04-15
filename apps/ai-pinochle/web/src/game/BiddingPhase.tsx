@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { BiddingState } from "@pinochle/shared";
 import { SEAT_LABELS, sendAction } from "@pinochle/shared";
+import { playSound } from "../audio/sounds";
 import styles from "./BiddingPhase.module.css";
 
 interface Props {
@@ -26,6 +27,22 @@ export function BiddingPhase({ biddingState, mySeat, sendMessage }: Props) {
   useEffect(() => {
     setBidAmount((prev) => (prev < minimum_valid_bid ? minimum_valid_bid : prev));
   }, [minimum_valid_bid]);
+
+  // Audio cue whenever the highest-bid value changes — i.e. any player (us
+  // included) placed a new winning bid. `null -> number` on first bid and
+  // `number -> number` on subsequent raises both trigger. A pass doesn't
+  // change the value, so no chime there (matches user intuition: chime =
+  // "someone actually bid").
+  const prevHighestRef = useRef<number | null>(current_highest_bid);
+  useEffect(() => {
+    if (
+      current_highest_bid !== null &&
+      current_highest_bid !== prevHighestRef.current
+    ) {
+      playSound("bid_chime", { gain: 0.5 });
+    }
+    prevHighestRef.current = current_highest_bid;
+  }, [current_highest_bid]);
 
   function clamp(n: number): number {
     if (n < minimum_valid_bid) return minimum_valid_bid;

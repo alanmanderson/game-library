@@ -4,6 +4,7 @@ import { SEAT_LABELS, SUITS, cardLabel } from "@pinochle/shared";
 import { CardImage } from "./CardImage";
 import { flyFromSeatToSlot, sweepToWinner } from "./animations";
 import { useReducedMotion } from "../hooks/useReducedMotion";
+import { playSound } from "../audio/sounds";
 import styles from "./TrickPhase.module.css";
 
 type Position = "bottom" | "left" | "top" | "right";
@@ -68,12 +69,19 @@ export function TrickPhase({
   // seat's fan origin. Trick sweep: when the winner is announced, fly all
   // four cards off toward the winning side.
   useLayoutEffect(() => {
+    let playedSlapThisPass = false;
     (Object.keys(slotRefs.current) as Position[]).forEach((pos) => {
       const nowCard = positionCards[pos]?.card ?? null;
       const wasCard = prevCardsRef.current[pos];
       if (nowCard && nowCard !== wasCard) {
         const el = slotRefs.current[pos];
         if (el) flyFromSeatToSlot(el, pos, reduced);
+        // Guard against a future batch that introduces more than one new card
+        // in a single render — we still want exactly one slap cue per play.
+        if (!playedSlapThisPass) {
+          playSound("card_slap", { gain: 0.7 });
+          playedSlapThisPass = true;
+        }
       }
       prevCardsRef.current[pos] = nowCard;
     });
@@ -83,6 +91,7 @@ export function TrickPhase({
         const el = slotRefs.current[pos];
         if (el && positionCards[pos]) sweepToWinner(el, winnerPosition, reduced);
       });
+      playSound("trick_sweep", { gain: 0.6 });
     }
     prevWinnerRef.current = winnerPosition;
   });
