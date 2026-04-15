@@ -233,9 +233,10 @@ describe("GameReplay – navigation", () => {
     fireEvent.click(screen.getByRole("button", { name: /next move/i }));
 
     await waitFor(() => {
-      // The dice element contains "🎲 3-5"; check it contains "3-5"
-      const diceEl = document.querySelector(".replay-dice");
-      expect(diceEl?.textContent).toContain("3-5");
+      // Dice are rendered as an on-board overlay for the current move.
+      const overlay = document.querySelector(".replay-dice-overlay");
+      expect(overlay).not.toBeNull();
+      expect(overlay?.querySelector(".dice-container")).not.toBeNull();
     });
   });
 

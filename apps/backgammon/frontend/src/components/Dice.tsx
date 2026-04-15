@@ -7,6 +7,8 @@ interface DiceProps {
   remainingDice: number[];
   currentTurn: Color;
   openingRoll?: { white: number; black: number } | null;
+  /** When true, skip the tumble animation and render the dice statically. */
+  animate?: boolean;
 }
 
 /**
@@ -39,7 +41,7 @@ function DieFace({ value, used, color, rolling }: { value: number; used: boolean
   );
 }
 
-function Dice({ dice, remainingDice, currentTurn, openingRoll }: DiceProps) {
+function Dice({ dice, remainingDice, currentTurn, openingRoll, animate = true }: DiceProps) {
   const [isRolling, setIsRolling] = useState(false);
   const [rollingFaces, setRollingFaces] = useState<[number, number]>([1, 1]);
   const prevDiceRef = useRef<{ die1: number; die2: number } | null>(null);
@@ -51,7 +53,7 @@ function Dice({ dice, remainingDice, currentTurn, openingRoll }: DiceProps) {
 
     if (dice) {
       const isNew = !prev || prev.die1 !== dice.die1 || prev.die2 !== dice.die2;
-      if (isNew) {
+      if (isNew && animate) {
         setIsRolling(true);
 
         // Cycle random faces during tumble
@@ -76,7 +78,7 @@ function Dice({ dice, remainingDice, currentTurn, openingRoll }: DiceProps) {
       if (rollTimerRef.current) clearTimeout(rollTimerRef.current);
       setIsRolling(false);
     }
-  }, [dice]);
+  }, [dice, animate]);
 
   // Cleanup on unmount
   useEffect(() => {

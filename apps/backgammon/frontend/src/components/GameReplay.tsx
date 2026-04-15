@@ -614,6 +614,7 @@ function GameReplay() {
               remainingDice={remainingDiceForDisplay}
               currentTurn={movedByColor}
               openingRoll={openingRoll}
+              animate={false}
             />
           </div>
         )}
@@ -642,8 +643,14 @@ function GameReplay() {
             <span className={`replay-player-badge replay-player-${movedByColor}`}>
               {movedBy ?? (movedByColor === "white" ? "White" : "Black")}
             </span>
-            <span className="replay-dice">🎲 {currentMove.dice_roll}</span>
             <span className="replay-notation">{currentMove.moves_notation}</span>
+            {currentAnalysis?.best_move_notation &&
+              currentAnalysis.quality !== "best" &&
+              currentAnalysis.quality !== "very_good" && (
+                <span className="replay-notation-best">
+                  best: {currentAnalysis.best_move_notation}
+                </span>
+              )}
           </>
         ) : (
           <span className="replay-notation-empty">Game start</span>

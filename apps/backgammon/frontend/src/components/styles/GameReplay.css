@@ -207,14 +207,15 @@
   border: 1px solid #555;
 }
 
-.replay-dice {
-  color: #ffd700;
-  font-weight: 600;
-}
-
 .replay-notation {
   color: #ccc;
   font-family: monospace;
+}
+
+.replay-notation-best {
+  color: #e74c3c;
+  font-family: monospace;
+  font-weight: 600;
 }
 
 .replay-notation-empty {
