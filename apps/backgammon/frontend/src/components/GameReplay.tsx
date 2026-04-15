@@ -4,10 +4,15 @@
  * Fetches replay data (initial state + per-move board snapshots) from the
  * backend and lets the user navigate forward/backward through the moves,
  * or watch the game play out automatically.
+ *
+ * Public sharing: the route is accessible without authentication.  A
+ * "Copy Share Link" button puts the canonical replay URL on the clipboard,
+ * and an ?embed=1 query param hides chrome (header + back button) so the
+ * viewer can be embedded on external sites.
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import type { GameState, ReplayData, ReplayMoveRecord } from "../types/game";
 import { getReplay } from "../services/api";
 import Board from "./Board";
@@ -34,13 +39,53 @@ function buildReplayState(state: GameState, move: ReplayMoveRecord | null): Game
   };
 }
 
+/** Build a one-line description of the result for OG/description tags. */
+function buildReplayDescription(data: ReplayData): string {
+  const white = data.white_player_nickname ?? "White";
+  const black = data.black_player_nickname ?? "Black";
+  if (data.winner_nickname && data.win_type) {
+    const loser =
+      data.winner_color === "white" ? black : data.winner_color === "black" ? white : "opponent";
+    const typeLabel =
+      data.win_type === "backgammon"
+        ? "backgammon"
+        : data.win_type === "gammon"
+          ? "gammon"
+          : "win";
+    const score =
+      data.white_match_score != null && data.black_match_score != null
+        ? ` (${data.white_match_score}-${data.black_match_score})`
+        : "";
+    return `${data.winner_nickname} defeated ${loser} by ${typeLabel}${score}.`;
+  }
+  return `A backgammon match between ${white} and ${black}.`;
+}
+
+/** Set (or update) a meta tag in document.head. */
+function setMeta(selector: string, attrs: Record<string, string>) {
+  let el = document.head.querySelector<HTMLMetaElement>(selector);
+  if (!el) {
+    el = document.createElement("meta");
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k !== "content") el.setAttribute(k, v);
+    }
+    document.head.appendChild(el);
+  }
+  if (attrs.content !== undefined) {
+    el.setAttribute("content", attrs.content);
+  }
+}
+
 function GameReplay() {
   const { tableId } = useParams<{ tableId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const embed = searchParams.get("embed") === "1";
 
   const [replayData, setReplayData] = useState<ReplayData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // Current position in the replay (0 = initial state, N = after move N)
   const [moveIndex, setMoveIndex] = useState(0);
@@ -85,6 +130,36 @@ function GameReplay() {
       cancelled = true;
     };
   }, [tableId]);
+
+  // Populate document.title and OG/Twitter meta tags once the replay is loaded.
+  // Note: this is a client-side SPA so headless crawlers that don't run JS
+  // won't see these tags.  Slack/iMessage/Discord do execute JS previews for
+  // many links, so this gives a best-effort preview for the common case.
+  useEffect(() => {
+    if (!replayData) return;
+    const title = `Backgammon replay: ${replayData.white_player_nickname ?? "White"} vs ${replayData.black_player_nickname ?? "Black"}`;
+    const description = buildReplayDescription(replayData);
+    const url =
+      typeof window !== "undefined" ? `${window.location.origin}/replay/${replayData.table_id}` : "";
+
+    const previousTitle = document.title;
+    document.title = title;
+
+    setMeta('meta[property="og:title"]', { property: "og:title", content: title });
+    setMeta('meta[property="og:description"]', { property: "og:description", content: description });
+    setMeta('meta[property="og:type"]', { property: "og:type", content: "website" });
+    if (url) {
+      setMeta('meta[property="og:url"]', { property: "og:url", content: url });
+    }
+    setMeta('meta[name="description"]', { name: "description", content: description });
+    setMeta('meta[name="twitter:card"]', { name: "twitter:card", content: "summary" });
+    setMeta('meta[name="twitter:title"]', { name: "twitter:title", content: title });
+    setMeta('meta[name="twitter:description"]', { name: "twitter:description", content: description });
+
+    return () => {
+      document.title = previousTitle;
+    };
+  }, [replayData]);
 
   // Stop auto-play when we reach the end or when the component unmounts
   useEffect(() => {
@@ -141,9 +216,33 @@ function GameReplay() {
     }
   }, [autoPlaying, moveIndex, totalMoves, stopAutoPlay]);
 
+  const handleCopyShareLink = useCallback(async () => {
+    if (!tableId) return;
+    const shareUrl = `${window.location.origin}/replay/${tableId}`;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+      } else {
+        // Fallback for older browsers / insecure contexts
+        const textarea = document.createElement("textarea");
+        textarea.value = shareUrl;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  }, [tableId]);
+
   if (loading) {
     return (
-      <div className="replay-page">
+      <div className={`replay-page${embed ? " replay-page--embed" : ""}`}>
         <div className="replay-loading">Loading replay…</div>
       </div>
     );
@@ -151,11 +250,13 @@ function GameReplay() {
 
   if (error || !replayData) {
     return (
-      <div className="replay-page">
+      <div className={`replay-page${embed ? " replay-page--embed" : ""}`}>
         <div className="replay-error">{error ?? "Replay not available."}</div>
-        <button className="replay-back-btn" onClick={() => navigate(-1)}>
-          ← Back
-        </button>
+        {!embed && (
+          <button className="replay-back-btn" onClick={() => navigate(-1)}>
+            ← Back
+          </button>
+        )}
       </div>
     );
   }
@@ -185,17 +286,28 @@ function GameReplay() {
   const cubeOwner = displayState.cube_owner ?? null;
 
   return (
-    <div className="replay-page">
-      {/* Header */}
-      <div className="replay-header">
-        <button className="replay-back-btn" onClick={() => navigate(-1)}>
-          ← Back
-        </button>
-        <h2 className="replay-title">
-          {replayData.white_player_nickname ?? "White"} vs{" "}
-          {replayData.black_player_nickname ?? "Black"}
-        </h2>
-      </div>
+    <div className={`replay-page${embed ? " replay-page--embed" : ""}`}>
+      {/* Header (hidden in embed mode) */}
+      {!embed && (
+        <div className="replay-header">
+          <button className="replay-back-btn" onClick={() => navigate(-1)}>
+            ← Back
+          </button>
+          <h2 className="replay-title">
+            {replayData.white_player_nickname ?? "White"} vs{" "}
+            {replayData.black_player_nickname ?? "Black"}
+          </h2>
+          <button
+            type="button"
+            className={`replay-share-btn${copied ? " replay-share-btn--copied" : ""}`}
+            onClick={handleCopyShareLink}
+            aria-label="Copy share link"
+            title="Copy a public link to this replay"
+          >
+            {copied ? "✓ Copied!" : "🔗 Copy Share Link"}
+          </button>
+        </div>
+      )}
 
       {/* Move counter */}
       <div className="replay-counter">

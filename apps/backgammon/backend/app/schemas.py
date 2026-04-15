@@ -222,8 +222,16 @@ class ReplayMoveRecord(BaseModel):
 
 class ReplayResponse(BaseModel):
     table_id: str
+    status: str
     white_player_nickname: Optional[str] = None
     black_player_nickname: Optional[str] = None
+    winner_color: Optional[str] = None  # "white" | "black" | None
+    winner_nickname: Optional[str] = None
+    win_type: Optional[str] = None  # "normal" | "gammon" | "backgammon"
+    final_score: Optional[int] = None
+    white_match_score: Optional[int] = None
+    black_match_score: Optional[int] = None
+    match_points: Optional[int] = None
     initial_state: dict
     moves: list[ReplayMoveRecord]
 

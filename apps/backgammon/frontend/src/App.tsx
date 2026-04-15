@@ -7,7 +7,7 @@
  */
 
 import { useState, useEffect } from "react";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, useLocation } from "react-router-dom";
 import type { Player } from "./types/game";
 import { getMe, getStoredToken, clearStoredToken } from "./services/api";
 import { STORAGE_KEY } from "./constants";
@@ -74,9 +74,11 @@ function App() {
     );
   }
 
+  // Public replay URLs must be viewable without signing in.  The replay route
+  // can also be embedded (?embed=1) so we suppress the auth modal there too.
   return (
     <div className="app">
-      {!player && <AuthModal onAuthenticated={handleAuthenticated} />}
+      <AppChrome player={player} onAuthenticated={handleAuthenticated} />
 
       <Routes>
         <Route
@@ -124,6 +126,23 @@ function App() {
       </Routes>
     </div>
   );
+}
+
+/**
+ * Renders the AuthModal unless the current route is a public replay URL.
+ * Lives inside the Router so that `useLocation` works.
+ */
+function AppChrome({
+  player,
+  onAuthenticated,
+}: {
+  player: Player | null;
+  onAuthenticated: (p: Player) => void;
+}) {
+  const location = useLocation();
+  const isPublicReplay = location.pathname.startsWith("/replay/");
+  if (player || isPublicReplay) return null;
+  return <AuthModal onAuthenticated={onAuthenticated} />;
 }
 
 export default App;

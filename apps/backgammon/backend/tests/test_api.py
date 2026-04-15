@@ -412,11 +412,18 @@ class TestGameReplay:
         assert state["off_white"] == 0
         assert state["off_black"] == 0
 
-    async def test_replay_includes_player_nicknames(self, client):
+    async def test_replay_includes_player_nicknames(self, client, db_session):
         """Replay response includes white and black player nicknames."""
+        from app.models import Table
+
         table, creator_auth, joiner_auth = await create_and_join_table(
             client, "ReplayAlice", "ReplayBob"
         )
+        # Mark the table as finished so the public replay endpoint allows access
+        db_table = await db_session.get(Table, table["id"])
+        db_table.status = "game_over"
+        await db_session.commit()
+
         resp = await client.get(f"/api/tables/{table['id']}/replay")
         assert resp.status_code == 200
         data = resp.json()
@@ -424,9 +431,15 @@ class TestGameReplay:
         assert "ReplayAlice" in nicknames
         assert "ReplayBob" in nicknames
 
-    async def test_replay_response_structure(self, client):
+    async def test_replay_response_structure(self, client, db_session):
         """Replay response has the expected top-level fields."""
+        from app.models import Table
+
         table, _, _ = await create_and_join_table(client)
+        db_table = await db_session.get(Table, table["id"])
+        db_table.status = "finished"
+        await db_session.commit()
+
         resp = await client.get(f"/api/tables/{table['id']}/replay")
         assert resp.status_code == 200
         data = resp.json()
@@ -435,7 +448,43 @@ class TestGameReplay:
         assert "black_player_nickname" in data
         assert "initial_state" in data
         assert "moves" in data
+        assert "status" in data
+        assert "winner_color" in data
+        assert "win_type" in data
         assert isinstance(data["moves"], list)
+
+    async def test_replay_blocks_in_progress_game(self, client):
+        """Replay endpoint refuses to serve games still being played."""
+        table, _, _ = await create_and_join_table(client)
+        # After joining, the table status is "playing".
+        resp = await client.get(f"/api/tables/{table['id']}/replay")
+        assert resp.status_code == 403
+        assert "completed" in resp.json()["detail"].lower()
+
+    async def test_replay_is_public_for_finished_games(self, client, db_session):
+        """Completed games can be fetched without any auth header."""
+        from app.models import Table, Player
+
+        table, _, _ = await create_and_join_table(client, "Alice", "Bob")
+        db_table = await db_session.get(Table, table["id"])
+        db_table.status = "finished"
+        db_table.winner_id = db_table.white_player_id
+        db_table.win_type = "gammon"
+        await db_session.commit()
+
+        # Look up the actual nickname of the white player (colors are assigned
+        # at join-time and which player gets white is not deterministic from
+        # the creator/joiner ordering).
+        white_player = await db_session.get(Player, db_table.white_player_id)
+        expected_winner_nickname = white_player.nickname
+
+        # Explicitly no Authorization header
+        resp = await client.get(f"/api/tables/{table['id']}/replay")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["winner_color"] == "white"
+        assert data["winner_nickname"] == expected_winner_nickname
+        assert data["win_type"] == "gammon"
 
 
 # -----------------------------------------------------------------------

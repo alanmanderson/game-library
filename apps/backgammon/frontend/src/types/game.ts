@@ -165,8 +165,16 @@ export interface ReplayMoveRecord {
 /** Full replay data for a completed game. */
 export interface ReplayData {
   table_id: string;
+  status: string;
   white_player_nickname: string | null;
   black_player_nickname: string | null;
+  winner_color?: "white" | "black" | null;
+  winner_nickname?: string | null;
+  win_type?: WinType | null;
+  final_score?: number | null;
+  white_match_score?: number | null;
+  black_match_score?: number | null;
+  match_points?: number | null;
   initial_state: GameState;
   moves: ReplayMoveRecord[];
 }

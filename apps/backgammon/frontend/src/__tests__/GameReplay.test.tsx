@@ -27,9 +27,9 @@ import * as api from "../services/api";
 // ---------------------------------------------------------------------------
 
 /** Render the GameReplay component at /replay/:tableId inside a router. */
-function renderReplay(tableId: string) {
+function renderReplay(tableId: string, search: string = "") {
   return render(
-    <MemoryRouter initialEntries={[`/replay/${tableId}`]}>
+    <MemoryRouter initialEntries={[`/replay/${tableId}${search}`]}>
       <Routes>
         <Route path="/replay/:tableId" element={<GameReplay />} />
       </Routes>
@@ -79,8 +79,16 @@ const STATE_AFTER_MOVE2 = {
 
 const replayWithMoves: ReplayData = {
   table_id: "TABLE001",
+  status: "finished",
   white_player_nickname: "Alice",
   black_player_nickname: "Bob",
+  winner_color: "white",
+  winner_nickname: "Alice",
+  win_type: "gammon",
+  final_score: 2,
+  white_match_score: 3,
+  black_match_score: 1,
+  match_points: 5,
   initial_state: INITIAL_STATE,
   moves: [
     {
@@ -104,8 +112,12 @@ const replayWithMoves: ReplayData = {
 
 const replayNoMoves: ReplayData = {
   table_id: "TABLE002",
+  status: "finished",
   white_player_nickname: "Alice",
   black_player_nickname: "Bob",
+  winner_color: null,
+  winner_nickname: null,
+  win_type: null,
   initial_state: INITIAL_STATE,
   moves: [],
 };
@@ -270,6 +282,87 @@ describe("GameReplay – navigation", () => {
 
     expect(screen.getByRole("button", { name: /go to last move/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /next move/i })).toBeDisabled();
+  });
+});
+
+describe("GameReplay – share link", () => {
+  it("renders a Copy Share Link button", async () => {
+    vi.mocked(api.getReplay).mockResolvedValue(replayWithMoves);
+    renderReplay("TABLE001");
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /copy share link/i }),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("copies the canonical replay URL to the clipboard and shows feedback", async () => {
+    vi.mocked(api.getReplay).mockResolvedValue(replayWithMoves);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    renderReplay("TABLE001");
+    const btn = await screen.findByRole("button", { name: /copy share link/i });
+    fireEvent.click(btn);
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledTimes(1);
+    });
+    const calledWith = writeText.mock.calls[0][0] as string;
+    expect(calledWith.endsWith("/replay/TABLE001")).toBe(true);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /copy share link/i })).toHaveTextContent(
+        /copied/i,
+      );
+    });
+  });
+});
+
+describe("GameReplay – embed mode", () => {
+  it("hides the header (title, back, share) when ?embed=1", async () => {
+    vi.mocked(api.getReplay).mockResolvedValue(replayWithMoves);
+    renderReplay("TABLE001", "?embed=1");
+    // Wait for the board to appear so we know loading is done
+    await waitFor(() => screen.getByText("Starting position"));
+    expect(screen.queryByRole("button", { name: /copy share link/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^back$/i })).toBeNull();
+    expect(screen.queryByText(/Alice vs Bob/)).toBeNull();
+  });
+
+  it("applies the embed CSS modifier class", async () => {
+    vi.mocked(api.getReplay).mockResolvedValue(replayWithMoves);
+    const { container } = renderReplay("TABLE001", "?embed=1");
+    await waitFor(() => screen.getByText("Starting position"));
+    expect(container.querySelector(".replay-page--embed")).not.toBeNull();
+  });
+
+  it("still shows the header when embed param is missing", async () => {
+    vi.mocked(api.getReplay).mockResolvedValue(replayWithMoves);
+    renderReplay("TABLE001");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /copy share link/i })).toBeInTheDocument();
+    });
+  });
+});
+
+describe("GameReplay – OG meta tags", () => {
+  it("sets document.title and og meta tags based on replay data", async () => {
+    vi.mocked(api.getReplay).mockResolvedValue(replayWithMoves);
+    renderReplay("TABLE001");
+    await waitFor(() => {
+      expect(document.title).toContain("Alice");
+      expect(document.title).toContain("Bob");
+    });
+    const ogTitle = document.head.querySelector('meta[property="og:title"]');
+    const ogDesc = document.head.querySelector('meta[property="og:description"]');
+    const ogType = document.head.querySelector('meta[property="og:type"]');
+    expect(ogTitle?.getAttribute("content")).toContain("Alice");
+    expect(ogDesc?.getAttribute("content")).toContain("Alice");
+    expect(ogType?.getAttribute("content")).toBe("website");
   });
 });
 

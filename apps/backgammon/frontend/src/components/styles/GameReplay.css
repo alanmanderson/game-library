@@ -41,6 +41,59 @@
   font-size: 1.25rem;
   font-weight: 600;
   color: #f5e6c8;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Share link button */
+.replay-share-btn {
+  background: var(--accent, #d4a843);
+  border: 1px solid var(--accent, #d4a843);
+  color: var(--bg-primary, #1a1a2e);
+  padding: 0.45rem 0.9rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
+  white-space: nowrap;
+}
+
+.replay-share-btn:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.replay-share-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.replay-share-btn--copied {
+  background: var(--success, #2ecc71);
+  border-color: var(--success, #2ecc71);
+  color: var(--bg-primary, #1a1a2e);
+}
+
+/* Embed mode: tighten padding, lose extra chrome */
+.replay-page--embed {
+  padding: 0.5rem;
+  min-height: auto;
+}
+
+.replay-page--embed .replay-counter {
+  font-size: 0.85rem;
+}
+
+@media (max-width: 768px) {
+  .replay-header {
+    flex-wrap: wrap;
+  }
+  .replay-share-btn {
+    font-size: 0.85rem;
+    padding: 0.4rem 0.7rem;
+  }
 }
 
 /* Move counter */

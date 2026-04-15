@@ -522,15 +522,37 @@ async def get_game_replay(
     if not table:
         raise HTTPException(status_code=404, detail="Table not found")
 
+    # Replays are public but must not leak in-progress games.  "waiting" tables
+    # have not started so there is nothing to leak; "game_over"/"finished" are
+    # completed games meant for sharing.  Block "playing".
+    if table.status == "playing":
+        raise HTTPException(
+            status_code=403,
+            detail="Replay is only available for completed games.",
+        )
+
     # Look up player nicknames
     white_nickname: str | None = None
     black_nickname: str | None = None
+    white_player = None
+    black_player = None
     if table.white_player_id:
         white_player = await db.get(Player, table.white_player_id)
         white_nickname = white_player.nickname if white_player else None
     if table.black_player_id:
         black_player = await db.get(Player, table.black_player_id)
         black_nickname = black_player.nickname if black_player else None
+
+    # Determine winner color + nickname (if any)
+    winner_color: str | None = None
+    winner_nickname: str | None = None
+    if table.winner_id:
+        if table.winner_id == table.white_player_id:
+            winner_color = "white"
+            winner_nickname = white_nickname
+        elif table.winner_id == table.black_player_id:
+            winner_color = "black"
+            winner_nickname = black_nickname
 
     # Build the standard initial board state
     initial_engine = BackgammonEngine()
@@ -572,8 +594,16 @@ async def get_game_replay(
 
     return ReplayResponse(
         table_id=table_id,
+        status=table.status,
         white_player_nickname=white_nickname,
         black_player_nickname=black_nickname,
+        winner_color=winner_color,
+        winner_nickname=winner_nickname,
+        win_type=table.win_type,
+        final_score=table.final_score,
+        white_match_score=table.white_match_score,
+        black_match_score=table.black_match_score,
+        match_points=table.match_points,
         initial_state=initial_state,
         moves=moves,
     )
