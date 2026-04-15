@@ -46,10 +46,11 @@ from .schemas import (
 
 logger = logging.getLogger(__name__)
 
-# gnubg TTY prompt varies; these are the tokens we recognise as "ready for
-# the next command". We inject a sentinel after every command so we don't
-# have to fight format differences.
-_SENTINEL = "__GNUBG_SENTINEL_COMPLETE__"
+# gnubg has no `echo` command, so we can't emit an arbitrary sentinel line.
+# Instead we send a deliberately unknown keyword and wait for gnubg's
+# "Unknown keyword `<name>`." reply — it echoes our token back to us,
+# giving a reliable framing marker without relying on prompt format.
+_SENTINEL = "__gnubg_sentinel_done__"
 _STARTUP_TIMEOUT = 15.0
 _COMMAND_TIMEOUT = 30.0
 
@@ -144,9 +145,10 @@ class GnubgEngine:
         assert self._proc is not None and self._proc.stdout is not None
 
         if initial:
-            # Send an echo so we know the banner is done.
+            # Send the sentinel token; gnubg will reply with "Unknown keyword
+            # `<sentinel>`." which we use as the end-of-banner marker.
             assert self._proc.stdin is not None
-            self._proc.stdin.write(f"echo {_SENTINEL}\n".encode())
+            self._proc.stdin.write(f"{_SENTINEL}\n".encode())
             await self._proc.stdin.drain()
 
         buf = bytearray()
@@ -179,7 +181,7 @@ class GnubgEngine:
         """
         assert self._proc is not None and self._proc.stdin is not None
         self._proc.stdin.write(f"{cmd}\n".encode())
-        self._proc.stdin.write(f"echo {_SENTINEL}\n".encode())
+        self._proc.stdin.write(f"{_SENTINEL}\n".encode())
         await self._proc.stdin.drain()
         return await self._drain_until_sentinel(timeout=timeout)
 
@@ -263,13 +265,38 @@ class GnubgEngine:
             return ("error", False)
         return (self._version, self.ready)
 
+    @staticmethod
+    def _simple_board(board: Board) -> str:
+        """Encode the board as gnubg's ``set board simple`` 26-int format.
+
+        gnubg expects: [bar_on_roll, pt_on_roll_1, ..., pt_on_roll_24,
+        bar_opp]. All counts are positive for the player on roll and
+        negative for their opponent. When white is on roll the 1-point is
+        backend index 1; when black is on roll the 1-point is backend
+        index 24 (the board mirrors).
+        """
+        is_white = board.turn == "white"
+        nums: list[int] = []
+        # index 0 = bar for player on roll
+        nums.append(board.bar_white if is_white else board.bar_black)
+        # indices 1..24 = board from player-on-roll's POV, positive = on-roll
+        for i in range(1, 25):
+            pt = i if is_white else (25 - i)
+            v = board.points[pt]
+            nums.append(v if is_white else -v)
+        # index 25 = bar for opponent
+        nums.append(board.bar_black if is_white else board.bar_white)
+        return " ".join(str(n) for n in nums)
+
     async def _set_board(self, board: Board) -> None:
         """Load ``board`` into gnubg. Caller holds the lock."""
-        pos_id = self._encode_position_id(board)
-        await self._raw_command(f"set board {pos_id}")
+        # `set board simple` is more robust across gnubg versions than
+        # Position ID encoding, and doesn't require a game in progress.
+        await self._raw_command("new game")
         await self._raw_command(
             f"set turn {board.turn}"
         )
+        await self._raw_command(f"set board simple {self._simple_board(board)}")
         if board.cube_value != 1:
             await self._raw_command(f"set cube value {board.cube_value}")
         if board.cube_owner:

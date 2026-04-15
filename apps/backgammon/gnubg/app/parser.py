@@ -85,6 +85,15 @@ _FIVE_FLOATS = re.compile(
     rf"^\s*{_NUM_GROUP}\s+{_NUM_GROUP}\s+{_NUM_GROUP}\s+{_NUM_GROUP}\s+{_NUM_GROUP}\s*$"
 )
 
+# gnubg tabular eval rows: "static: N N N N N N N" or "N ply: N N N N N N N"
+# Seven floats: win, w(g), w(bg), l(g), l(bg), equity, cubeful.
+_EVAL_ROW = re.compile(
+    rf"^\s*(static|\d+\s*ply)\s*:\s*"
+    rf"{_NUM_GROUP}\s+{_NUM_GROUP}\s+{_NUM_GROUP}\s+"
+    rf"{_NUM_GROUP}\s+{_NUM_GROUP}\s+{_NUM_GROUP}\s+{_NUM_GROUP}\s*$",
+    re.MULTILINE,
+)
+
 _EQUITY_LINE = re.compile(
     rf"(?:Cubeless\s+(?:equity|eval)|Equity)\s*[=:]?\s*{_NUM_GROUP}",
     re.IGNORECASE,
@@ -166,7 +175,42 @@ def parse_version(text: str) -> str:
 
 
 def parse_eval(text: str) -> ParsedEval:
-    """Parse the output of ``eval`` into equity + probs."""
+    """Parse the output of ``eval`` into equity + probs.
+
+    gnubg's ``eval`` prints a tabular block like::
+
+                Win     W(g)    W(bg)   L(g)    L(bg)   Equity    Cubeful
+        static: 0.566   0.113   0.001   0.139   0.006   +0.101    +0.168
+         1 ply: 0.624   0.221   0.005   0.070   0.001   +0.403    +0.531
+         2 ply: 0.505   0.113   0.002   0.145   0.004   -0.025    -0.019
+
+    We prefer the deepest ply row available.
+    """
+    # Try tabular ply rows first (most accurate source).
+    tabular = _EVAL_ROW.findall(text)
+    if tabular:
+        # Prefer the deepest-ply row. "static" has ply = -1 so it loses to any
+        # numbered row; a row with no ply label comes from legacy formats and
+        # is treated as ply 0.
+        def _ply_of(row: tuple) -> int:
+            label = row[0].strip()
+            if label.startswith("static"):
+                return -1
+            m = re.match(r"(\d+)\s*ply", label)
+            return int(m.group(1)) if m else 0
+
+        best = max(tabular, key=_ply_of)
+        return ParsedEval(
+            equity=float(best[6]),
+            probs=ParsedProbs(
+                win=float(best[1]),
+                win_g=float(best[2]),
+                win_bg=float(best[3]),
+                lose_g=float(best[4]),
+                lose_bg=float(best[5]),
+            ),
+        )
+
     probs = _find_probs(text)
     equity = _find_equity(text)
     if probs is None or equity is None:

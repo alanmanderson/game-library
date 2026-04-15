@@ -62,3 +62,15 @@ variable "enable_training_vm_2" {
   type        = bool
   default     = false
 }
+
+variable "training_vm_size" {
+  description = "Azure VM size for the primary ML training VM."
+  type        = string
+  default     = "Standard_D4s_v5"
+}
+
+variable "training_vm_2_size" {
+  description = "Azure VM size for the secondary ML training VM."
+  type        = string
+  default     = "Standard_D4s_v5"
+}

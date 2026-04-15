@@ -44,7 +44,7 @@ resource "azurerm_linux_virtual_machine" "gnubg" {
   name                = "vm-gnubg"
   location            = azurerm_resource_group.backgammon.location
   resource_group_name = azurerm_resource_group.backgammon.name
-  size                = "Standard_B1s"
+  size                = "Standard_B2pts_v2"
   admin_username      = "azureuser"
 
   network_interface_ids = [
@@ -65,7 +65,7 @@ resource "azurerm_linux_virtual_machine" "gnubg" {
   source_image_reference {
     publisher = "Canonical"
     offer     = "ubuntu-24_04-lts"
-    sku       = "server"
+    sku       = "server-arm64"
     version   = "latest"
   }
 

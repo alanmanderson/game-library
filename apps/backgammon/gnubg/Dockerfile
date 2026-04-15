@@ -6,6 +6,9 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends gnubg \
     && rm -rf /var/lib/apt/lists/*
 
+# gnubg installs to /usr/games/ (Debian convention); ensure it's on PATH.
+ENV PATH="/usr/games:${PATH}"
+
 WORKDIR /app
 
 COPY requirements.txt ./
