@@ -12,7 +12,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "postgres" {
 }
 
 resource "azurerm_postgresql_flexible_server" "pinochle" {
-  name                          = "psql-pinochle"
+  name                          = "psql-pinochle-vs"
   location                      = azurerm_resource_group.pinochle.location
   resource_group_name           = azurerm_resource_group.pinochle.name
   version                       = "16"

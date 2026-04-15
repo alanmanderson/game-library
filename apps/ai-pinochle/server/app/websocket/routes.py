@@ -70,7 +70,7 @@ async def game_websocket(websocket: WebSocket, room_code: str):
             try:
                 await db.__aexit__(None, None, None)
             except Exception as e:
-                logger.debug("Session cleanup error (%s: %s)", type(e).__name__, e)
+                logger.warning("Session cleanup error (%s: %s)", type(e).__name__, e)
 
 
 async def _run_websocket(
@@ -86,12 +86,14 @@ async def _run_websocket(
     manager.clear_disconnect(room_code, user.id)
     log_event(room_code, user.username, "connected")
 
-    # Reject connections to non-existent rooms
+    # Allow connecting to IN_PROGRESS rooms (active games) and to recently
+    # completed rooms (so seated players can request a rematch from the
+    # game-over screen). Anything else (ABANDONED, missing) is rejected.
     result = await db.execute(
-        select(Game).where(Game.room_code == room_code, Game.status == "IN_PROGRESS")
+        select(Game).where(Game.room_code == room_code)
     )
     game = result.scalar_one_or_none()
-    if game is None:
+    if game is None or game.status not in ("IN_PROGRESS", "COMPLETED"):
         await websocket.close(code=4004, reason="Room not found")
         manager.disconnect(room_code, websocket)
         return
@@ -113,7 +115,7 @@ async def _run_websocket(
             except ValueError:
                 await manager.send_personal(websocket, {
                     "event": "ERROR",
-                    "payload": {"message": "Invalid JSON"},
+                    "payload": {"code": "INVALID_JSON", "message": "Invalid JSON"},
                 })
                 continue
 
@@ -135,13 +137,22 @@ async def _run_websocket(
                     logger.debug("Rollback failed")
                 await manager.send_personal(websocket, {
                     "event": "ERROR",
-                    "payload": {"message": "Server error processing your action"},
+                    "payload": {
+                        "code": "SERVER_ERROR",
+                        "message": "Server error processing your action",
+                    },
                 })
     except WebSocketDisconnect:
         pass
     finally:
+        # Record disconnect BEFORE removing the connection so the room's
+        # disconnect_times entry isn't orphaned when this is the last player.
+        # We only record if there are other connections still active OR we're
+        # in a mid-game phase that the forfeit sweep cares about.
+        remaining = [c for c in manager.get_connections(room_code) if c.websocket is not websocket]
+        if remaining:
+            manager.record_disconnect(room_code, user.id)
         manager.disconnect(room_code, websocket)
-        manager.record_disconnect(room_code, user.id)
         log_event(room_code, user.username, "disconnected")
 
 

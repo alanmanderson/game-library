@@ -50,6 +50,13 @@ function authReducer(_state: AuthState, action: AuthAction): AuthState {
     case "LOGOUT":
       localStorage.removeItem("token");
       localStorage.removeItem("user");
+      // Clear the last-joined room so the next user on this browser
+      // doesn't get bounced into the previous user's room. Reset the URL
+      // too, otherwise a /XXXX path would re-hydrate roomCode on next mount.
+      sessionStorage.removeItem("roomCode");
+      if (window.location.pathname !== "/") {
+        window.history.replaceState(null, "", "/");
+      }
       return { token: null, user: null };
   }
 }

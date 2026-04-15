@@ -144,7 +144,7 @@ export function RoomScreen({ route, navigation }: Props) {
                     style={styles.sitButton}
                     onPress={() => handleSit(seat)}
                   >
-                    <Text style={styles.sitButtonText}>Sit</Text>
+                    <Text style={styles.sitButtonText}>Sit here</Text>
                   </TouchableOpacity>
                 </>
               )}

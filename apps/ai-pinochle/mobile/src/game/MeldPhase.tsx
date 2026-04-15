@@ -13,6 +13,7 @@ interface Props {
   meldData: MeldData;
   acknowledgedSeats: string[];
   hasAcknowledged: boolean;
+  seatPlayers: Record<string, string | null>;
   sendMessage: (msg: Record<string, unknown>) => void;
 }
 
@@ -36,11 +37,16 @@ export function MeldPhase({
   meldData,
   acknowledgedSeats,
   hasAcknowledged,
+  seatPlayers,
   sendMessage,
 }: Props) {
   function handleAcknowledge() {
     sendMessage({ action: "ACKNOWLEDGE_MELD", payload: {} });
   }
+
+  const waitingOn = SEAT_ORDER
+    .filter((seat) => !acknowledgedSeats.includes(seat))
+    .map((seat) => seatPlayers[seat.toLowerCase()] ?? SEAT_LABELS[seat]);
 
   return (
     <ScrollView
@@ -103,9 +109,12 @@ export function MeldPhase({
         disabled={hasAcknowledged}
       >
         <Text style={styles.ackButtonText}>
-          {hasAcknowledged ? "Acknowledged" : "Acknowledge"}
+          {hasAcknowledged ? "Waiting for others" : "Acknowledge"}
         </Text>
       </TouchableOpacity>
+      {hasAcknowledged && waitingOn.length > 0 && (
+        <Text style={styles.waitingOn}>Waiting on: {waitingOn.join(", ")}</Text>
+      )}
     </ScrollView>
   );
 }
@@ -186,5 +195,11 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "600",
     fontSize: 15,
+  },
+  waitingOn: {
+    marginTop: 6,
+    color: "#aaa",
+    fontSize: 11,
+    textAlign: "center",
   },
 });

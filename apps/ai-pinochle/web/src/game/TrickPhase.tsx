@@ -1,5 +1,5 @@
 import type { CardPlayed, TrickResult } from "@pinochle/shared";
-import { SEAT_LABELS, cardLabel } from "@pinochle/shared";
+import { SEAT_LABELS, SUITS, cardLabel } from "@pinochle/shared";
 import styles from "./TrickPhase.module.css";
 
 interface Props {
@@ -10,6 +10,8 @@ interface Props {
   trickScores: Record<string, number>;
   trickResult: TrickResult | null;
   mySeat: string;
+  trumpSuit: string | null;
+  gameScores: Record<string, number>;
 }
 
 function cardToImage(code: string): string {
@@ -35,7 +37,10 @@ export function TrickPhase({
   trickScores,
   trickResult,
   mySeat,
+  trumpSuit,
+  gameScores,
 }: Props) {
+  const trumpInfo = trumpSuit ? SUITS.find((s) => s.key === trumpSuit) : null;
   const positionCards: Record<string, CardPlayed | null> = {
     top: null,
     left: null,
@@ -55,10 +60,32 @@ export function TrickPhase({
   return (
     <div className={styles.container}>
       <div className={styles.info}>
-        <span className={styles.trickNum}>Trick {trickNumber} / 12</span>
+        <div className={styles.infoTop}>
+          <span className={styles.trickNum}>Trick {trickNumber} / 12</span>
+          {trumpInfo && (
+            <span
+              className={styles.trumpBadge}
+              aria-label={`Trump: ${trumpInfo.key}`}
+            >
+              <span className={styles.trumpLabel}>Trump</span>
+              <span className={styles.trumpSymbol} style={{ color: trumpInfo.color }}>
+                {trumpInfo.symbol}
+              </span>
+              <span className={styles.trumpName}>{trumpInfo.key}</span>
+            </span>
+          )}
+        </div>
         <div className={styles.scores}>
-          <span>NS: {trickScores.NS} pts ({tricksTaken.NS} tricks)</span>
-          <span>EW: {trickScores.EW} pts ({tricksTaken.EW} tricks)</span>
+          <span>
+            NS: {trickScores.NS} pts ({tricksTaken.NS} tricks)
+            {" \u2022 "}
+            <span className={styles.gameScore}>Game {gameScores.NS}/150</span>
+          </span>
+          <span>
+            EW: {trickScores.EW} pts ({tricksTaken.EW} tricks)
+            {" \u2022 "}
+            <span className={styles.gameScore}>Game {gameScores.EW}/150</span>
+          </span>
         </div>
       </div>
 
@@ -85,7 +112,7 @@ export function TrickPhase({
         </div>
       </div>
 
-      <div className={styles.turnIndicator}>
+      <div className={styles.turnIndicator} role="status" aria-live="polite">
         {isMyTurn ? (
           <span className={styles.yourTurn}>Your turn &mdash; select a card</span>
         ) : nextToActSeat ? (
@@ -107,6 +134,8 @@ function CardSlot({ entry, isWinner }: { entry: CardPlayed | null; isWinner: boo
     <img
       src={cardToImage(entry.card)}
       alt={cardLabel(entry.card)}
+      width={60}
+      height={84}
       className={`${styles.trickCard} ${isWinner ? styles.winner : ""}`}
     />
   );

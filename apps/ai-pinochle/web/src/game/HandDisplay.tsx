@@ -36,6 +36,8 @@ export function HandDisplay({ cards, trumpSuit, onCardClick, legalCards }: Props
             key={`${card}-${i}`}
             src={cardToImage(card)}
             alt={cardLabel(card)}
+            width={80}
+            height={112}
             className={classes}
             onClick={clickable ? () => onCardClick!(card) : undefined}
             onKeyDown={clickable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onCardClick!(card); } } : undefined}

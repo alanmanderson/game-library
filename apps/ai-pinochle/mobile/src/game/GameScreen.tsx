@@ -20,8 +20,10 @@ import { MeldPhase } from "./MeldPhase";
 import { TrickPhase } from "./TrickPhase";
 import { PassCardsPhase } from "./PassCardsPhase";
 import { HandResult } from "./HandResult";
+import { GameOverScreen } from "./GameOverScreen";
 import { PlayerAvatar } from "./PlayerAvatar";
 import { OtherPlayerHand } from "./OtherPlayerHand";
+import { TEAM_FOR_SEAT } from "@pinochle/shared";
 
 interface Props {
   sendMessage: (msg: Record<string, unknown>) => void;
@@ -45,7 +47,7 @@ function phaseLabel(phase: Phase): string {
     case "PASSING_CARDS":
       return "Passing Cards";
     case "SHOWING_MELD":
-      return "Meld Phase";
+      return "Showing Melds";
     case "TRICK_PLAYING":
       return "Trick Play";
     case "HAND_COMPLETE":
@@ -99,6 +101,10 @@ export function GameScreen({
     [],
   );
   const [passingState, setPassingState] = useState<PassingState | null>(null);
+  const [gameScores, setGameScores] = useState<Record<string, number>>({ NS: 0, EW: 0 });
+  const [gameOver, setGameOver] = useState<{ winner_team: string; final_scores: Record<string, number>; forfeit_note?: string } | null>(null);
+  const [rematchRequested, setRematchRequested] = useState(false);
+  const [pendingRematchSeats, setPendingRematchSeats] = useState<string[]>([]);
 
   const trickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -152,12 +158,16 @@ export function GameScreen({
     const { event, payload } = lastEvent;
 
     if (event === "ERROR") {
-      const p = payload as { message: string };
+      const p = payload as { code?: string; message: string };
+      if (p.code === "ALREADY_REQUESTED_REMATCH") return;
       setError(p.message);
       if (pendingCardRef.current) {
         setHand(pendingCardRef.current.handSnapshot);
         setLegalCards([]); // keep disabled until next YOUR_TURN
         pendingCardRef.current = null;
+      }
+      if (p.code === "REMATCH_NOT_AVAILABLE") {
+        setRematchRequested(false);
       }
       return;
     }
@@ -345,11 +355,62 @@ export function GameScreen({
         score_deltas: p.score_deltas,
         game_scores: p.game_scores,
       });
+      setGameScores(p.game_scores);
       setHandResultAckedSeats([]);
       setPhase("HAND_COMPLETE");
     } else if (event === "HAND_RESULT_ACKNOWLEDGED") {
       const p = payload as { acknowledged_seats: string[] };
       setHandResultAckedSeats(p.acknowledged_seats);
+    } else if (event === "GAME_OVER") {
+      const p = payload as { winner_team: string; final_scores: Record<string, number> };
+      setGameOver({ winner_team: p.winner_team, final_scores: p.final_scores });
+      setGameScores(p.final_scores);
+      setRematchRequested(false);
+      setPendingRematchSeats([]);
+      setPhase("GAME_OVER");
+    } else if (event === "GAME_FORFEITED") {
+      const p = payload as {
+        winning_team: "NS" | "EW";
+        forfeiting_team: "NS" | "EW";
+        forfeiting_seat: string;
+        final_scores: Record<string, number>;
+      };
+      cancelTrickTimer();
+      setGameOver({
+        winner_team: p.winning_team,
+        final_scores: p.final_scores,
+        forfeit_note: `${p.forfeiting_team} forfeited the game`,
+      });
+      setGameScores(p.final_scores);
+      setRematchRequested(false);
+      setPendingRematchSeats([]);
+      setPhase("GAME_OVER");
+    } else if (event === "REMATCH_REQUESTED") {
+      const p = payload as { seat: string; pending_seats: string[] };
+      setPendingRematchSeats(p.pending_seats);
+      if (p.seat === mySeat) setRematchRequested(true);
+    } else if (event === "REMATCH_STARTED") {
+      setGameOver(null);
+      setRematchRequested(false);
+      setPendingRematchSeats([]);
+      setGameScores({ NS: 0, EW: 0 });
+      setHandResult(null);
+      setHandResultAckedSeats([]);
+      setBiddingResult(null);
+      setTrumpSuit(null);
+      setMeldData(null);
+      setAcknowledgedSeats([]);
+      setPassingState(null);
+      setTrickNumber(1);
+      setCurrentTrick([]);
+      setTrickResult(null);
+      setTricksTaken({ NS: 0, EW: 0 });
+      setTrickScores({ NS: 0, EW: 0 });
+      setNextToActSeat(null);
+      setLegalCards([]);
+      setPhase("BIDDING");
+    } else if (event === "LEFT_TO_LOBBY") {
+      onLeave();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastEvent]);
@@ -453,6 +514,7 @@ export function GameScreen({
               meldData={meldData}
               acknowledgedSeats={acknowledgedSeats}
               hasAcknowledged={hasAcknowledged}
+              seatPlayers={seatPlayers}
               sendMessage={sendMessage}
             />
           )}
@@ -466,6 +528,8 @@ export function GameScreen({
               trickScores={trickScores}
               trickResult={trickResult}
               mySeat={mySeat}
+              trumpSuit={trumpSuit}
+              gameScores={gameScores}
             />
           )}
 
@@ -474,12 +538,32 @@ export function GameScreen({
               result={handResult}
               hasAcknowledged={handResultAckedSeats.includes(mySeat)}
               acknowledgedSeats={handResultAckedSeats}
+              seatPlayers={seatPlayers}
               onAcknowledge={() =>
                 sendMessage({
                   action: "ACKNOWLEDGE_HAND_RESULT",
                   payload: {},
                 })
               }
+            />
+          )}
+
+          {phase === "GAME_OVER" && gameOver && (
+            <GameOverScreen
+              winnerTeam={gameOver.winner_team}
+              finalScores={gameOver.final_scores}
+              myTeam={TEAM_FOR_SEAT[mySeat] ?? "NS"}
+              forfeitNote={gameOver.forfeit_note ?? null}
+              rematchRequested={rematchRequested}
+              pendingSeats={pendingRematchSeats}
+              seatPlayers={seatPlayers}
+              onRematch={() => {
+                setRematchRequested(true);
+                sendMessage({ action: "REMATCH_REQUEST", payload: {} });
+              }}
+              onLeaveToLobby={() => {
+                sendMessage({ action: "LEAVE_TO_LOBBY", payload: {} });
+              }}
             />
           )}
         </View>

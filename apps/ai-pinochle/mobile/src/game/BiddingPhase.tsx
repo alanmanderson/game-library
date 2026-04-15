@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import type { BiddingState } from "@pinochle/shared";
 import { SEAT_LABELS } from "@pinochle/shared";
 
@@ -13,24 +13,36 @@ function seatLabel(seat: string): string {
   return SEAT_LABELS[seat] ?? seat;
 }
 
+const MAX_BID = 1500;
+
 export function BiddingPhase({ biddingState, mySeat, sendMessage }: Props) {
   const { current_highest_bid, highest_bidder_seat, next_to_act_seat, minimum_valid_bid } = biddingState;
   const isMyTurn = next_to_act_seat === mySeat;
-  const [bidAmount, setBidAmount] = useState(String(minimum_valid_bid));
+  const [bidAmount, setBidAmount] = useState(minimum_valid_bid);
 
   useEffect(() => {
-    setBidAmount(String(minimum_valid_bid));
+    setBidAmount((prev) => (prev < minimum_valid_bid ? minimum_valid_bid : prev));
   }, [minimum_valid_bid]);
 
+  function clamp(n: number): number {
+    if (n < minimum_valid_bid) return minimum_valid_bid;
+    if (n > MAX_BID) return MAX_BID;
+    return n;
+  }
+
+  function adjust(delta: number) {
+    setBidAmount((prev) => clamp(prev + delta));
+  }
+
   function handleBid() {
-    const amount = parseInt(bidAmount, 10);
-    if (isNaN(amount) || amount < minimum_valid_bid) return;
-    sendMessage({ action: "SUBMIT_BID", payload: { amount } });
+    sendMessage({ action: "SUBMIT_BID", payload: { amount: clamp(bidAmount) } });
   }
 
   function handlePass() {
     sendMessage({ action: "SUBMIT_BID", payload: {} });
   }
+
+  const canDecrement = bidAmount - 1 >= minimum_valid_bid;
 
   return (
     <View style={styles.container}>
@@ -50,15 +62,36 @@ export function BiddingPhase({ biddingState, mySeat, sendMessage }: Props) {
       {isMyTurn ? (
         <View style={styles.controls}>
           <Text style={styles.turnLabel}>Your turn to bid</Text>
+          <View style={styles.stepperRow}>
+            <TouchableOpacity
+              style={[styles.stepButton, !canDecrement && styles.stepButtonDisabled]}
+              onPress={() => adjust(-1)}
+              disabled={!canDecrement}
+            >
+              <Text style={styles.stepText}>−1</Text>
+            </TouchableOpacity>
+            <View style={styles.bidValue}>
+              <Text style={styles.bidNumber}>{bidAmount}</Text>
+              <Text style={styles.bidMin}>min {minimum_valid_bid}</Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.stepButton, bidAmount >= MAX_BID && styles.stepButtonDisabled]}
+              onPress={() => adjust(1)}
+              disabled={bidAmount >= MAX_BID}
+            >
+              <Text style={styles.stepText}>+1</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.stepButton, bidAmount >= MAX_BID && styles.stepButtonDisabled]}
+              onPress={() => adjust(5)}
+              disabled={bidAmount >= MAX_BID}
+            >
+              <Text style={styles.stepText}>+5</Text>
+            </TouchableOpacity>
+          </View>
           <View style={styles.bidRow}>
-            <TextInput
-              style={styles.bidInput}
-              keyboardType="number-pad"
-              value={bidAmount}
-              onChangeText={setBidAmount}
-            />
             <TouchableOpacity style={styles.bidButton} onPress={handleBid}>
-              <Text style={styles.bidButtonText}>Bid</Text>
+              <Text style={styles.bidButtonText}>Bid {bidAmount}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.passButton} onPress={handlePass}>
               <Text style={styles.passButtonText}>Pass</Text>
@@ -106,21 +139,51 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginBottom: 8,
   },
+  stepperRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 8,
+  },
+  stepButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: "#3a5a3a",
+    borderRadius: 4,
+    minWidth: 40,
+    alignItems: "center",
+  },
+  stepButtonDisabled: {
+    opacity: 0.4,
+  },
+  stepText: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  bidValue: {
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    backgroundColor: "#2a4a2a",
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "#4a6a4a",
+    minWidth: 64,
+  },
+  bidNumber: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  bidMin: {
+    color: "#999",
+    fontSize: 9,
+  },
   bidRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-  },
-  bidInput: {
-    borderWidth: 1,
-    borderColor: "#666",
-    borderRadius: 6,
-    padding: 8,
-    width: 60,
-    textAlign: "center",
-    color: "#fff",
-    backgroundColor: "#2a4a2a",
-    fontSize: 16,
   },
   bidButton: {
     backgroundColor: "#4a90d9",

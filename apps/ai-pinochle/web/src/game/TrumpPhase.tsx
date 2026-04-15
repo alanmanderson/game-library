@@ -11,13 +11,30 @@ interface Props {
 
 export function TrumpPhase({ biddingResult, isBidWinner, sendMessage }: Props) {
   const [shootTheMoon, setShootTheMoon] = useState(false);
+  const [pendingSuit, setPendingSuit] = useState<string | null>(null);
 
-  function handleSelect(suit: string) {
+  function submit(suit: string, moon: boolean) {
     sendMessage({
       action: "DECLARE_TRUMP",
-      payload: { suit, shoot_the_moon: shootTheMoon },
+      payload: { suit, shoot_the_moon: moon },
     });
   }
+
+  function handleSelect(suit: string) {
+    if (shootTheMoon) {
+      setPendingSuit(suit);
+      return;
+    }
+    submit(suit, false);
+  }
+
+  function confirmMoon() {
+    if (!pendingSuit) return;
+    submit(pendingSuit, true);
+    setPendingSuit(null);
+  }
+
+  const pendingSuitInfo = pendingSuit ? SUITS.find((s) => s.key === pendingSuit) : null;
 
   if (!isBidWinner) {
     const label = SEAT_LABELS[biddingResult.winning_seat] ?? biddingResult.winning_seat;
@@ -60,6 +77,33 @@ export function TrumpPhase({ biddingResult, isBidWinner, sendMessage }: Props) {
         />
         Shoot the Moon
       </label>
+      <p className={styles.moonExplain}>
+        Shooting the moon means your team pledges to take every trick this hand.
+        If you succeed, you score a massive bonus; if you miss even one trick, you go set for the full bid.
+      </p>
+
+      {pendingSuit && pendingSuitInfo && (
+        <div className={styles.confirmBox} role="alertdialog" aria-labelledby="moonConfirmTitle">
+          <p id="moonConfirmTitle" className={styles.confirmTitle}>
+            Shoot the moon with{" "}
+            <span style={{ color: pendingSuitInfo.color }}>
+              {pendingSuitInfo.symbol} {pendingSuitInfo.key}
+            </span>
+            ?
+          </p>
+          <p className={styles.confirmBody}>
+            Your team must take <strong>every trick</strong>. Missing one sets you for the full bid.
+          </p>
+          <div className={styles.confirmActions}>
+            <button className={styles.confirmYes} onClick={confirmMoon}>
+              Yes, shoot the moon
+            </button>
+            <button className={styles.confirmNo} onClick={() => setPendingSuit(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

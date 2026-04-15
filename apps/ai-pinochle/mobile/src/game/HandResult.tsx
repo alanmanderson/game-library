@@ -1,11 +1,13 @@
 import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import type { HandResultData } from "@pinochle/shared";
+import { SEAT_LABELS, SEAT_ORDER } from "@pinochle/shared";
 
 interface Props {
   result: HandResultData;
   hasAcknowledged: boolean;
   acknowledgedSeats: string[];
+  seatPlayers: Record<string, string | null>;
   onAcknowledge: () => void;
 }
 
@@ -13,12 +15,17 @@ export function HandResult({
   result,
   hasAcknowledged,
   acknowledgedSeats,
+  seatPlayers,
   onAcknowledge,
 }: Props) {
   const { trick_scores, team_meld, bid, bidding_team, score_deltas, game_scores } =
     result;
   const otherTeam = bidding_team === "NS" ? "EW" : "NS";
   const bidMade = score_deltas[bidding_team] >= 0;
+
+  const waitingOn = SEAT_ORDER
+    .filter((seat) => !acknowledgedSeats.includes(seat))
+    .map((seat) => seatPlayers[seat.toLowerCase()] ?? SEAT_LABELS[seat]);
 
   return (
     <View style={styles.container}>
@@ -76,11 +83,14 @@ export function HandResult({
         disabled={hasAcknowledged}
       >
         <Text style={styles.okButtonText}>
-          {hasAcknowledged ? "Waiting..." : "OK"}
+          {hasAcknowledged ? "Waiting..." : "Continue"}
         </Text>
       </TouchableOpacity>
       <Text style={styles.ackProgress}>
         {acknowledgedSeats.length}/4 ready
+        {hasAcknowledged && waitingOn.length > 0
+          ? ` — waiting on ${waitingOn.join(", ")}`
+          : ""}
       </Text>
     </View>
   );

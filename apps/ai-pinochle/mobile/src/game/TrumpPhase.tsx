@@ -15,13 +15,30 @@ export function TrumpPhase({
   sendMessage,
 }: Props) {
   const [shootTheMoon, setShootTheMoon] = useState(false);
+  const [pendingSuit, setPendingSuit] = useState<string | null>(null);
 
-  function handleSelect(suit: string) {
+  function submit(suit: string, moon: boolean) {
     sendMessage({
       action: "DECLARE_TRUMP",
-      payload: { suit, shoot_the_moon: shootTheMoon },
+      payload: { suit, shoot_the_moon: moon },
     });
   }
+
+  function handleSelect(suit: string) {
+    if (shootTheMoon) {
+      setPendingSuit(suit);
+      return;
+    }
+    submit(suit, false);
+  }
+
+  function confirmMoon() {
+    if (!pendingSuit) return;
+    submit(pendingSuit, true);
+    setPendingSuit(null);
+  }
+
+  const pendingSuitInfo = pendingSuit ? SUITS.find((s) => s.key === pendingSuit) : null;
 
   if (!isBidWinner) {
     const label =
@@ -68,6 +85,36 @@ export function TrumpPhase({
         />
         <Text style={styles.moonLabel}>Shoot the Moon</Text>
       </View>
+      <Text style={styles.moonExplain}>
+        Shooting the moon means your team pledges to take every trick this hand.
+        If you succeed, you score a massive bonus; if you miss even one trick, you go set for the full bid.
+      </Text>
+
+      {pendingSuit && pendingSuitInfo && (
+        <View style={styles.confirmBox}>
+          <Text style={styles.confirmTitle}>
+            Shoot the moon with{" "}
+            <Text style={{ color: pendingSuitInfo.color }}>
+              {pendingSuitInfo.symbol} {pendingSuitInfo.key}
+            </Text>
+            ?
+          </Text>
+          <Text style={styles.confirmBody}>
+            Your team must take every trick. Missing one sets you for the full bid.
+          </Text>
+          <View style={styles.confirmActions}>
+            <TouchableOpacity style={styles.confirmYes} onPress={confirmMoon}>
+              <Text style={styles.confirmYesText}>Yes, shoot the moon</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.confirmNo}
+              onPress={() => setPendingSuit(null)}
+            >
+              <Text style={styles.confirmNoText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -134,5 +181,62 @@ const styles = StyleSheet.create({
   moonLabel: {
     color: "#ccc",
     fontSize: 14,
+  },
+  moonExplain: {
+    marginTop: 8,
+    color: "#aaa",
+    fontSize: 11,
+    textAlign: "center",
+    maxWidth: 300,
+    lineHeight: 15,
+  },
+  confirmBox: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: "#3a3020",
+    borderWidth: 2,
+    borderColor: "#ffb300",
+    borderRadius: 8,
+    alignItems: "center",
+    gap: 6,
+    maxWidth: 320,
+  },
+  confirmTitle: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  confirmBody: {
+    color: "#ccc",
+    fontSize: 11,
+    textAlign: "center",
+    lineHeight: 15,
+  },
+  confirmActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 4,
+  },
+  confirmYes: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#d32f2f",
+    borderRadius: 4,
+  },
+  confirmYesText: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 12,
+  },
+  confirmNo: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#555",
+    borderRadius: 4,
+  },
+  confirmNoText: {
+    color: "#fff",
+    fontSize: 12,
   },
 });

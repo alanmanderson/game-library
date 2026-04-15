@@ -1,7 +1,7 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import type { CardPlayed, TrickResult } from "@pinochle/shared";
-import { SEAT_LABELS } from "@pinochle/shared";
+import { SEAT_LABELS, SUITS } from "@pinochle/shared";
 import { CardImage } from "./CardImage";
 
 interface Props {
@@ -12,6 +12,8 @@ interface Props {
   trickScores: Record<string, number>;
   trickResult: TrickResult | null;
   mySeat: string;
+  trumpSuit: string | null;
+  gameScores: Record<string, number>;
 }
 
 function getPositionForSeat(
@@ -33,7 +35,10 @@ export function TrickPhase({
   trickScores,
   trickResult,
   mySeat,
+  trumpSuit,
+  gameScores,
 }: Props) {
+  const trumpInfo = trumpSuit ? SUITS.find((s) => s.key === trumpSuit) : null;
   const positionCards: Record<string, CardPlayed | null> = {
     top: null,
     left: null,
@@ -53,13 +58,26 @@ export function TrickPhase({
   return (
     <View style={styles.container}>
       <View style={styles.info}>
-        <Text style={styles.trickNum}>Trick {trickNumber} / 12</Text>
+        <View style={styles.infoTop}>
+          <Text style={styles.trickNum}>Trick {trickNumber} / 12</Text>
+          {trumpInfo && (
+            <View style={styles.trumpBadge}>
+              <Text style={styles.trumpLabelText}>Trump</Text>
+              <Text style={[styles.trumpSymbol, { color: trumpInfo.color }]}>
+                {trumpInfo.symbol}
+              </Text>
+              <Text style={styles.trumpName}>{trumpInfo.key}</Text>
+            </View>
+          )}
+        </View>
         <View style={styles.scores}>
           <Text style={styles.scoreText}>
-            NS: {trickScores.NS} pts ({tricksTaken.NS} tricks)
+            NS: {trickScores.NS} ({tricksTaken.NS}t){" "}
+            <Text style={styles.gameScore}>· Game {gameScores.NS}/150</Text>
           </Text>
           <Text style={styles.scoreText}>
-            EW: {trickScores.EW} pts ({tricksTaken.EW} tricks)
+            EW: {trickScores.EW} ({tricksTaken.EW}t){" "}
+            <Text style={styles.gameScore}>· Game {gameScores.EW}/150</Text>
           </Text>
         </View>
       </View>
@@ -145,11 +163,46 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 8,
   },
+  infoTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 4,
+  },
   trickNum: {
     color: "#eee",
     fontSize: 15,
     fontWeight: "600",
-    marginBottom: 4,
+  },
+  trumpBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+  },
+  trumpLabelText: {
+    color: "#aaa",
+    fontSize: 9,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  trumpSymbol: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  trumpName: {
+    color: "#eee",
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  gameScore: {
+    color: "#ffd700",
+    fontWeight: "600",
   },
   scores: {
     flexDirection: "row",

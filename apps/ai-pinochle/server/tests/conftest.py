@@ -31,6 +31,7 @@ Game.__table__.c.id.server_default = None
 Game.__table__.c.id.default = None
 Game.__table__.c.ns_total_score.server_default = None
 Game.__table__.c.ew_total_score.server_default = None
+Game.__table__.c.version.server_default = None
 Game.__table__.c.status.type = String()
 
 
@@ -53,6 +54,8 @@ def _set_game_defaults(target, args, kwargs):
         target.ns_total_score = 0
     if "ew_total_score" not in kwargs:
         target.ew_total_score = 0
+    if "version" not in kwargs:
+        target.version = 0
 
 
 # Create ONE persistent sqlite3 connection that lives for the entire test run.
@@ -67,17 +70,72 @@ engine = create_async_engine(
 )
 
 
+_ANALYTICS_DDL = [
+    """CREATE TABLE IF NOT EXISTS hands (
+        id TEXT PRIMARY KEY,
+        game_id TEXT NOT NULL,
+        hand_number INTEGER NOT NULL,
+        winning_bidder_id TEXT,
+        winning_bid_amount INTEGER,
+        is_shoot_the_moon INTEGER NOT NULL DEFAULT 0,
+        trump_suit TEXT,
+        ns_meld_score INTEGER,
+        ew_meld_score INTEGER,
+        ns_trick_score INTEGER,
+        ew_trick_score INTEGER,
+        is_set INTEGER
+    )""",
+    """CREATE TABLE IF NOT EXISTS bids (
+        id TEXT PRIMARY KEY,
+        hand_id TEXT NOT NULL,
+        player_id TEXT NOT NULL,
+        bid_amount INTEGER,
+        is_shoot_the_moon INTEGER NOT NULL DEFAULT 0,
+        bid_sequence INTEGER NOT NULL
+    )""",
+    """CREATE TABLE IF NOT EXISTS tricks (
+        id TEXT PRIMARY KEY,
+        hand_id TEXT NOT NULL,
+        trick_number INTEGER NOT NULL,
+        led_by_player_id TEXT,
+        won_by_player_id TEXT,
+        north_card TEXT,
+        east_card TEXT,
+        south_card TEXT,
+        west_card TEXT,
+        trick_points INTEGER
+    )""",
+]
+
+_ANALYTICS_DROP = ["DROP TABLE IF EXISTS tricks", "DROP TABLE IF EXISTS bids", "DROP TABLE IF EXISTS hands"]
+
+
 @pytest.fixture(autouse=True)
 async def _setup_db():
     from app.api.auth import _login_attempts
+    from app.websocket import background as bg
     from app.websocket.connection_manager import manager
+
+    # Point the background task's session factory at the test engine.
+    bg.set_session_factory(async_sessionmaker(engine, expire_on_commit=False))
+
+    def _create_analytics(sync_conn):
+        for ddl in _ANALYTICS_DDL:
+            sync_conn.exec_driver_sql(ddl)
+
+    def _drop_analytics(sync_conn):
+        for stmt in _ANALYTICS_DROP:
+            sync_conn.exec_driver_sql(stmt)
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_create_analytics)
     yield
     manager.clear()
+    manager.disconnect_times.clear()
     _login_attempts.clear()
     async with engine.begin() as conn:
+        await conn.run_sync(_drop_analytics)
         await conn.run_sync(Base.metadata.drop_all)
 
 

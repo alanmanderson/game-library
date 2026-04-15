@@ -2,7 +2,7 @@ resource "azurerm_linux_virtual_machine" "pinochle" {
   name                = "vm-pinochle"
   location            = azurerm_resource_group.pinochle.location
   resource_group_name = azurerm_resource_group.pinochle.name
-  size                = "Standard_B2ats_v2"
+  size                = "Standard_B2s_v2"
   admin_username      = "azureuser"
 
   network_interface_ids = [

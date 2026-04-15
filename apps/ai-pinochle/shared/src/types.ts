@@ -18,11 +18,72 @@ export type ServerEvent =
   | "CARDS_RECEIVED" | "MELD_BROADCAST" | "MELD_ACKNOWLEDGED"
   | "MELD_PHASE_COMPLETED" | "YOUR_TURN" | "CARD_PLAYED"
   | "TRICK_COMPLETED" | "TRICK_STATE" | "HAND_COMPLETED"
-  | "HAND_RESULT_ACKNOWLEDGED" | "GAME_OVER";
+  | "HAND_RESULT_ACKNOWLEDGED" | "GAME_OVER"
+  | "REMATCH_REQUESTED" | "REMATCH_STARTED"
+  | "GAME_FORFEITED" | "LEFT_TO_LOBBY";
 
 export type ClientAction =
   | "SELECT_SEAT" | "START_GAME" | "SUBMIT_BID" | "DECLARE_TRUMP"
-  | "PASS_CARDS" | "ACKNOWLEDGE_MELD" | "PLAY_CARD" | "ACKNOWLEDGE_HAND_RESULT";
+  | "PASS_CARDS" | "ACKNOWLEDGE_MELD" | "PLAY_CARD" | "ACKNOWLEDGE_HAND_RESULT"
+  | "REMATCH_REQUEST" | "LEAVE_TO_LOBBY";
+
+/**
+ * Stable, machine-readable error codes returned in `ERROR` event payloads.
+ * Mirrors `server/app/websocket/errors.py::ErrorCode`. Clients should branch
+ * on `code` rather than substring-matching `message`.
+ */
+export type ErrorCode =
+  | "UNKNOWN_ACTION" | "INVALID_JSON" | "SERVER_ERROR"
+  | "GAME_NOT_FOUND" | "NOT_SEATED" | "STATE_CONFLICT"
+  | "WRONG_PHASE" | "GAME_ALREADY_STARTED"
+  | "INVALID_SEAT"
+  | "NOT_GAME_CREATOR" | "SEATS_NOT_FULL"
+  | "NOT_YOUR_TURN" | "INVALID_BID" | "BID_TOO_LOW" | "BID_TOO_HIGH" | "DEALER_MUST_BID"
+  | "NOT_BID_WINNER" | "INVALID_SUIT"
+  | "NOT_BIDDING_TEAM" | "ALREADY_PASSED" | "INVALID_PASS_CARDS" | "CARD_NOT_IN_HAND"
+  | "ALREADY_ACKNOWLEDGED"
+  | "INVALID_CARD" | "ILLEGAL_PLAY"
+  | "REMATCH_NOT_AVAILABLE" | "ALREADY_REQUESTED_REMATCH";
+
+export interface WsErrorPayload {
+  code: ErrorCode;
+  message: string;
+}
+
+/**
+ * Rematch event payload contracts (back-end ↔ front-end):
+ *
+ *   Action  REMATCH_REQUEST    payload: {}                             (no body)
+ *   Event   REMATCH_REQUESTED  payload: { seat, pending_seats: string[] }
+ *   Event   REMATCH_STARTED    payload: { dealer_seat, first_bidder_seat }
+ *                              followed by HAND_DEALT (private) + BIDDING_TURN (broadcast)
+ *
+ *   Action  LEAVE_TO_LOBBY     payload: {}
+ *   Event   LEFT_TO_LOBBY      payload: {}    (sent only to the leaving WS, then close)
+ *
+ *   Event   GAME_FORFEITED     payload: {
+ *     winning_team:    "NS" | "EW",
+ *     forfeiting_team: "NS" | "EW",
+ *     forfeiting_seat: string,
+ *     final_scores:    { NS: number, EW: number }
+ *   }
+ */
+export interface RematchRequestedPayload {
+  seat: string;
+  pending_seats: string[];
+}
+
+export interface RematchStartedPayload {
+  dealer_seat: string;
+  first_bidder_seat: string;
+}
+
+export interface GameForfeitedPayload {
+  winning_team: "NS" | "EW";
+  forfeiting_team: "NS" | "EW";
+  forfeiting_seat: string;
+  final_scores: Record<"NS" | "EW", number>;
+}
 
 export interface WsEvent {
   event: ServerEvent;

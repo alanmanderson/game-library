@@ -1,0 +1,121 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem 1.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 215, 0, 0.4);
+  max-width: 480px;
+}
+
+.headline {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 700;
+  color: #ffd700;
+  text-align: center;
+}
+
+.banner {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #eee;
+  text-align: center;
+}
+
+.scores {
+  display: flex;
+  gap: 1.5rem;
+  margin: 0.5rem 0;
+}
+
+.scoreCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 1rem 1.5rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 2px solid transparent;
+  min-width: 90px;
+}
+
+.winnerCard {
+  border-color: #ffd700;
+  background: rgba(255, 215, 0, 0.1);
+  box-shadow: 0 0 12px rgba(255, 215, 0, 0.3);
+}
+
+.teamLabel {
+  font-size: 0.85rem;
+  color: #aaa;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.scoreValue {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.finalLine {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #ccc;
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.rematchButton {
+  padding: 0.625rem 1.5rem;
+  background: #4a90d9;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rematchButton:disabled {
+  background: #555;
+  color: #888;
+  cursor: not-allowed;
+}
+
+.lobbyButton {
+  padding: 0.625rem 1.5rem;
+  background: #2e7d32;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.lobbyButton:hover {
+  background: #1b5e20;
+}
+
+.forfeit {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #ffb74d;
+  text-align: center;
+}
+
+.waiting {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #aaa;
+  text-align: center;
+}

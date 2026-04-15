@@ -59,6 +59,105 @@ When making implementation choices (data modeling, API shape, WebSocket events, 
 - Keep functions simple and easy to follow.
 - Avoid unnecessary abstractions — prefer straightforward, direct code over layers of indirection. The overall design should stay simple.
 
+## Development Workflows
+
+### Server (Python/FastAPI)
+
+```bash
+cd server
+source .venv/bin/activate          # Always activate venv first
+pip install -e ".[dev]"            # Install with dev dependencies
+uvicorn app.main:app --reload      # Run dev server on :8000
+```
+
+- Python 3.12+, managed with `uv` (lockfile: `server/uv.lock`)
+- Config via env vars or `.env` file (see `app/config.py`): `DATABASE_URL`, `SECRET_KEY`, `GOOGLE_CLIENT_ID`, `ALLOWED_ORIGINS`
+- `DATABASE_URL` uses `postgresql+asyncpg://` (async); Alembic auto-converts to sync `postgresql://`
+
+### Web (React/Vite)
+
+```bash
+npm install                        # From repo root (workspaces)
+npm run build --workspace=web      # Build for production → web/dist/
+npm run dev --workspace=web        # Dev server with HMR
+```
+
+- `shared/` has no build step — its `main` points directly to `src/index.ts`
+- Vite resolves `@pinochle/shared` via npm workspaces
+
+### Running Tests
+
+```bash
+cd server && source .venv/bin/activate
+python -m pytest                   # Run all tests
+python -m pytest tests/test_scoring.py  # Run specific file
+python -m pytest -x               # Stop on first failure
+```
+
+- Tests use in-memory SQLite (not PostgreSQL) — see `tests/conftest.py`
+- `asyncio_mode = "auto"` in `pyproject.toml` — async tests need no decorator
+- SQLAlchemy model defaults are patched for SQLite compatibility in conftest
+- WebSocket tests use Starlette's `TestClient` (sync) via the `sync_client` fixture
+
+### Database Migrations (Alembic)
+
+```bash
+cd server && source .venv/bin/activate
+alembic upgrade head               # Apply all migrations
+alembic revision --autogenerate -m "description"  # Create new migration
+```
+
+- Alembic reads `DATABASE_URL` env var (set it before running)
+- `alembic/env.py` converts `postgresql+asyncpg://` to `postgresql://` and `?ssl=require` to `?sslmode=require` for psycopg2
+
+## Deployment
+
+### Current Production
+
+- **Cloud**: Azure (Visual Studio Enterprise subscription `1a020407-...`)
+- **Region**: Canada Central (`canadacentral`)
+- **VM**: `vm-pinochle` (Standard_B2s_v2, Ubuntu 24.04), IP: `20.151.4.179`
+- **Database**: PostgreSQL 16 Flexible Server (`psql-pinochle-vs`, private networking)
+- **Domain**: `pinochle.alanmanderson.com`
+- **SSH**: `ssh -i ~/.ssh/id_ed25519 azureuser@20.151.4.179`
+
+### Deployment Architecture
+
+```
+Internet → Caddy (:80/:443) → FastAPI (:8000) → PostgreSQL (private subnet)
+                ↓
+          Static SPA files (/srv/web)
+```
+
+- **Docker Compose**: `fastapi` (app) + `caddy` (reverse proxy/TLS)
+- **Caddy**: Auto-HTTPS via Let's Encrypt, routes `/auth/*`, `/games/*`, `/ws/*` to FastAPI, serves SPA for everything else
+- App files live at `/opt/pinochle/` on the VM
+- `.env` file at `/opt/pinochle/.env` (created by cloud-init or manually)
+- `server/entrypoint.sh` runs `alembic upgrade head` then starts Uvicorn
+
+### Infrastructure (Terraform / Azure CLI)
+
+Terraform configs are in `infra/` but the actual deployment was done via **Azure CLI** due to an azurerm 4.x provider bug (reads resources from wrong subscription during refresh). The Terraform files still serve as documentation of the desired state.
+
+Key Azure resources: Resource Group (`rg-pinochle`), VNet (`vnet-pinochle`, 10.0.0.0/16), VM subnet + PostgreSQL delegated subnet, NSG (SSH/HTTP/HTTPS), Private DNS zone, Static Public IP.
+
+### Deploy Updates
+
+To redeploy application code to the VM:
+```bash
+# Build web frontend
+npm run build --workspace=web
+
+# Copy files to VM
+scp -i ~/.ssh/id_ed25519 -r web/dist azureuser@20.151.4.179:/opt/pinochle/web-dist
+scp -i ~/.ssh/id_ed25519 -r server azureuser@20.151.4.179:/opt/pinochle/server
+scp -i ~/.ssh/id_ed25519 Dockerfile docker-compose.yml Caddyfile azureuser@20.151.4.179:/opt/pinochle/
+
+# Rebuild and restart on VM
+ssh -i ~/.ssh/id_ed25519 azureuser@20.151.4.179 \
+  "cd /opt/pinochle && docker build -t pinochle-server:latest . && docker compose up -d"
+```
+
 ## Pinochle Rules Reference
 
 This game implements **4-player partnership Pinochle** (North/South vs East/West). Standard double-deck: 48 cards (two copies each of 9, 10, J, Q, K, A in all four suits). See `docs/RULES.md` for full rules and `docs/design.md` Section 3 for meld values, scoring, and legal card rules as implemented.

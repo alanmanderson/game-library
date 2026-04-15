@@ -1,17 +1,23 @@
 import type { HandResultData } from "@pinochle/shared";
+import { SEAT_LABELS, SEAT_ORDER } from "@pinochle/shared";
 import styles from "./HandResult.module.css";
 
 interface Props {
   result: HandResultData;
   hasAcknowledged: boolean;
   acknowledgedSeats: string[];
+  seatPlayers: Record<string, string | null>;
   onAcknowledge: () => void;
 }
 
-export function HandResult({ result, hasAcknowledged, acknowledgedSeats, onAcknowledge }: Props) {
+export function HandResult({ result, hasAcknowledged, acknowledgedSeats, seatPlayers, onAcknowledge }: Props) {
   const { trick_scores, team_meld, bid, bidding_team, score_deltas, game_scores } = result;
   const otherTeam = bidding_team === "NS" ? "EW" : "NS";
   const bidMade = score_deltas[bidding_team] >= 0;
+
+  const waitingOn = SEAT_ORDER
+    .filter((seat) => !acknowledgedSeats.includes(seat))
+    .map((seat) => seatPlayers[seat.toLowerCase()] ?? SEAT_LABELS[seat]);
 
   return (
     <div className={styles.container}>
@@ -62,10 +68,13 @@ export function HandResult({ result, hasAcknowledged, acknowledgedSeats, onAckno
         onClick={onAcknowledge}
         disabled={hasAcknowledged}
       >
-        {hasAcknowledged ? "Waiting..." : "OK"}
+        {hasAcknowledged ? "Waiting..." : "Continue"}
       </button>
       <span className={styles.ackProgress}>
         {acknowledgedSeats.length}/4 ready
+        {hasAcknowledged && waitingOn.length > 0 && (
+          <> &mdash; waiting on {waitingOn.join(", ")}</>
+        )}
       </span>
     </div>
   );

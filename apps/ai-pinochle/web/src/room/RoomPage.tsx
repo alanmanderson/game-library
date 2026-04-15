@@ -36,6 +36,17 @@ export function RoomPage({ roomCode, onLeave }: Props) {
   const [error, setError] = useState("");
   const [gameStarted, setGameStarted] = useState(false);
   const [myHand, setMyHand] = useState<string[]>([]);
+  const [copied, setCopied] = useState<"code" | "link" | null>(null);
+
+  async function copyText(text: string, kind: "code" | "link") {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(kind);
+      setTimeout(() => setCopied(null), 1500);
+    } catch {
+      // Older browsers without clipboard API — user can still select text manually.
+    }
+  }
 
   useEffect(() => {
     if (!lastEvent) return;
@@ -93,7 +104,25 @@ export function RoomPage({ roomCode, onLeave }: Props) {
 
   return (
     <div className={styles.container}>
-      <p className={styles.roomCodeDisplay}>{roomCode}</p>
+      <div className={styles.codeRow}>
+        <p className={styles.roomCodeDisplay}>{roomCode}</p>
+        <div className={styles.codeActions}>
+          <button
+            className={styles.copyButton}
+            onClick={() => copyText(roomCode, "code")}
+            aria-label="Copy room code"
+          >
+            {copied === "code" ? "Copied!" : "Copy code"}
+          </button>
+          <button
+            className={styles.copyButton}
+            onClick={() => copyText(`${window.location.origin}/${roomCode}`, "link")}
+            aria-label="Copy join link"
+          >
+            {copied === "link" ? "Copied!" : "Copy link"}
+          </button>
+        </div>
+      </div>
       <p className={styles.roomLabel}>Share this code with other players</p>
 
       <p className={styles.connectionStatus}>
@@ -126,7 +155,7 @@ export function RoomPage({ roomCode, onLeave }: Props) {
                     className={styles.sitButton}
                     onClick={() => handleSit(seat)}
                   >
-                    Sit
+                    Sit here
                   </button>
                 </>
               )}

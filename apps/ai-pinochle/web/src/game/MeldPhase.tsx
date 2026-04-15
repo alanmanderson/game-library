@@ -6,6 +6,7 @@ interface Props {
   meldData: MeldData;
   acknowledgedSeats: string[];
   hasAcknowledged: boolean;
+  seatPlayers: Record<string, string | null>;
   sendMessage: (msg: Record<string, unknown>) => void;
 }
 
@@ -29,11 +30,16 @@ export function MeldPhase({
   meldData,
   acknowledgedSeats,
   hasAcknowledged,
+  seatPlayers,
   sendMessage,
 }: Props) {
   function handleAcknowledge() {
     sendMessage({ action: "ACKNOWLEDGE_MELD", payload: {} });
   }
+
+  const waitingOn = SEAT_ORDER
+    .filter((seat) => !acknowledgedSeats.includes(seat))
+    .map((seat) => seatPlayers[seat.toLowerCase()] ?? SEAT_LABELS[seat]);
 
   return (
     <div className={styles.container}>
@@ -88,8 +94,13 @@ export function MeldPhase({
         onClick={handleAcknowledge}
         disabled={hasAcknowledged}
       >
-        {hasAcknowledged ? "Acknowledged" : "Acknowledge"}
+        {hasAcknowledged ? "Waiting for others" : "Acknowledge"}
       </button>
+      {hasAcknowledged && waitingOn.length > 0 && (
+        <p className={styles.waitingOn}>
+          Waiting on: {waitingOn.join(", ")}
+        </p>
+      )}
     </div>
   );
 }

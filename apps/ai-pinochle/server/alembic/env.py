@@ -22,6 +22,8 @@ if not database_url:
     raise RuntimeError("DATABASE_URL environment variable is not set")
 # Convert async driver URL to sync — Alembic runs synchronously.
 database_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
+# asyncpg uses ?ssl=require but psycopg2 uses ?sslmode=require
+database_url = database_url.replace("?ssl=require", "?sslmode=require")
 config.set_main_option("sqlalchemy.url", database_url)
 
 # Import models so they register on Base.metadata for autogenerate support.
