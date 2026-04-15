@@ -9,6 +9,7 @@ import { describe, it, expect } from "vitest";
 import {
   moveToNotation,
   formatDiceRoll,
+  parseMovesNotation,
   pointToDisplayNumber,
 } from "../utils/notation";
 
@@ -97,6 +98,50 @@ describe("formatDiceRoll", () => {
 
   it("formats maximum roll", () => {
     expect(formatDiceRoll(6, 5)).toBe("6-5");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseMovesNotation
+// ---------------------------------------------------------------------------
+
+describe("parseMovesNotation", () => {
+  it("parses two independent moves", () => {
+    expect(parseMovesNotation("13/11 13/10")).toEqual([
+      { from: 13, to: 11, is_hit: false },
+      { from: 13, to: 10, is_hit: false },
+    ]);
+  });
+
+  it("consolidates a chained single-checker hop", () => {
+    expect(parseMovesNotation("24/22 22/18")).toEqual([
+      { from: 24, to: 18, is_hit: false },
+    ]);
+  });
+
+  it("preserves the hit flag on a consolidated chain", () => {
+    expect(parseMovesNotation("24/22 22/18*")).toEqual([
+      { from: 24, to: 18, is_hit: true },
+    ]);
+  });
+
+  it("parses bar entries and bear-offs", () => {
+    expect(parseMovesNotation("bar/22 5/off")).toEqual([
+      { from: "bar", to: 22, is_hit: false },
+      { from: 5, to: "off", is_hit: false },
+    ]);
+  });
+
+  it("returns an empty list for an empty or blank string", () => {
+    expect(parseMovesNotation("")).toEqual([]);
+    expect(parseMovesNotation("   ")).toEqual([]);
+  });
+
+  it("drops malformed segments silently", () => {
+    expect(parseMovesNotation("13/11 garbage 6/5")).toEqual([
+      { from: 13, to: 11, is_hit: false },
+      { from: 6, to: 5, is_hit: false },
+    ]);
   });
 });
 

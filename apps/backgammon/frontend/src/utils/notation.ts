@@ -50,6 +50,57 @@ export function formatDiceRoll(die1: number, die2: number): string {
 }
 
 /**
+ * A single move parsed out of a notation string. Points are the same internal
+ * 1..24 convention used by the engine; `from` / `to` are `"bar"` or `"off"`
+ * for off-board sources / destinations.
+ */
+export interface ParsedMove {
+  from: number | "bar";
+  to: number | "off";
+  is_hit: boolean;
+}
+
+/**
+ * Parse a full move notation like ``"13/11 13/10"`` or ``"24/22 22/18"``
+ * into a list of source/destination pairs. Consecutive segments that share
+ * an endpoint (e.g. ``24/22 22/18``) are consolidated so the caller sees the
+ * checker's true start and end points (``{ from: 24, to: 18 }``).
+ *
+ * Unparseable segments are dropped silently — this is a presentation helper,
+ * not a validator.
+ */
+export function parseMovesNotation(notation: string): ParsedMove[] {
+  if (!notation) return [];
+  const results: ParsedMove[] = [];
+  for (const rawSegment of notation.trim().split(/\s+/)) {
+    const clean = rawSegment.replace(/\*$/, "");
+    const isHit = rawSegment.endsWith("*");
+    const [fromStr, toStr] = clean.split("/");
+    if (!fromStr || !toStr) continue;
+    const from: number | "bar" =
+      fromStr === "bar" ? "bar" : parseInt(fromStr, 10);
+    const to: number | "off" = toStr === "off" ? "off" : parseInt(toStr, 10);
+    if (typeof from === "number" && Number.isNaN(from)) continue;
+    if (typeof to === "number" && Number.isNaN(to)) continue;
+
+    // Consolidate chained hops: if the previous destination matches this
+    // source, they represent the same checker continuing its journey.
+    const prev = results[results.length - 1];
+    if (
+      prev &&
+      typeof from === "number" &&
+      prev.to === from
+    ) {
+      prev.to = to;
+      prev.is_hit = prev.is_hit || isHit;
+      continue;
+    }
+    results.push({ from, to, is_hit: isHit });
+  }
+  return results;
+}
+
+/**
  * Translate an internal point number (1-24) into the display number the
  * player actually sees, which depends on which side of the board they are
  * sitting on.

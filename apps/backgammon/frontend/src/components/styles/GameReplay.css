@@ -114,6 +114,27 @@
   pointer-events: none; /* read-only */
 }
 
+/* Dice overlay — positioned over the centre bar of the board so the dice
+   appear on the side of whoever rolled them (bottom = viewer's seat). */
+.replay-dice-overlay {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.replay-dice-overlay--bottom {
+  bottom: 14%;
+}
+
+.replay-dice-overlay--top {
+  top: 14%;
+}
+
 /* Engine analysis indicator overlaid on the board's centre bar. */
 .replay-board-analysis {
   position: absolute;

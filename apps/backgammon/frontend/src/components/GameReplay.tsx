@@ -24,8 +24,28 @@ import type {
 } from "../types/game";
 import { getAnalysis, getReplay } from "../services/api";
 import Board from "./Board";
+import Dice from "./Dice";
 import { STORAGE_KEY } from "../constants";
+import { parseMovesNotation, type ParsedMove } from "../utils/notation";
 import "./styles/GameReplay.css";
+
+/** Return the set of on-board destination points touched by the parsed moves. */
+function destinationPoints(moves: ParsedMove[]): Set<number> {
+  const out = new Set<number>();
+  for (const m of moves) {
+    if (typeof m.to === "number" && m.to >= 1 && m.to <= 24) out.add(m.to);
+  }
+  return out;
+}
+
+/** Return the set of on-board source + destination points touched by the moves. */
+function sourceAndDestPoints(moves: ParsedMove[]): Set<number> {
+  const out = destinationPoints(moves);
+  for (const m of moves) {
+    if (typeof m.from === "number" && m.from >= 1 && m.from <= 24) out.add(m.from);
+  }
+  return out;
+}
 
 /** Read the logged-in player from localStorage, if present. */
 function readStoredPlayerId(): string | null {
@@ -493,6 +513,50 @@ function GameReplay() {
   const cubeValue = displayState.cube_value ?? 1;
   const cubeOwner = displayState.cube_owner ?? null;
 
+  // Destinations of the checkers that moved in the current step — rendered as
+  // a yellow triangle highlight so the viewer can see what just changed.
+  const movedPoints = currentMove
+    ? destinationPoints(parseMovesNotation(currentMove.moves_notation))
+    : undefined;
+
+  // When the player didn't pick the engine's top move, outline the engine's
+  // intended source + destination points in red so the recommended play is
+  // visible on the board.
+  const bestMovePoints =
+    currentAnalysis &&
+    currentAnalysis.best_move_notation &&
+    currentAnalysis.quality !== "best" &&
+    currentAnalysis.quality !== "very_good"
+      ? sourceAndDestPoints(
+          parseMovesNotation(currentAnalysis.best_move_notation),
+        )
+      : undefined;
+
+  // Dice to show on the board: parsed from the current move record. For moves
+  // other than the very first, both dice belong to the same player; for move
+  // 1 we reconstruct the opening roll so each die is coloured by who rolled
+  // it. The first mover always rolled the higher value, so we can infer both
+  // players' rolls from the dice and the first mover's colour.
+  const replayDice = displayState.dice;
+  const openingRoll =
+    moveIndex === 1 && replayDice && replayDice.die1 !== replayDice.die2
+      ? {
+          white:
+            movedByColor === "white"
+              ? Math.max(replayDice.die1, replayDice.die2)
+              : Math.min(replayDice.die1, replayDice.die2),
+          black:
+            movedByColor === "black"
+              ? Math.max(replayDice.die1, replayDice.die2)
+              : Math.min(replayDice.die1, replayDice.die2),
+        }
+      : null;
+  const remainingDiceForDisplay = replayDice
+    ? replayDice.die1 === replayDice.die2
+      ? [replayDice.die1, replayDice.die1, replayDice.die1, replayDice.die1]
+      : [replayDice.die1, replayDice.die2]
+    : [];
+
   return (
     <div className={`replay-page${embed ? " replay-page--embed" : ""}`}>
       {/* Header (hidden in embed mode) */}
@@ -529,7 +593,7 @@ function GameReplay() {
       </div>
 
       {/* Board */}
-      <div className="replay-board-wrapper">
+      <div className={`replay-board-wrapper replay-board-wrapper--${viewColor}`}>
         <Board
           gameState={displayState}
           myColor={viewColor}
@@ -540,7 +604,23 @@ function GameReplay() {
           onBearOffClick={() => {}}
           cubeValue={cubeValue}
           cubeOwner={cubeOwner}
+          movedPoints={movedPoints}
+          bestMovePoints={bestMovePoints}
         />
+        {replayDice && (
+          <div
+            className={`replay-dice-overlay replay-dice-overlay--${
+              movedByColor === viewColor ? "bottom" : "top"
+            }`}
+          >
+            <Dice
+              dice={replayDice}
+              remainingDice={remainingDiceForDisplay}
+              currentTurn={movedByColor}
+              openingRoll={openingRoll}
+            />
+          </div>
+        )}
         {currentAnalysis && (
           <div
             className={`replay-board-analysis replay-board-analysis--${QUALITY_CSS_CLASS[currentAnalysis.quality]}`}

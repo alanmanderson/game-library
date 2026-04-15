@@ -21,6 +21,10 @@ interface BoardProps {
   cubeOwner: Color | null;
   animatingMove?: AnimatingMove | null;
   hintMoves?: HintMove[];
+  /** Points where checkers landed on the most recent move (replay: yellow outline). */
+  movedPoints?: Set<number>;
+  /** Points that the engine's recommended move would have touched (replay: red outline). */
+  bestMovePoints?: Set<number>;
   /** Board theme ID (e.g. "classic", "dark-marble"). Defaults to "classic". */
   boardTheme?: string;
   /** Checker style ID (e.g. "classic", "marble"). Defaults to "classic". */
@@ -50,6 +54,8 @@ const HIGHLIGHT_SOURCE = "rgba(212, 168, 67, 0.35)";
 const HIGHLIGHT_SELECTED = "rgba(255, 215, 0, 0.6)";
 const HIGHLIGHT_DEST = "rgba(46, 204, 113, 0.5)";
 const HIGHLIGHT_HINT = "rgba(52, 152, 219, 0.5)";
+const HIGHLIGHT_MOVED = "rgba(255, 215, 0, 0.55)";
+const HIGHLIGHT_BEST_MOVE = "rgba(231, 76, 60, 0.5)";
 const WHITE_CHECKER_FILL = "#f0e6d3";
 const WHITE_CHECKER_STROKE = "#b8a88a";
 const BLACK_CHECKER_FILL = "#2b2b2b";
@@ -70,6 +76,8 @@ function Board({
   cubeOwner,
   animatingMove,
   hintMoves = [],
+  movedPoints,
+  bestMovePoints,
   boardTheme,
   checkerStyle,
 }: BoardProps) {
@@ -591,10 +599,16 @@ function Board({
 
     let fillColor: string | null = null;
     const isHintPoint = hintFromPoints.has(point) || hintToPoints.has(point);
+    const isMovedPoint = movedPoints?.has(point) ?? false;
+    const isBestMovePoint = bestMovePoints?.has(point) ?? false;
     if (selectedPoint === point) {
       fillColor = HIGHLIGHT_SELECTED;
     } else if (validDestinations.has(point)) {
       fillColor = HIGHLIGHT_DEST;
+    } else if (isMovedPoint) {
+      fillColor = HIGHLIGHT_MOVED;
+    } else if (isBestMovePoint) {
+      fillColor = HIGHLIGHT_BEST_MOVE;
     } else if (isHintPoint) {
       fillColor = HIGHLIGHT_HINT;
     } else if (selectedPoint === null && validSourcePoints.has(point)) {
