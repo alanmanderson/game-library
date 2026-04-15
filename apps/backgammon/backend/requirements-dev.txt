@@ -3,3 +3,12 @@ pytest==8.3.4
 pytest-asyncio==0.24.0
 pytest-cov==6.1.1
 aiosqlite==0.20.0
+
+# Needed by tests that exercise the ML bot's full-turn planner
+# (`tests/test_bot.py::TestHardDifficulty`) — the planner imports torch+numpy
+# via `ml/bot_integration.py` and without them the bot silently falls back
+# and the assertions fail on `None`. Matches the runtime dependencies baked
+# into `backend/Dockerfile`.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.0.0
+numpy>=1.24.0
