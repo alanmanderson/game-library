@@ -99,6 +99,9 @@ const BiddingTurnEvent = z.object({
     highest_bidder_seat: Seat.nullable(),
     next_to_act_seat: Seat,
     minimum_valid_bid: z.number(),
+    // Present on reconnect snapshots so the client can populate the cumulative
+    // scoreboard without waiting for the next HAND_COMPLETED.
+    game_scores: z.record(z.string(), z.number()).optional(),
   }),
 });
 
@@ -108,6 +111,7 @@ const BiddingCompletedEvent = z.object({
     winning_seat: Seat,
     winning_bid: z.number(),
     is_shoot_the_moon: z.boolean(),
+    game_scores: z.record(z.string(), z.number()).optional(),
   }),
 });
 
@@ -119,6 +123,7 @@ const TrumpNamedEvent = z.object({
     bidding_team: z.string().optional(),
     winning_bid: z.number().optional(),
     is_shoot_the_moon: z.boolean().optional(),
+    game_scores: z.record(z.string(), z.number()).optional(),
   }),
 });
 
@@ -157,6 +162,9 @@ const MeldBroadcastEvent = z.object({
     bidding_team: z.string(),
     team_meld: z.record(z.string(), z.number()),
     player_melds: z.record(z.string(), PlayerMeldSchema),
+    // Reconnect-only: cumulative scores + who has already clicked through.
+    game_scores: z.record(z.string(), z.number()).optional(),
+    acknowledged_seats: z.array(Seat).optional(),
   }),
 });
 
@@ -173,6 +181,7 @@ const MeldPhaseCompletedEvent = z.object({
   payload: z.object({
     team_meld: z.record(z.string(), z.number()).optional(),
     first_to_act_seat: Seat.optional().nullable(),
+    game_scores: z.record(z.string(), z.number()).optional(),
   }),
 });
 
@@ -216,6 +225,7 @@ const TrickStateEvent = z.object({
     tricks_taken: z.record(z.string(), z.number()),
     trick_scores: z.record(z.string(), z.number()),
     led_seat: Seat.nullable().optional(),
+    game_scores: z.record(z.string(), z.number()).optional(),
   }),
 });
 
@@ -228,6 +238,8 @@ const HandCompletedEvent = z.object({
     bidding_team: z.string(),
     score_deltas: z.record(z.string(), z.number()),
     game_scores: z.record(z.string(), z.number()),
+    // Reconnect-only: who has already dismissed the hand-result screen.
+    acknowledged_seats: z.array(Seat).optional(),
   }),
 });
 
@@ -244,6 +256,9 @@ const GameOverEvent = z.object({
   payload: z.object({
     winner_team: z.string(),
     final_scores: z.record(z.string(), z.number()),
+    // Reconnect-only: rematch votes that have already arrived, so the client
+    // can restore "Waiting on X" without waiting for the next REMATCH_REQUESTED.
+    pending_rematch_seats: z.array(Seat).optional(),
   }),
 });
 

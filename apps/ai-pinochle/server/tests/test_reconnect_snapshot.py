@@ -287,6 +287,10 @@ async def test_reconnect_showing_meld_with_acks(
         assert mb["payload"]["trump_suit"] == "DIAMONDS"
         assert mb["payload"]["team_meld"] == {"NS": 20, "EW": 10}
         assert mb["payload"]["winning_bid"] == 25
+        # Reconnect-only fields so the client can render "Waiting on X" and
+        # the cumulative scoreboard without waiting for the next event.
+        assert mb["payload"]["acknowledged_seats"] == ["NORTH", "EAST"]
+        assert mb["payload"]["game_scores"] == {"NS": 0, "EW": 0}
 
         ma = ws.receive_json()
         assert ma["event"] == "MELD_ACKNOWLEDGED"
@@ -460,8 +464,186 @@ async def test_reconnect_hand_complete_with_acks(
         assert hc["payload"]["bidding_team"] == "NS"
         assert hc["payload"]["score_deltas"] == {"NS": 30, "EW": 15}
         assert hc["payload"]["game_scores"] == {"NS": 50, "EW": 30}
+        # Reconnect-only: "Waiting on X" state from the HandResult screen.
+        assert hc["payload"]["acknowledged_seats"] == ["NORTH"]
 
         hra = ws.receive_json()
         assert hra["event"] == "HAND_RESULT_ACKNOWLEDGED"
         assert hra["payload"]["seat"] == "NORTH"
         assert hra["payload"]["acknowledged_seats"] == ["NORTH"]
+
+
+# ---------------------------------------------------------------------------
+# GAME_OVER — snapshot re-emits GAME_OVER (+ REMATCH_REQUESTED if any pending)
+# ---------------------------------------------------------------------------
+
+
+async def test_reconnect_game_over_with_pending_rematch_votes(
+    client: AsyncClient, sync_client: TestClient, auth_headers: dict
+):
+    """2 of 4 players have requested rematch → pending_rematch_seats mirrors."""
+    room_code, tokens = await _fill_seats_and_get_tokens(
+        client, sync_client, auth_headers
+    )
+    # The game must be COMPLETED to accept connections in GAME_OVER phase;
+    # _set_state only writes current_state_json, so also flip status.
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+    async with Session() as db:
+        game = (
+            await db.execute(select(Game).where(Game.room_code == room_code))
+        ).scalar_one()
+        await db.execute(
+            update(Game).where(Game.id == game.id).values(
+                status="COMPLETED",
+                current_state_json={
+                    "phase": "GAME_OVER",
+                    "winner_team": "NS",
+                    "game_scores": {"NS": 152, "EW": 88},
+                    "pending_rematch_seats": ["NORTH", "EAST"],
+                    "current_hand": {},
+                    "player_hands": {s: [] for s in ["NORTH", "EAST", "SOUTH", "WEST"]},
+                },
+                version=game.version + 1,
+            )
+        )
+        await db.commit()
+
+    with sync_client.websocket_connect(f"/ws/{room_code}?token={tokens[0]}") as ws:
+        ws.receive_json()  # LOBBY_STATE_UPDATED
+        ws.receive_json()  # HAND_DEALT (empty hand)
+        go = ws.receive_json()
+        assert go["event"] == "GAME_OVER"
+        assert go["payload"]["winner_team"] == "NS"
+        assert go["payload"]["final_scores"] == {"NS": 152, "EW": 88}
+        assert go["payload"]["pending_rematch_seats"] == ["NORTH", "EAST"]
+
+        rr = ws.receive_json()
+        assert rr["event"] == "REMATCH_REQUESTED"
+        assert rr["payload"]["seat"] == "EAST"
+        assert rr["payload"]["pending_seats"] == ["NORTH", "EAST"]
+
+
+async def test_reconnect_game_over_without_pending_rematch_votes(
+    client: AsyncClient, sync_client: TestClient, auth_headers: dict
+):
+    """No rematch votes yet → GAME_OVER only, no trailing REMATCH_REQUESTED."""
+    room_code, tokens = await _fill_seats_and_get_tokens(
+        client, sync_client, auth_headers
+    )
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+    async with Session() as db:
+        game = (
+            await db.execute(select(Game).where(Game.room_code == room_code))
+        ).scalar_one()
+        await db.execute(
+            update(Game).where(Game.id == game.id).values(
+                status="COMPLETED",
+                current_state_json={
+                    "phase": "GAME_OVER",
+                    "winner_team": "EW",
+                    "game_scores": {"NS": 120, "EW": 150},
+                    "pending_rematch_seats": [],
+                    "current_hand": {},
+                    "player_hands": {s: [] for s in ["NORTH", "EAST", "SOUTH", "WEST"]},
+                },
+                version=game.version + 1,
+            )
+        )
+        await db.commit()
+
+    with sync_client.websocket_connect(f"/ws/{room_code}?token={tokens[0]}") as ws:
+        ws.receive_json()  # LOBBY_STATE_UPDATED
+        ws.receive_json()  # HAND_DEALT
+        go = ws.receive_json()
+        assert go["event"] == "GAME_OVER"
+        assert go["payload"]["pending_rematch_seats"] == []
+
+        # No trailing REMATCH_REQUESTED — flush via PING to prove it.
+        ws.send_json({"action": "PING", "payload": {}})
+        pong = ws.receive_json()
+        assert pong["event"] == "PONG"
+
+
+# ---------------------------------------------------------------------------
+# game_scores always present — mid-hand reconnect across phases.
+# ---------------------------------------------------------------------------
+
+
+async def test_reconnect_mid_hand_includes_nonzero_cumulative_game_scores(
+    client: AsyncClient, sync_client: TestClient, auth_headers: dict
+):
+    """A reconnect during TRICK_PLAYING in hand 3 must carry the cumulative
+    scoreboard so the on-screen number doesn't blink back to 0/0."""
+    room_code, tokens = await _fill_seats_and_get_tokens(
+        client, sync_client, auth_headers
+    )
+    await _set_state(room_code, {
+        "phase": "TRICK_PLAYING",
+        "game_scores": {"NS": 74, "EW": 61},
+        "current_hand": {
+            "hand_number": 3,
+            "dealer_seat": "EAST",
+            "trump_suit": "SPADES",
+            "bidding": {
+                "winning_bid": 28,
+                "winning_seat": "SOUTH",
+                "is_shoot_the_moon": False,
+            },
+            "team_meld": {"NS": 12, "EW": 8},
+            "trick_play": {
+                "trick_number": 2,
+                "next_to_act_seat": "EAST",
+                "led_seat": "EAST",
+                "cards_played": [],
+                "tricks_taken": {"NS": 1, "EW": 0},
+                "trick_scores": {"NS": 4, "EW": 0},
+            },
+        },
+        "player_hands": {
+            "NORTH": ["AC", "KD"], "EAST": ["9H"], "SOUTH": [], "WEST": [],
+        },
+    })
+
+    with sync_client.websocket_connect(f"/ws/{room_code}?token={tokens[0]}") as ws:
+        ws.receive_json()  # LOBBY_STATE_UPDATED
+        ws.receive_json()  # HAND_DEALT
+        mpc = ws.receive_json()
+        assert mpc["event"] == "MELD_PHASE_COMPLETED"
+        assert mpc["payload"]["game_scores"] == {"NS": 74, "EW": 61}
+
+        ts = ws.receive_json()
+        assert ts["event"] == "TRICK_STATE"
+        assert ts["payload"]["game_scores"] == {"NS": 74, "EW": 61}
+
+
+async def test_reconnect_bidding_includes_nonzero_cumulative_game_scores(
+    client: AsyncClient, sync_client: TestClient, auth_headers: dict
+):
+    """Same cumulative-score guarantee but for the BIDDING-phase snapshot."""
+    room_code, tokens = await _fill_seats_and_get_tokens(
+        client, sync_client, auth_headers
+    )
+    await _set_state(room_code, {
+        "phase": "BIDDING",
+        "game_scores": {"NS": 42, "EW": 35},
+        "current_hand": {
+            "hand_number": 2,
+            "dealer_seat": "NORTH",
+            "bidding": {
+                "winning_bid": 26,
+                "winning_seat": "EAST",
+                "is_shoot_the_moon": False,
+                "next_to_act_seat": "SOUTH",
+                "passed_seats": [],
+                "auction": [],
+            },
+        },
+        "player_hands": {s: ["AH"] * 12 for s in ["NORTH", "EAST", "SOUTH", "WEST"]},
+    })
+
+    with sync_client.websocket_connect(f"/ws/{room_code}?token={tokens[0]}") as ws:
+        ws.receive_json()  # LOBBY_STATE_UPDATED
+        ws.receive_json()  # HAND_DEALT
+        bt = ws.receive_json()
+        assert bt["event"] == "BIDDING_TURN"
+        assert bt["payload"]["game_scores"] == {"NS": 42, "EW": 35}

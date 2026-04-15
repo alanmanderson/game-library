@@ -84,6 +84,13 @@ async def test_rematch_happy_path(
 
     websockets, contexts = _open_four_ws(sync_client, room_code, tokens)
     try:
+        # Reconnect snapshot: GAME_OVER is re-emitted per WS so the client can
+        # render the game-over screen without waiting for another event.
+        for ws in websockets:
+            msg = ws.receive_json()
+            assert msg["event"] == "GAME_OVER"
+            assert msg["payload"]["pending_rematch_seats"] == []
+
         # First 3 players request — each gets a REMATCH_REQUESTED broadcast.
         for i in range(3):
             websockets[i].send_json({"action": "REMATCH_REQUEST", "payload": {}})

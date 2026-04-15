@@ -169,6 +169,11 @@ async def _send_game_state_on_reconnect(
     if phase == "LOBBY_WAITING" or phase is None:
         return
 
+    # Cumulative game scores — included on every per-phase snapshot event below
+    # so mid-hand reconnects can render the scoreboard on the trick-play surface
+    # without waiting for the next HAND_COMPLETED.
+    game_scores = state.get("game_scores", {"NS": 0, "EW": 0})
+
     # Find the player's seat
     player_seat = None
     for seat, col in SEAT_COLUMNS.items():
@@ -196,6 +201,7 @@ async def _send_game_state_on_reconnect(
                 "highest_bidder_seat": bidding.get("winning_seat"),
                 "next_to_act_seat": bidding.get("next_to_act_seat"),
                 "minimum_valid_bid": (winning_bid + 1) if winning_bid is not None else 25,
+                "game_scores": game_scores,
             },
         })
 
@@ -206,6 +212,7 @@ async def _send_game_state_on_reconnect(
                 "winning_seat": bidding.get("winning_seat"),
                 "winning_bid": bidding.get("winning_bid"),
                 "is_shoot_the_moon": bidding.get("is_shoot_the_moon", False),
+                "game_scores": game_scores,
             },
         })
 
@@ -220,6 +227,7 @@ async def _send_game_state_on_reconnect(
                 "bidding_team": TEAM_FOR_SEAT.get(winning_seat, ""),
                 "winning_bid": bidding.get("winning_bid"),
                 "is_shoot_the_moon": bidding.get("is_shoot_the_moon", False),
+                "game_scores": game_scores,
             },
         })
         await manager.send_personal(websocket, {
@@ -243,6 +251,7 @@ async def _send_game_state_on_reconnect(
 
     elif phase == "SHOWING_MELD":
         winning_seat = bidding.get("winning_seat")
+        acknowledged_seats = list(hand.get("meld_acknowledged_seats", []))
         await manager.send_personal(websocket, {
             "event": "MELD_BROADCAST",
             "payload": {
@@ -252,15 +261,16 @@ async def _send_game_state_on_reconnect(
                 "bidding_team": TEAM_FOR_SEAT.get(winning_seat, ""),
                 "team_meld": hand.get("team_meld", {}),
                 "player_melds": hand.get("player_melds", {}),
+                "game_scores": game_scores,
+                "acknowledged_seats": acknowledged_seats,
             },
         })
-        acked = hand.get("meld_acknowledged_seats", [])
-        if acked:
+        if acknowledged_seats:
             await manager.send_personal(websocket, {
                 "event": "MELD_ACKNOWLEDGED",
                 "payload": {
-                    "seat": acked[-1],
-                    "acknowledged_seats": list(acked),
+                    "seat": acknowledged_seats[-1],
+                    "acknowledged_seats": acknowledged_seats,
                 },
             })
 
@@ -272,6 +282,7 @@ async def _send_game_state_on_reconnect(
             "payload": {
                 "team_meld": hand.get("team_meld", {}),
                 "first_to_act_seat": trick_play.get("led_seat"),
+                "game_scores": game_scores,
             },
         })
 
@@ -283,6 +294,7 @@ async def _send_game_state_on_reconnect(
                 "tricks_taken": trick_play.get("tricks_taken", {}),
                 "trick_scores": trick_play.get("trick_scores", {}),
                 "led_seat": trick_play.get("led_seat"),
+                "game_scores": game_scores,
             },
         })
 
@@ -328,6 +340,7 @@ async def _send_game_state_on_reconnect(
         bidding = hand.get("bidding", {})
         winning_seat = bidding.get("winning_seat")
         trick_play = hand.get("trick_play", {})
+        acknowledged_seats = list(hand.get("hand_result_acknowledged_seats", []))
 
         await manager.send_personal(websocket, {
             "event": "HAND_COMPLETED",
@@ -337,16 +350,38 @@ async def _send_game_state_on_reconnect(
                 "bid": bidding.get("winning_bid"),
                 "bidding_team": TEAM_FOR_SEAT.get(winning_seat, ""),
                 "score_deltas": hand.get("score_deltas", {}),
-                "game_scores": state.get("game_scores", {}),
+                "game_scores": game_scores,
+                "acknowledged_seats": acknowledged_seats,
             },
         })
 
-        acked = hand.get("hand_result_acknowledged_seats", [])
-        if acked:
+        if acknowledged_seats:
             await manager.send_personal(websocket, {
                 "event": "HAND_RESULT_ACKNOWLEDGED",
                 "payload": {
-                    "seat": acked[-1],
-                    "acknowledged_seats": list(acked),
+                    "seat": acknowledged_seats[-1],
+                    "acknowledged_seats": acknowledged_seats,
+                },
+            })
+
+    elif phase == "GAME_OVER":
+        # Mid-lobby reconnect after the game ended: re-emit GAME_OVER so the
+        # client can render the result screen, and re-emit any in-progress
+        # rematch votes via REMATCH_REQUESTED so "Waiting on X" stays accurate.
+        pending_rematch_seats = list(state.get("pending_rematch_seats", []))
+        await manager.send_personal(websocket, {
+            "event": "GAME_OVER",
+            "payload": {
+                "winner_team": state.get("winner_team", ""),
+                "final_scores": game_scores,
+                "pending_rematch_seats": pending_rematch_seats,
+            },
+        })
+        if pending_rematch_seats:
+            await manager.send_personal(websocket, {
+                "event": "REMATCH_REQUESTED",
+                "payload": {
+                    "seat": pending_rematch_seats[-1],
+                    "pending_seats": pending_rematch_seats,
                 },
             })
