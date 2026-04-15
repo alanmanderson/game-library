@@ -77,6 +77,12 @@ export function useWebSocket(
         }, 30000);
       };
 
+      ws.onerror = () => {
+        // Browsers mask details behind a generic Event; the paired onclose
+        // that follows is what drives reconnect. Log so errors aren't silent.
+        console.warn("[useWebSocket] socket error");
+      };
+
       ws.onmessage = (e) => {
         let raw: unknown;
         try {

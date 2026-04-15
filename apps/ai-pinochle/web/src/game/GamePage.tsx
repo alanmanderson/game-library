@@ -94,8 +94,11 @@ export function GamePage({
     const isActiveGame = phase !== "LOBBY_WAITING" && phase !== "GAME_OVER";
     if (!isActiveGame) return;
     function handleBeforeUnload(e: BeforeUnloadEvent) {
+      // Per the HTML spec, calling preventDefault is sufficient in modern
+      // browsers, but Chrome/Edge and some older engines still require a
+      // non-empty returnValue to actually show the leave-site prompt.
       e.preventDefault();
-      e.returnValue = "";
+      e.returnValue = "You are in an active game. Leave anyway?";
     }
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
