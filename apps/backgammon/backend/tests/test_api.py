@@ -7,7 +7,9 @@ Each test is independent -- a fresh in-memory database is provisioned via the
 
 import pytest
 
-from app.models import Player, PlayerStats
+from datetime import datetime, timedelta, timezone
+
+from app.models import Player, PlayerStats, Table
 from tests.conftest import (
     auth_headers,
     create_test_player,
@@ -845,3 +847,170 @@ class TestLeaderboardEndpoints:
         """An invalid metric value returns a 422 validation error."""
         resp = await client.get("/api/leaderboard?metric=invalid")
         assert resp.status_code == 422
+
+    async def test_leaderboard_invalid_period(self, client):
+        """An invalid period value returns a 422 validation error."""
+        resp = await client.get("/api/leaderboard?period=yesterday")
+        assert resp.status_code == 422
+
+    async def test_leaderboard_period_week_only_recent_games(
+        self, client, db_session
+    ):
+        """period=week counts only games finished in the last 7 days."""
+        alice = Player(nickname="Alice", is_guest=False)
+        bob = Player(nickname="Bob", is_guest=False)
+        db_session.add_all([alice, bob])
+        await db_session.flush()
+
+        now = datetime.now(timezone.utc)
+        recent_win = Table(
+            id="RECENT01",
+            status="finished",
+            white_player_id=alice.id,
+            black_player_id=bob.id,
+            winner_id=alice.id,
+            finished_at=now - timedelta(days=2),
+        )
+        old_win = Table(
+            id="OLDWIN01",
+            status="finished",
+            white_player_id=bob.id,
+            black_player_id=alice.id,
+            winner_id=bob.id,
+            finished_at=now - timedelta(days=40),
+        )
+        db_session.add_all([recent_win, old_win])
+        await db_session.flush()
+
+        resp = await client.get("/api/leaderboard?period=week&metric=wins")
+        assert resp.status_code == 200
+        entries = resp.json()["entries"]
+        nicknames_to_wins = {e["nickname"]: e["total_wins"] for e in entries}
+        # Alice has 1 recent win; Bob has 0 in the week window but was in the
+        # recent game, so still appears with 1 game/0 wins.
+        assert nicknames_to_wins.get("Alice") == 1
+        assert nicknames_to_wins.get("Bob") == 0
+        # The old game is outside the window so each player only has 1 game.
+        alice_entry = next(e for e in entries if e["nickname"] == "Alice")
+        bob_entry = next(e for e in entries if e["nickname"] == "Bob")
+        assert alice_entry["total_games"] == 1
+        assert bob_entry["total_games"] == 1
+
+    async def test_leaderboard_period_month_window(self, client, db_session):
+        """period=month counts games finished in the last 30 days only."""
+        p = Player(nickname="Carol", is_guest=False)
+        q = Player(nickname="Dave", is_guest=False)
+        db_session.add_all([p, q])
+        await db_session.flush()
+
+        now = datetime.now(timezone.utc)
+        in_month = Table(
+            id="INMONTH1",
+            status="finished",
+            white_player_id=p.id,
+            black_player_id=q.id,
+            winner_id=p.id,
+            finished_at=now - timedelta(days=10),
+        )
+        out_of_month = Table(
+            id="OUTMON01",
+            status="finished",
+            white_player_id=p.id,
+            black_player_id=q.id,
+            winner_id=p.id,
+            finished_at=now - timedelta(days=100),
+        )
+        db_session.add_all([in_month, out_of_month])
+        await db_session.flush()
+
+        resp = await client.get("/api/leaderboard?period=month&metric=wins")
+        assert resp.status_code == 200
+        entries = resp.json()["entries"]
+        carol = next(e for e in entries if e["nickname"] == "Carol")
+        assert carol["total_wins"] == 1
+        assert carol["total_games"] == 1
+
+    async def test_leaderboard_period_all_time_uses_playerstats(
+        self, client, db_session
+    ):
+        """period=all_time (default) still reads from PlayerStats aggregates."""
+        p = Player(nickname="Eve", is_guest=False)
+        db_session.add(p)
+        await db_session.flush()
+        db_session.add(
+            PlayerStats(
+                player_id=p.id,
+                opponent_id=None,
+                games_played=7,
+                games_won=4,
+                games_lost=3,
+            )
+        )
+        await db_session.flush()
+
+        resp = await client.get("/api/leaderboard?period=all_time&metric=wins")
+        assert resp.status_code == 200
+        entries = resp.json()["entries"]
+        eve = next(e for e in entries if e["nickname"] == "Eve")
+        assert eve["total_wins"] == 4
+        assert eve["total_games"] == 7
+
+    async def test_leaderboard_viewer_entry_out_of_window(self, client, db_session):
+        """viewer_entry is returned when the viewer is ranked below the page."""
+        players = []
+        for i in range(5):
+            p = Player(nickname=f"Ranker{i}", is_guest=False)
+            db_session.add(p)
+            players.append(p)
+        await db_session.flush()
+
+        # Give each player a decreasing win count.
+        for i, p in enumerate(players):
+            db_session.add(
+                PlayerStats(
+                    player_id=p.id,
+                    opponent_id=None,
+                    games_played=10,
+                    games_won=10 - i,
+                    games_lost=i,
+                )
+            )
+        await db_session.flush()
+
+        # The last player (Ranker4) has 6 wins — lowest rank. Ask for page
+        # size 2 with their id as viewer_id so we expect a viewer_entry back.
+        last_id = players[4].id
+        resp = await client.get(
+            f"/api/leaderboard?metric=wins&limit=2&offset=0&viewer_id={last_id}"
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["entries"]) == 2
+        assert data["viewer_entry"] is not None
+        assert data["viewer_entry"]["player_id"] == last_id
+        assert data["viewer_entry"]["rank"] == 5
+
+    async def test_leaderboard_viewer_entry_absent_when_on_page(
+        self, client, db_session
+    ):
+        """viewer_entry is NOT populated when the viewer is already in the page."""
+        p = Player(nickname="OnPage", is_guest=False)
+        db_session.add(p)
+        await db_session.flush()
+        db_session.add(
+            PlayerStats(
+                player_id=p.id,
+                opponent_id=None,
+                games_played=4,
+                games_won=3,
+                games_lost=1,
+            )
+        )
+        await db_session.flush()
+
+        resp = await client.get(
+            f"/api/leaderboard?metric=wins&viewer_id={p.id}"
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["viewer_entry"] is None

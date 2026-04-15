@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import type { LeaderboardEntry } from "../types/game";
+import type { LeaderboardEntry, LeaderboardPeriod } from "../types/game";
 import { getLeaderboard } from "../services/api";
 import { TIER_COLORS, tierForRating, type Tier } from "../constants/tiers";
 import "./styles/Leaderboard.css";
@@ -18,24 +18,44 @@ const TABS: { value: Metric; label: string }[] = [
   { value: "rating", label: "Rating" },
 ];
 
+const PERIOD_TABS: { value: LeaderboardPeriod; label: string }[] = [
+  { value: "all_time", label: "All Time" },
+  { value: "month", label: "This Month" },
+  { value: "week", label: "This Week" },
+];
+
 const PAGE_SIZE = 25;
 
 function Leaderboard({ playerId, onBack, embedded }: LeaderboardProps) {
   const [metric, setMetric] = useState<Metric>("wins");
+  const [period, setPeriod] = useState<LeaderboardPeriod>("all_time");
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [total, setTotal] = useState(0);
+  const [viewerEntry, setViewerEntry] = useState<LeaderboardEntry | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchLeaderboard = useCallback(
-    async (selectedMetric: Metric, offset: number, append: boolean) => {
+    async (
+      selectedMetric: Metric,
+      selectedPeriod: LeaderboardPeriod,
+      offset: number,
+      append: boolean,
+    ) => {
       if (offset === 0) setLoading(true);
       else setLoadingMore(true);
       setError(null);
       try {
-        const data = await getLeaderboard(selectedMetric, PAGE_SIZE, offset);
+        const data = await getLeaderboard(
+          selectedMetric,
+          PAGE_SIZE,
+          offset,
+          selectedPeriod,
+          playerId,
+        );
         setTotal(data.total);
+        setViewerEntry(data.viewer_entry ?? null);
         setEntries((prev) => (append ? [...prev, ...data.entries] : data.entries));
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load leaderboard.");
@@ -44,20 +64,25 @@ function Leaderboard({ playerId, onBack, embedded }: LeaderboardProps) {
         setLoadingMore(false);
       }
     },
-    [],
+    [playerId],
   );
 
   useEffect(() => {
-    fetchLeaderboard(metric, 0, false);
-  }, [metric, fetchLeaderboard]);
+    fetchLeaderboard(metric, period, 0, false);
+  }, [metric, period, fetchLeaderboard]);
 
   const handleTabChange = (newMetric: Metric) => {
     setMetric(newMetric);
     setEntries([]);
   };
 
+  const handlePeriodChange = (newPeriod: LeaderboardPeriod) => {
+    setPeriod(newPeriod);
+    setEntries([]);
+  };
+
   const handleLoadMore = () => {
-    fetchLeaderboard(metric, entries.length, true);
+    fetchLeaderboard(metric, period, entries.length, true);
   };
 
   const rankClass = (rank: number) => {
@@ -66,6 +91,15 @@ function Leaderboard({ playerId, onBack, embedded }: LeaderboardProps) {
     if (rank === 3) return "leaderboard-rank leaderboard-rank-3";
     return "leaderboard-rank";
   };
+
+  const emptyMessage =
+    period === "all_time"
+      ? metric === "rating"
+        ? "No players with enough rated games yet."
+        : "No games played yet."
+      : period === "week"
+        ? "No games played this week yet."
+        : "No games played this month yet.";
 
   return (
     <div className={`leaderboard${embedded ? " leaderboard--embedded" : ""}`}>
@@ -79,7 +113,7 @@ function Leaderboard({ playerId, onBack, embedded }: LeaderboardProps) {
         </div>
       )}
 
-      <div className="leaderboard-tabs" role="tablist">
+      <div className="leaderboard-tabs" role="tablist" aria-label="Metric">
         {TABS.map((tab) => (
           <button
             key={tab.value}
@@ -93,15 +127,29 @@ function Leaderboard({ playerId, onBack, embedded }: LeaderboardProps) {
         ))}
       </div>
 
+      <div
+        className="leaderboard-period-tabs"
+        role="tablist"
+        aria-label="Time period"
+      >
+        {PERIOD_TABS.map((tab) => (
+          <button
+            key={tab.value}
+            role="tab"
+            aria-selected={period === tab.value}
+            className={`leaderboard-period-tab${period === tab.value ? " active" : ""}`}
+            onClick={() => handlePeriodChange(tab.value)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       {loading && <p className="leaderboard-loading">Loading...</p>}
       {error && <p className="leaderboard-error">{error}</p>}
 
       {!loading && !error && entries.length === 0 && (
-        <p className="leaderboard-empty">
-          {metric === "rating"
-            ? "No players with enough rated games yet."
-            : "No games played yet."}
-        </p>
+        <p className="leaderboard-empty">{emptyMessage}</p>
       )}
 
       {entries.length > 0 && (
@@ -167,6 +215,19 @@ function Leaderboard({ playerId, onBack, embedded }: LeaderboardProps) {
             >
               {loadingMore ? "Loading..." : "Load more"}
             </button>
+          )}
+
+          {viewerEntry && (
+            <div className="leaderboard-self-footer" role="status">
+              <span className="leaderboard-self-footer-label">You:</span>
+              <span className="leaderboard-self-footer-rank">
+                #{viewerEntry.rank}
+              </span>
+              <span className="leaderboard-self-footer-meta">
+                {viewerEntry.rating} rating &middot; {viewerEntry.total_games}{" "}
+                {viewerEntry.total_games === 1 ? "game" : "games"}
+              </span>
+            </div>
           )}
         </>
       )}

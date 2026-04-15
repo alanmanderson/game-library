@@ -354,7 +354,15 @@ export interface LeaderboardEntry {
 export interface LeaderboardData {
   entries: LeaderboardEntry[];
   total: number;
+  /**
+   * Viewer's row when they are ranked but fall outside the returned pagination
+   * window. Enables the "you are #N" sticky footer.
+   */
+  viewer_entry?: LeaderboardEntry | null;
 }
+
+/** Time-period filter for the leaderboard. */
+export type LeaderboardPeriod = "all_time" | "month" | "week";
 
 // ---------------------------------------------------------------------------
 // Tournament types

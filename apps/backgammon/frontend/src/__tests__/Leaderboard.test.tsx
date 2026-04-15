@@ -179,7 +179,13 @@ describe("Leaderboard – tab switching", () => {
     const winRateTab = screen.getByRole("tab", { name: "Win Rate" });
     fireEvent.click(winRateTab);
     await waitFor(() => {
-      expect(api.getLeaderboard).toHaveBeenCalledWith("win_rate", 25, 0);
+      expect(api.getLeaderboard).toHaveBeenCalledWith(
+        "win_rate",
+        25,
+        0,
+        "all_time",
+        null,
+      );
     });
   });
 
@@ -214,6 +220,89 @@ describe("Leaderboard – back button", () => {
 // ---------------------------------------------------------------------------
 // Load more
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Period filter
+// ---------------------------------------------------------------------------
+
+describe("Leaderboard – period filter", () => {
+  it("renders the three period tabs", async () => {
+    vi.mocked(api.getLeaderboard).mockResolvedValue(makeData());
+    renderLeaderboard();
+    expect(screen.getByRole("tab", { name: "All Time" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "This Month" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "This Week" })).toBeInTheDocument();
+  });
+
+  it("refetches with period=week when This Week is clicked", async () => {
+    vi.mocked(api.getLeaderboard).mockResolvedValue(makeData());
+    renderLeaderboard();
+    await waitFor(() => screen.getByText("Alice"));
+
+    const weekTab = screen.getByRole("tab", { name: "This Week" });
+    fireEvent.click(weekTab);
+    await waitFor(() => {
+      expect(api.getLeaderboard).toHaveBeenCalledWith(
+        "wins",
+        25,
+        0,
+        "week",
+        null,
+      );
+    });
+  });
+
+  it("passes the viewer's id as viewer_id when a playerId is provided", async () => {
+    vi.mocked(api.getLeaderboard).mockResolvedValue(makeData());
+    renderLeaderboard("player-42");
+    await waitFor(() => {
+      expect(api.getLeaderboard).toHaveBeenCalledWith(
+        "wins",
+        25,
+        0,
+        "all_time",
+        "player-42",
+      );
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Self-rank footer
+// ---------------------------------------------------------------------------
+
+describe("Leaderboard – self-rank footer", () => {
+  it("shows a sticky footer when the viewer is off-page", async () => {
+    vi.mocked(api.getLeaderboard).mockResolvedValue(
+      makeData({
+        total: 50,
+        viewer_entry: {
+          rank: 42,
+          player_id: "player-42",
+          nickname: "You",
+          rating: 1523,
+          rating_games: 47,
+          total_wins: 30,
+          total_games: 47,
+          win_rate: 63.8,
+        },
+      }),
+    );
+    renderLeaderboard("player-42");
+    await waitFor(() => {
+      expect(screen.getByText("#42")).toBeInTheDocument();
+      expect(screen.getByText(/1523 rating/)).toBeInTheDocument();
+      expect(screen.getByText(/47 games/)).toBeInTheDocument();
+    });
+  });
+
+  it("does not show the self-rank footer when viewer_entry is not returned", async () => {
+    vi.mocked(api.getLeaderboard).mockResolvedValue(makeData());
+    renderLeaderboard("player-1");
+    await waitFor(() => screen.getByText("Alice"));
+    expect(screen.queryByText(/^#\d/)).not.toBeInTheDocument();
+  });
+});
 
 describe("Leaderboard – load more", () => {
   it("does not show Load more when all entries are displayed", async () => {

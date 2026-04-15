@@ -364,6 +364,10 @@ class LeaderboardEntry(BaseModel):
 class LeaderboardResponse(BaseModel):
     entries: list[LeaderboardEntry]
     total: int
+    # Populated when the request provides ``viewer_id`` and that player is
+    # ranked but falls outside the returned pagination window. Allows the
+    # frontend to display a "you are #N" sticky footer.
+    viewer_entry: Optional["LeaderboardEntry"] = None
 
 
 # ── Season Schemas ────────────────────────────────────────────────────────

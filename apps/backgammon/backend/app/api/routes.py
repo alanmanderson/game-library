@@ -1,11 +1,12 @@
 """REST API routes for the backgammon application."""
 
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_, func
+from sqlalchemy import select, or_, func, case
 
 from app.database import get_db
 from app.models import GameAnalysis, Player, Table, MoveRecord, PlayerStats, Season
@@ -950,42 +951,118 @@ async def get_active_season(db: AsyncSession = Depends(get_db)):
 @router.get("/leaderboard", response_model=LeaderboardResponse)
 async def get_leaderboard(
     metric: str = Query(default="wins", pattern="^(rating|wins|win_rate)$"),
+    period: str = Query(default="all_time", pattern="^(all_time|month|week)$"),
     limit: int = Query(default=100, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    viewer_id: Optional[str] = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Return leaderboard entries sorted by the chosen metric.
 
     metric=rating  – top players by ELO rating (min 5 rated games)
-    metric=wins    – top players by total wins (from PlayerStats)
-    metric=win_rate – top players by win rate (min 10 games)
+    metric=wins    – top players by total wins
+    metric=win_rate – top players by win rate (min 10 games for all_time, 3 for
+                      windowed periods since sample size is smaller)
+
+    period=all_time (default) – uses PlayerStats aggregates
+    period=month    – wins/games from Tables.finished_at within the last 30 days
+    period=week     – wins/games from Tables.finished_at within the last 7 days
+
+    ``viewer_id`` is an optional query parameter: when provided, the response
+    includes a ``viewer_entry`` containing that player's leaderboard row even
+    if they're outside the paginated window (useful for self-rank footer).
 
     Guest and bot accounts are always excluded.
-    """
-    # Build a subquery that aggregates wins/games from PlayerStats
-    stats_sq = (
-        select(
-            PlayerStats.player_id,
-            func.sum(PlayerStats.games_won).label("total_wins"),
-            func.sum(PlayerStats.games_played).label("total_games"),
-        )
-        .group_by(PlayerStats.player_id)
-        .subquery()
-    )
 
-    base_q = (
-        select(
-            Player.id,
-            Player.nickname,
-            Player.rating,
-            Player.rating_games,
-            func.coalesce(stats_sq.c.total_wins, 0).label("total_wins"),
-            func.coalesce(stats_sq.c.total_games, 0).label("total_games"),
+    # Future: a ``friends_only=true`` filter will scope results to the viewer's
+    # friends list once the friends system is implemented.
+    """
+    window_start: Optional[datetime] = None
+    if period == "month":
+        window_start = datetime.now(timezone.utc) - timedelta(days=30)
+    elif period == "week":
+        window_start = datetime.now(timezone.utc) - timedelta(days=7)
+
+    # --- Build the stats subquery ------------------------------------------
+    if window_start is None:
+        # All-time: aggregate from PlayerStats (fast, pre-aggregated path).
+        stats_sq = (
+            select(
+                PlayerStats.player_id,
+                func.sum(PlayerStats.games_won).label("total_wins"),
+                func.sum(PlayerStats.games_played).label("total_games"),
+            )
+            .group_by(PlayerStats.player_id)
+            .subquery()
         )
-        .outerjoin(stats_sq, Player.id == stats_sq.c.player_id)
-        .where(Player.is_guest == False)  # noqa: E712
-        .where(Player.id != BOT_PLAYER_ID)
-    )
+        min_games_win_rate = 10
+    else:
+        # Windowed: aggregate directly from finished Tables.
+        # Each finished table contributes 1 game to each participant and a win
+        # to the winner_id.
+        # Build two UNION ALL rows per table (one for each color), then group.
+        white_rows = select(
+            Table.white_player_id.label("player_id"),
+            case((Table.winner_id == Table.white_player_id, 1), else_=0).label("is_win"),
+        ).where(
+            Table.status == "finished",
+            Table.finished_at.is_not(None),
+            Table.finished_at >= window_start,
+            Table.white_player_id.is_not(None),
+        )
+        black_rows = select(
+            Table.black_player_id.label("player_id"),
+            case((Table.winner_id == Table.black_player_id, 1), else_=0).label("is_win"),
+        ).where(
+            Table.status == "finished",
+            Table.finished_at.is_not(None),
+            Table.finished_at >= window_start,
+            Table.black_player_id.is_not(None),
+        )
+        union_sq = white_rows.union_all(black_rows).subquery()
+        stats_sq = (
+            select(
+                union_sq.c.player_id.label("player_id"),
+                func.sum(union_sq.c.is_win).label("total_wins"),
+                func.count().label("total_games"),
+            )
+            .group_by(union_sq.c.player_id)
+            .subquery()
+        )
+        # Lower threshold for windowed win_rate since sample sizes are smaller.
+        min_games_win_rate = 3
+
+    # For windowed periods, only include players who actually played in the
+    # window (inner-join equivalent via WHERE). For all-time we keep the
+    # existing outer-join behaviour so rating-only players still show up.
+    if window_start is None:
+        base_q = (
+            select(
+                Player.id,
+                Player.nickname,
+                Player.rating,
+                Player.rating_games,
+                func.coalesce(stats_sq.c.total_wins, 0).label("total_wins"),
+                func.coalesce(stats_sq.c.total_games, 0).label("total_games"),
+            )
+            .outerjoin(stats_sq, Player.id == stats_sq.c.player_id)
+            .where(Player.is_guest == False)  # noqa: E712
+            .where(Player.id != BOT_PLAYER_ID)
+        )
+    else:
+        base_q = (
+            select(
+                Player.id,
+                Player.nickname,
+                Player.rating,
+                Player.rating_games,
+                func.coalesce(stats_sq.c.total_wins, 0).label("total_wins"),
+                func.coalesce(stats_sq.c.total_games, 0).label("total_games"),
+            )
+            .join(stats_sq, Player.id == stats_sq.c.player_id)
+            .where(Player.is_guest == False)  # noqa: E712
+            .where(Player.id != BOT_PLAYER_ID)
+        )
 
     if metric == "rating":
         q = (
@@ -998,7 +1075,7 @@ async def get_leaderboard(
     else:  # win_rate
         q = (
             base_q
-            .where(func.coalesce(stats_sq.c.total_games, 0) >= 10)
+            .where(func.coalesce(stats_sq.c.total_games, 0) >= min_games_win_rate)
             .order_by(
                 (func.coalesce(stats_sq.c.total_wins, 0) * 1.0
                  / stats_sq.c.total_games).desc()
@@ -1009,25 +1086,38 @@ async def get_leaderboard(
     count_result = await db.execute(select(func.count()).select_from(q.subquery()))
     total = count_result.scalar() or 0
 
-    result = await db.execute(q.offset(offset).limit(limit))
-    rows = result.all()
+    # Materialize all matching rows so we can locate viewer_id for a self-rank
+    # footer even if they're outside the [offset, offset+limit) slice. This is
+    # bounded by the leaderboard eligibility filters so stays small in practice.
+    all_result = await db.execute(q)
+    all_rows = all_result.all()
 
-    entries = []
-    for i, row in enumerate(rows):
+    def _make_entry(index: int, row) -> LeaderboardEntry:
         total_wins = int(row.total_wins)
         total_games = int(row.total_games)
         win_rate = (total_wins / total_games * 100.0) if total_games > 0 else 0.0
-        entries.append(
-            LeaderboardEntry(
-                rank=offset + i + 1,
-                player_id=row.id,
-                nickname=row.nickname,
-                rating=row.rating,
-                rating_games=row.rating_games,
-                total_wins=total_wins,
-                total_games=total_games,
-                win_rate=win_rate,
-            )
+        return LeaderboardEntry(
+            rank=index + 1,
+            player_id=row.id,
+            nickname=row.nickname,
+            rating=row.rating,
+            rating_games=row.rating_games,
+            total_wins=total_wins,
+            total_games=total_games,
+            win_rate=win_rate,
         )
 
-    return LeaderboardResponse(entries=entries, total=total)
+    page_rows = all_rows[offset : offset + limit]
+    entries = [_make_entry(offset + i, row) for i, row in enumerate(page_rows)]
+
+    viewer_entry: Optional[LeaderboardEntry] = None
+    if viewer_id:
+        for i, row in enumerate(all_rows):
+            if row.id == viewer_id:
+                # Only populate when viewer is NOT in the current page slice
+                # (frontend already highlights the row when in view).
+                if not (offset <= i < offset + limit):
+                    viewer_entry = _make_entry(i, row)
+                break
+
+    return LeaderboardResponse(entries=entries, total=total, viewer_entry=viewer_entry)

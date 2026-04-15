@@ -315,10 +315,19 @@ export function getLeaderboard(
   metric: "wins" | "win_rate" | "rating" = "wins",
   limit: number = 100,
   offset: number = 0,
+  period: "all_time" | "month" | "week" = "all_time",
+  viewerId?: string | null,
 ): Promise<LeaderboardData> {
-  return request<LeaderboardData>(
-    `/api/leaderboard?metric=${metric}&limit=${limit}&offset=${offset}`,
-  );
+  const params = new URLSearchParams({
+    metric,
+    limit: String(limit),
+    offset: String(offset),
+    period,
+  });
+  if (viewerId) {
+    params.set("viewer_id", viewerId);
+  }
+  return request<LeaderboardData>(`/api/leaderboard?${params.toString()}`);
 }
 
 // ---------------------------------------------------------------------------
