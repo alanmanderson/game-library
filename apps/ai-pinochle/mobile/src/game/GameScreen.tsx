@@ -1,12 +1,14 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView } from "react-native";
 import * as ScreenOrientation from "expo-screen-orientation";
-import type { Phase, UseGameStateApi } from "@pinochle/shared";
+import type { Phase, UseGameStateApi, MoonOutcome } from "@pinochle/shared";
 import {
   CARDS_PER_PLAYER,
   TEAM_FOR_SEAT,
+  detectMoonOutcome,
   getTableOrder,
 } from "@pinochle/shared";
+import { MoonCelebration } from "./MoonCelebration";
 import { HandDisplay } from "./HandDisplay";
 import { BiddingPhase } from "./BiddingPhase";
 import { TrumpPhase } from "./TrumpPhase";
@@ -89,6 +91,22 @@ export function GameScreen({
     leaveToLobby,
   } = game;
 
+  // Moon-shot celebration: edge-detect HAND_COMPLETE with moon flag set.
+  // Mirrors the web GamePage pattern; see web/src/game/GamePage.tsx.
+  const moonOutcome = detectMoonOutcome(game.state);
+  const prevMoonKindRef = useRef<MoonOutcome["kind"]>("none");
+  const [activeMoon, setActiveMoon] = useState<
+    Extract<MoonOutcome, { kind: "success" } | { kind: "fail" }> | null
+  >(null);
+  useEffect(() => {
+    const prev = prevMoonKindRef.current;
+    prevMoonKindRef.current = moonOutcome.kind;
+    if (prev !== "none") return;
+    if (moonOutcome.kind === "success" || moonOutcome.kind === "fail") {
+      setActiveMoon(moonOutcome);
+    }
+  }, [moonOutcome]);
+
   // Lock to landscape on mount, restore portrait on unmount.
   useEffect(() => {
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
@@ -121,6 +139,12 @@ export function GameScreen({
 
   return (
     <SafeAreaView style={styles.table}>
+      {activeMoon && (
+        <MoonCelebration
+          outcome={activeMoon}
+          onDismiss={() => setActiveMoon(null)}
+        />
+      )}
       {/* Status bar */}
       <View style={styles.statusBar}>
         <Text style={styles.phaseLabel}>{phaseLabel(phase)}</Text>

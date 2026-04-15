@@ -74,6 +74,9 @@ export {
 } from "./gameReducer";
 export type { GameState, GameAction } from "./gameReducer";
 
+export { detectMoonOutcome } from "./moonOutcome";
+export type { MoonOutcome } from "./moonOutcome";
+
 export { useGameState } from "./hooks/useGameState";
 export type { UseGameStateApi, UseGameStateOptions } from "./hooks/useGameState";
 

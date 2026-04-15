@@ -1,8 +1,9 @@
-import { useEffect } from "react";
-import type { Phase, UseGameStateApi } from "@pinochle/shared";
+import { useEffect, useRef, useState } from "react";
+import type { Phase, UseGameStateApi, MoonOutcome } from "@pinochle/shared";
 import {
   CARDS_PER_PLAYER,
   TEAM_FOR_SEAT,
+  detectMoonOutcome,
   getTableOrder,
 } from "@pinochle/shared";
 import { HandDisplay } from "./HandDisplay.tsx";
@@ -13,6 +14,7 @@ import { TrickPhase } from "./TrickPhase.tsx";
 import { PassCardsPhase } from "./PassCardsPhase.tsx";
 import { HandResult } from "./HandResult.tsx";
 import { GameOverScreen } from "./GameOverScreen.tsx";
+import { MoonCelebration } from "./MoonCelebration.tsx";
 import { PlayerAvatar } from "./PlayerAvatar.tsx";
 import { OtherPlayerHand } from "./OtherPlayerHand.tsx";
 import styles from "./GamePage.module.css";
@@ -67,6 +69,25 @@ export function GamePage({
     leaveToLobby,
   } = game;
 
+  // Moon-shot celebration: edge-detect the HAND_COMPLETE transition where
+  // `meldData.is_shoot_the_moon` is true. Same `useRef`-of-previous pattern
+  // used by the card animations in PR #54. We hold the outcome in local
+  // state so the overlay can outlive a state churn (e.g. an ack arriving
+  // mid-celebration) and dismiss itself on its own timer.
+  const moonOutcome = detectMoonOutcome(game.state);
+  const prevMoonKindRef = useRef<MoonOutcome["kind"]>("none");
+  const [activeMoon, setActiveMoon] = useState<
+    Extract<MoonOutcome, { kind: "success" } | { kind: "fail" }> | null
+  >(null);
+  useEffect(() => {
+    const prev = prevMoonKindRef.current;
+    prevMoonKindRef.current = moonOutcome.kind;
+    if (prev !== "none") return; // Already showing / shown for this hand.
+    if (moonOutcome.kind === "success" || moonOutcome.kind === "fail") {
+      setActiveMoon(moonOutcome);
+    }
+  }, [moonOutcome]);
+
   // Warn before closing the tab while a game is active.
   useEffect(() => {
     const isActiveGame = phase !== "LOBBY_WAITING" && phase !== "GAME_OVER";
@@ -100,6 +121,12 @@ export function GamePage({
 
   return (
     <div className={styles.table}>
+      {activeMoon && (
+        <MoonCelebration
+          outcome={activeMoon}
+          onDismiss={() => setActiveMoon(null)}
+        />
+      )}
       {!connected && (
         <div className={styles.disconnectOverlay} role="status" aria-live="polite">
           <div className={styles.disconnectMessage}>
