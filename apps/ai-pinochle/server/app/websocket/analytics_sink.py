@@ -11,6 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.game import Game
+from app.persistence.achievements import check_game_achievements, check_hand_achievements
 from app.persistence.analytics import insert_bids, insert_hand, insert_trick
 from app.websocket.state_io import OptimisticLockError, save_game_state
 
@@ -24,11 +25,25 @@ SEAT_COLUMNS = {
 }
 
 
+def _user_id_to_seat(game: Game, user_id: uuid.UUID) -> str | None:
+    for seat, col in SEAT_COLUMNS.items():
+        if getattr(game, col) == user_id:
+            return seat
+    return None
+
+
 async def dispatch(
     db: AsyncSession, game: Game, state: dict, side_effects: list[dict]
-) -> None:
-    """Persist hands/bids/tricks rows for each relevant side effect."""
+) -> list[dict]:
+    """Persist hands/bids/tricks and evaluate achievements.
+
+    Returns a list of WebSocket event specs (scope="seat") for any newly
+    unlocked achievements.  The list is empty when nothing was unlocked.
+    All achievement evaluation is best-effort — failures are logged and
+    swallowed so a DB hiccup never breaks the live game.
+    """
     hand = state.get("current_hand") or {}
+    achievement_events: list[dict] = []
 
     for sfx in side_effects:
         kind = sfx.get("type")
@@ -38,7 +53,45 @@ async def dispatch(
             await _persist_finished_trick(db, game, hand, sfx)
         elif kind == "hand_completed":
             await _persist_hand_completion(db, hand, sfx)
-        # "save_extra", "game_started", "game_over" are consumed elsewhere.
+            try:
+                unlocked = await check_hand_achievements(db, game, state, sfx)
+                achievement_events.extend(
+                    _build_achievement_events(game, unlocked)
+                )
+            except Exception:
+                logger.exception(
+                    "Achievement check failed (hand_completed) for game %s", game.id
+                )
+        elif kind == "game_over":
+            try:
+                unlocked = await check_game_achievements(db, game, state)
+                achievement_events.extend(
+                    _build_achievement_events(game, unlocked)
+                )
+            except Exception:
+                logger.exception(
+                    "Achievement check failed (game_over) for game %s", game.id
+                )
+        # "save_extra", "game_started" are consumed elsewhere.
+
+    return achievement_events
+
+
+def _build_achievement_events(
+    game: Game, unlocked: list[tuple[uuid.UUID, dict]]
+) -> list[dict]:
+    """Convert (user_id, achievement_meta) pairs into WS event specs."""
+    events: list[dict] = []
+    for uid, ach_meta in unlocked:
+        seat = _user_id_to_seat(game, uid)
+        if seat:
+            events.append({
+                "scope": "seat",
+                "seat": seat,
+                "event": "ACHIEVEMENTS_UNLOCKED",
+                "payload": {"achievements": [ach_meta]},
+            })
+    return events
 
 
 async def _persist_new_hand(

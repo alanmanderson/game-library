@@ -304,6 +304,19 @@ const LeftToLobbyEvent = z.object({
   payload: z.object({}).loose(),
 });
 
+const AchievementsUnlockedEvent = z.object({
+  event: z.literal("ACHIEVEMENTS_UNLOCKED"),
+  payload: z.object({
+    achievements: z.array(
+      z.object({
+        name: z.string(),
+        description: z.string(),
+        rarity: z.enum(["COMMON", "RARE", "EPIC", "LEGENDARY"]),
+      })
+    ),
+  }),
+});
+
 const ReauthRequiredEvent = z.object({
   event: z.literal("REAUTH_REQUIRED"),
   payload: z.object({
@@ -337,6 +350,7 @@ export const WsEventSchema = z.discriminatedUnion("event", [
   RematchStartedEvent,
   GameForfeitedEvent,
   LeftToLobbyEvent,
+  AchievementsUnlockedEvent,
   ReauthRequiredEvent,
 ]);
 

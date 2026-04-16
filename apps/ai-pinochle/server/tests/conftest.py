@@ -47,6 +47,7 @@ async def _patched_ensure_sync_result(result, calling_method):  # type: ignore[n
 
 _sa_async_session._ensure_sync_result = _patched_ensure_sync_result
 
+from app.models.achievement import UserAchievement
 from app.models.base import Base
 from app.models.game import Game
 from app.models.user import User
@@ -67,6 +68,10 @@ Game.__table__.c.ns_total_score.server_default = None
 Game.__table__.c.ew_total_score.server_default = None
 Game.__table__.c.version.server_default = None
 Game.__table__.c.status.type = String()
+
+# Patch UserAchievement model column defaults for SQLite compatibility
+UserAchievement.__table__.c.id.server_default = None
+UserAchievement.__table__.c.unlocked_at.server_default = None
 
 
 @event.listens_for(User, "init")
@@ -90,6 +95,14 @@ def _set_game_defaults(target, args, kwargs):
         target.ew_total_score = 0
     if "version" not in kwargs:
         target.version = 0
+
+
+@event.listens_for(UserAchievement, "init")
+def _set_achievement_defaults(target, args, kwargs):
+    if "id" not in kwargs:
+        target.id = uuid.uuid4()
+    if "unlocked_at" not in kwargs:
+        target.unlocked_at = datetime.now(timezone.utc)
 
 
 # Create ONE persistent sqlite3 connection that lives for the entire test run.

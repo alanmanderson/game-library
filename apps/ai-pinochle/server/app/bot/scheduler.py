@@ -202,8 +202,8 @@ async def _execute_bot_turn(room_code: str, bot_seat: str) -> None:
                         )
                         return
 
-                    await analytics_sink.dispatch(db, game, new_state, side_effects)
-                    await event_bus.dispatch(game, room_code, new_state, events)
+                    achievement_events = await analytics_sink.dispatch(db, game, new_state, side_effects)
+                    await event_bus.dispatch(game, room_code, new_state, events + achievement_events)
 
                     # Post-dispatch bookkeeping (mirrors _apply in handlers.py)
                     if new_state.get("phase") == "GAME_OVER":

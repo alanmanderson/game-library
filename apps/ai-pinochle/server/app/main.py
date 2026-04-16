@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.auth import router as auth_router
 from app.api.games import router as games_router
+from app.api.users import router as users_router
 from app.bot.scheduler import set_session_factory as set_bot_session_factory
 from app.config import settings
 from app.database import AsyncSessionLocal
@@ -60,6 +61,7 @@ app.add_middleware(
 
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(games_router, prefix="/games", tags=["games"])
+app.include_router(users_router, prefix="/users", tags=["users"])
 app.include_router(ws_router, prefix="/ws", tags=["websocket"])
 
 # Serve card images so mobile clients can load them via URL

@@ -1,5 +1,6 @@
 import { Suspense, lazy, useState } from "react";
 import type { Seats, WsEvent } from "@pinochle/shared";
+import type { Achievement } from "../ui";
 import {
   SEATS,
   SEAT_LABELS_LOWER,
@@ -54,6 +55,7 @@ export function RoomPage({ roomCode, onLeave }: Props) {
   const [hintsEnabled, setHintsEnabled] = useState(false);
   const [gameStarted, setGameStarted] = useState(false);
   const [copied, setCopied] = useState<"code" | "link" | null>(null);
+  const [pendingAchievements, setPendingAchievements] = useState<Achievement[] | null>(null);
 
   const { sendMessage, connected } = useWebSocket(roomCode, token!, {
     onEvent: (event) => handleEvent(event),
@@ -83,6 +85,9 @@ export function RoomPage({ roomCode, onLeave }: Props) {
         return;
       case "LEFT_TO_LOBBY":
         onLeave();
+        return;
+      case "ACHIEVEMENTS_UNLOCKED":
+        setPendingAchievements(event.payload.achievements);
         return;
       default:
         game.applyEvent(event);
@@ -146,6 +151,8 @@ export function RoomPage({ roomCode, onLeave }: Props) {
             onLeave={onLeave}
             hintsEnabled={hintsEnabled}
             roomCode={roomCode}
+            pendingAchievements={pendingAchievements}
+            onDismissAchievements={() => setPendingAchievements(null)}
           />
         </Suspense>
       </GameErrorBoundary>

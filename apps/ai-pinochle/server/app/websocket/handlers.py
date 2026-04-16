@@ -203,8 +203,8 @@ async def _apply(
     ):
         return
 
-    await analytics_sink.dispatch(db, game, new_state, side_effects)
-    await event_bus.dispatch(game, room_code, new_state, events)
+    achievement_events = await analytics_sink.dispatch(db, game, new_state, side_effects)
+    await event_bus.dispatch(game, room_code, new_state, events + achievement_events)
 
     # Post-dispatch bookkeeping: clear disconnect timers when the game
     # transitions into a non-play state or gets restarted.

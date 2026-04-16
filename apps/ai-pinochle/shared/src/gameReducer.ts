@@ -408,5 +408,9 @@ function applyEvent(state: GameState, evt: WsEvent, mySeat: string): GameState {
     // Handled by useWebSocket (it triggers the reauth flow); no reducer change.
     case "REAUTH_REQUIRED":
       return state;
+
+    // Toast notifications handled by GamePage directly; no reducer change.
+    case "ACHIEVEMENTS_UNLOCKED":
+      return state;
   }
 }

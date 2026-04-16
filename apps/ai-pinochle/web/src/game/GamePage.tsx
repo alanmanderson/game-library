@@ -18,7 +18,8 @@ import { MoonCelebration } from "./MoonCelebration.tsx";
 import { PlayerAvatar } from "./PlayerAvatar.tsx";
 import { OtherPlayerHand } from "./OtherPlayerHand.tsx";
 import { useHint } from "../hooks/useHint.ts";
-import { MuteToggle, RulesDrawer } from "../ui";
+import { MuteToggle, RulesDrawer, AchievementToast } from "../ui";
+import type { Achievement } from "../ui";
 import styles from "./GamePage.module.css";
 
 type SendMessage = (msg: Record<string, unknown>) => boolean | void;
@@ -32,6 +33,8 @@ interface Props {
   onLeave: () => void;
   hintsEnabled: boolean;
   roomCode: string;
+  pendingAchievements: Achievement[] | null;
+  onDismissAchievements: () => void;
 }
 
 export function GamePage({
@@ -43,6 +46,8 @@ export function GamePage({
   onLeave,
   hintsEnabled,
   roomCode,
+  pendingAchievements,
+  onDismissAchievements,
 }: Props) {
   const {
     state: {
@@ -154,6 +159,12 @@ export function GamePage({
         <MoonCelebration
           outcome={activeMoon}
           onDismiss={() => setActiveMoon(null)}
+        />
+      )}
+      {pendingAchievements && pendingAchievements.length > 0 && (
+        <AchievementToast
+          achievements={pendingAchievements}
+          onDismiss={onDismissAchievements}
         />
       )}
       {!connected && (

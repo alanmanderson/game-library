@@ -18,6 +18,9 @@ const MyGamesPage = lazy(() =>
 const ReplayPage = lazy(() =>
   import("../game/ReplayPage.tsx").then((m) => ({ default: m.ReplayPage })),
 );
+const AchievementsPage = lazy(() =>
+  import("../game/AchievementsPage.tsx").then((m) => ({ default: m.AchievementsPage })),
+);
 
 function extractRoomCode(pathname: string): string {
   const match = pathname.match(/^\/([A-Z]{4})$/);
@@ -44,6 +47,7 @@ export function LobbyPage() {
   const [joinError, setJoinError] = useState("");
 
   const [showMyGames, setShowMyGames] = useState(false);
+  const [showAchievements, setShowAchievements] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const [replayRoomCode, setReplayRoomCode] = useState<string | null>(null);
 
@@ -183,6 +187,14 @@ export function LobbyPage() {
     );
   }
 
+  if (showAchievements) {
+    return (
+      <Suspense fallback={<Loading />}>
+        <AchievementsPage onBack={() => setShowAchievements(false)} />
+      </Suspense>
+    );
+  }
+
   return (
     <div className={styles.container}>
       <BrandHeader
@@ -195,6 +207,9 @@ export function LobbyPage() {
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setShowMyGames(true)}>
               My Games
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setShowAchievements(true)}>
+              Achievements
             </Button>
           </>
         }
