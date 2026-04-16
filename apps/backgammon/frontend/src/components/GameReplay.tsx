@@ -650,6 +650,7 @@ function GameReplay() {
           cubeOwner={cubeOwner}
           moveArrows={moveArrows}
           bestMoveArrows={bestMoveArrows}
+          arrowsMoverColor={movedByColor as "white" | "black"}
         />
         {replayDice && (
           <div className="replay-dice-overlay">

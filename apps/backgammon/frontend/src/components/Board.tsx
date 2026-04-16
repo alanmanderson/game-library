@@ -26,6 +26,8 @@ interface BoardProps {
   moveArrows?: ParsedMove[];
   /** Arrows showing the engine's recommended move (red). One entry per die use. */
   bestMoveArrows?: ParsedMove[];
+  /** Colour of the player whose move the arrows represent (needed to resolve bar/off positions). */
+  arrowsMoverColor?: Color;
   /** Board theme ID (e.g. "classic", "dark-marble"). Defaults to "classic". */
   boardTheme?: string;
   /** Checker style ID (e.g. "classic", "marble"). Defaults to "classic". */
@@ -77,6 +79,7 @@ function Board({
   hintMoves = [],
   moveArrows,
   bestMoveArrows,
+  arrowsMoverColor,
   boardTheme,
   checkerStyle,
 }: BoardProps) {
@@ -699,10 +702,16 @@ function Board({
 
   function arrowCoord(point: number | "bar" | "off"): { cx: number; cy: number } {
     if (point === "bar") {
-      return { cx: layout.barX + BAR_WIDTH / 2, cy: BOARD_HEIGHT / 2 };
+      // Bar position: the mover's bar checkers sit on their own side.
+      const isBottom = arrowsMoverColor ? arrowsMoverColor === myColor : true;
+      return {
+        cx: layout.barX + BAR_WIDTH / 2,
+        cy: isBottom ? BOARD_HEIGHT * 0.65 : BOARD_HEIGHT * 0.35,
+      };
     }
     if (point === "off") {
-      const isBottom = myColor === "white";
+      // Bear-off: point to the mover's bear-off area (their side of the board).
+      const isBottom = arrowsMoverColor ? arrowsMoverColor === myColor : true;
       return {
         cx: layout.bearoffX + BEAROFF_WIDTH / 2,
         cy: isBottom ? BOARD_HEIGHT - MARGIN - TRIANGLE_HEIGHT * 0.4 : MARGIN + TRIANGLE_HEIGHT * 0.4,
