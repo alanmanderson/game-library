@@ -8,11 +8,13 @@ Thin I/O layer between WS frames and the pure state machine. Responsibilities:
   4. Persist via `save_game_state` with optimistic locking.
   5. Fan out events through `event_bus` and analytics through `analytics_sink`.
 
-All phase-specific rule logic lives in `app.engine.actions.*`. Two actions
-remain adapter-only because they touch columns or close the socket rather
-than `current_state_json`:
-  - `SELECT_SEAT`  — atomic seat claim via conditional UPDATE
-  - `LEAVE_TO_LOBBY` — WS close
+All phase-specific rule logic lives in `app.engine.actions.*`. Adapter-only
+actions touch columns or close the socket rather than `current_state_json`:
+  - `SELECT_SEAT`        — atomic seat claim via conditional UPDATE
+  - `LEAVE_TO_LOBBY`     — WS close
+  - `SWAP_SEAT_REQUEST`  — store pending swap in state JSON
+  - `SWAP_SEAT_ACCEPT`   — execute swap, clear pending state
+  - `KICK_PLAYER`        — host removes a player from a seat
 """
 import copy
 import logging
@@ -128,6 +130,15 @@ async def handle_message(
         return
     if action == "LEAVE_TO_LOBBY":
         await handle_leave_to_lobby(websocket)
+        return
+    if action == "SWAP_SEAT_REQUEST":
+        await handle_swap_seat_request(websocket, payload, room_code, user_id, db)
+        return
+    if action == "SWAP_SEAT_ACCEPT":
+        await handle_swap_seat_accept(websocket, payload, room_code, user_id, db)
+        return
+    if action == "KICK_PLAYER":
+        await handle_kick_player(websocket, payload, room_code, user_id, db)
         return
 
     if not supports(action):
@@ -303,7 +314,7 @@ async def handle_select_seat(
     await db.refresh(game)
 
     seats = await _build_seats_dict(game, db)
-    await _send_lobby_state(game, room_code, seats)
+    await _send_lobby_state(game, room_code, seats, db)
 
 
 # ---------------------------------------------------------------------------
@@ -323,6 +334,188 @@ async def handle_leave_to_lobby(websocket: WebSocket) -> None:
 
 
 # ---------------------------------------------------------------------------
+# SWAP_SEAT_REQUEST
+# ---------------------------------------------------------------------------
+
+
+async def handle_swap_seat_request(
+    websocket: WebSocket,
+    payload: dict,
+    room_code: str,
+    user_id: uuid.UUID,
+    db: AsyncSession,
+) -> None:
+    raw_target = payload.get("target_seat")
+    if not isinstance(raw_target, str):
+        await _send_error(websocket, ErrorCode.INVALID_SEAT, f"Invalid target_seat: {raw_target}")
+        return
+
+    target_seat = raw_target.upper()
+    if target_seat not in VALID_SEATS:
+        await _send_error(websocket, ErrorCode.INVALID_SEAT, f"Invalid seat: {raw_target}")
+        return
+
+    game = await _load_game(db, room_code)
+    if game is None:
+        await _send_error(websocket, ErrorCode.GAME_NOT_FOUND, "Game not found")
+        return
+
+    state = game.current_state_json or {}
+    if state.get("phase") != "LOBBY_WAITING":
+        await _send_error(websocket, ErrorCode.WRONG_PHASE, "Can only swap seats in the lobby")
+        return
+
+    requester_seat = _seat_for_user(game, user_id)
+    if requester_seat is None:
+        await _send_error(websocket, ErrorCode.NOT_SEATED, "You must be seated to request a swap")
+        return
+
+    if requester_seat == target_seat:
+        await _send_error(websocket, ErrorCode.INVALID_SEAT, "You are already in that seat")
+        return
+
+    target_col = SEAT_COLUMNS[target_seat]
+    if getattr(game, target_col) is None:
+        await _send_error(
+            websocket, ErrorCode.INVALID_SEAT, f"Seat {target_seat} is empty — use SELECT_SEAT instead"
+        )
+        return
+
+    new_state = copy.deepcopy(state)
+    new_state["pending_swap"] = {
+        "from_seat": requester_seat,
+        "to_seat": target_seat,
+        "requested_by": str(user_id),
+    }
+
+    if not await _save_or_conflict(websocket, db, game, new_state):
+        return
+
+    await db.refresh(game)
+    seats = await _build_seats_dict(game, db)
+    await _send_lobby_state(game, room_code, seats, db)
+
+
+# ---------------------------------------------------------------------------
+# SWAP_SEAT_ACCEPT
+# ---------------------------------------------------------------------------
+
+
+async def handle_swap_seat_accept(
+    websocket: WebSocket,
+    payload: dict,
+    room_code: str,
+    user_id: uuid.UUID,
+    db: AsyncSession,
+) -> None:
+    game = await _load_game(db, room_code)
+    if game is None:
+        await _send_error(websocket, ErrorCode.GAME_NOT_FOUND, "Game not found")
+        return
+
+    state = game.current_state_json or {}
+    if state.get("phase") != "LOBBY_WAITING":
+        await _send_error(websocket, ErrorCode.WRONG_PHASE, "Can only swap seats in the lobby")
+        return
+
+    pending = state.get("pending_swap")
+    if not pending:
+        await _send_error(websocket, ErrorCode.NO_PENDING_SWAP, "No pending swap to accept")
+        return
+
+    to_seat = pending["to_seat"]
+    to_col = SEAT_COLUMNS[to_seat]
+    if getattr(game, to_col) != user_id:
+        await _send_error(
+            websocket, ErrorCode.SWAP_NOT_FOR_YOU, "This swap request is not directed at you"
+        )
+        return
+
+    from_seat = pending["from_seat"]
+    from_col = SEAT_COLUMNS[from_seat]
+    from_player_id = getattr(game, from_col)
+
+    new_state = copy.deepcopy(state)
+    new_state.pop("pending_swap", None)
+
+    # Merge seat-column changes into the versioned UPDATE so they're
+    # covered by the optimistic lock (no gap between the two writes).
+    if not await _save_or_conflict(
+        websocket, db, game, new_state,
+        extra={from_col: user_id, to_col: from_player_id},
+    ):
+        return
+
+    await db.refresh(game)
+    seats = await _build_seats_dict(game, db)
+    await _send_lobby_state(game, room_code, seats, db)
+
+
+# ---------------------------------------------------------------------------
+# KICK_PLAYER
+# ---------------------------------------------------------------------------
+
+
+async def handle_kick_player(
+    websocket: WebSocket,
+    payload: dict,
+    room_code: str,
+    user_id: uuid.UUID,
+    db: AsyncSession,
+) -> None:
+    raw_seat = payload.get("seat")
+    if not isinstance(raw_seat, str):
+        await _send_error(websocket, ErrorCode.INVALID_SEAT, f"Invalid seat: {raw_seat}")
+        return
+
+    seat = raw_seat.upper()
+    if seat not in VALID_SEATS:
+        await _send_error(websocket, ErrorCode.INVALID_SEAT, f"Invalid seat: {raw_seat}")
+        return
+
+    game = await _load_game(db, room_code)
+    if game is None:
+        await _send_error(websocket, ErrorCode.GAME_NOT_FOUND, "Game not found")
+        return
+
+    state = game.current_state_json or {}
+    if state.get("phase") != "LOBBY_WAITING":
+        await _send_error(websocket, ErrorCode.WRONG_PHASE, "Can only kick players in the lobby")
+        return
+
+    created_by = state.get("created_by")
+    if str(user_id) != created_by:
+        await _send_error(websocket, ErrorCode.NOT_GAME_CREATOR, "Only the room creator can kick players")
+        return
+
+    col = SEAT_COLUMNS[seat]
+    occupant_id = getattr(game, col)
+    if occupant_id is None:
+        await _send_error(websocket, ErrorCode.INVALID_SEAT, f"Seat {seat} is empty")
+        return
+
+    if occupant_id == user_id:
+        await _send_error(websocket, ErrorCode.CANNOT_KICK_SELF, "You cannot kick yourself")
+        return
+
+    new_state = copy.deepcopy(state)
+    pending = new_state.get("pending_swap")
+    if pending and (pending.get("from_seat") == seat or pending.get("to_seat") == seat):
+        new_state.pop("pending_swap", None)
+
+    # Merge seat-column clear into the versioned UPDATE (same lock coverage).
+    if not await _save_or_conflict(
+        websocket, db, game, new_state,
+        extra={col: None},
+    ):
+        return
+
+    await db.refresh(game)
+    seats = await _build_seats_dict(game, db)
+    await _send_lobby_state(game, room_code, seats, db)
+
+
+# ---------------------------------------------------------------------------
 # Shared helpers (also imported by routes.py / background.py)
 # ---------------------------------------------------------------------------
 
@@ -338,15 +531,74 @@ def _your_seat(game: Game, user_id: uuid.UUID) -> str | None:
     return _seat_for_user(game, user_id)
 
 
+async def _resolve_username(db: AsyncSession, user_id_str: str | None) -> str | None:
+    """Resolve a UUID string to a first_name, returning None if not found."""
+    if not user_id_str:
+        return None
+    try:
+        uid = uuid.UUID(user_id_str)
+    except (ValueError, AttributeError):
+        return None
+    result = await db.execute(select(User).where(User.id == uid))
+    user = result.scalar_one_or_none()
+    return user.first_name if user else None
+
+
+async def _build_lobby_payload(
+    game: Game,
+    db: AsyncSession,
+    seats: dict[str, str | None],
+    viewer_user_id: uuid.UUID,
+) -> dict:
+    """Build the LOBBY_STATE_UPDATED payload for a single viewer."""
+    state = game.current_state_json or {}
+    your_seat = _your_seat(game, viewer_user_id)
+
+    created_by = state.get("created_by")
+    is_host = bool(created_by and str(viewer_user_id) == created_by)
+
+    pending_swap_raw = state.get("pending_swap")
+    pending_swap_payload = None
+    if pending_swap_raw:
+        from_seat = pending_swap_raw.get("from_seat", "")
+        to_seat = pending_swap_raw.get("to_seat", "")
+        requested_by = pending_swap_raw.get("requested_by")
+        from_col = SEAT_COLUMNS.get(from_seat)
+        to_col = SEAT_COLUMNS.get(to_seat)
+        # Validate the swap is still live: requester must still occupy from_seat
+        # and the target seat must still be occupied. If a SELECT_SEAT moved
+        # either participant, the swap is stale and we suppress it.
+        from_occupant = getattr(game, from_col) if from_col else None
+        to_occupant = getattr(game, to_col) if to_col else None
+        if (
+            from_occupant is not None
+            and str(from_occupant) == requested_by
+            and to_occupant is not None
+        ):
+            from_player = await _resolve_username(db, requested_by)
+            pending_swap_payload = {
+                "from_seat": from_seat,
+                "to_seat": to_seat,
+                "from_player": from_player or "",
+            }
+
+    return {
+        "seats": seats,
+        "your_seat": your_seat,
+        "is_host": is_host,
+        "pending_swap": pending_swap_payload,
+    }
+
+
 async def _send_lobby_state(
-    game: Game, room_code: str, seats: dict[str, str | None]
+    game: Game, room_code: str, seats: dict[str, str | None], db: AsyncSession
 ) -> None:
     connections = manager.get_connections(room_code)
     for conn in connections:
-        your_seat = _your_seat(game, conn.user_id)
+        payload = await _build_lobby_payload(game, db, seats, conn.user_id)
         await manager.send_personal(conn.websocket, {
             "event": "LOBBY_STATE_UPDATED",
-            "payload": {"seats": seats, "your_seat": your_seat},
+            "payload": payload,
         })
 
 
@@ -377,6 +629,7 @@ __all__ = [
     "_seat_for_user",
     "_your_seat",
     "_build_seats_dict",
+    "_build_lobby_payload",
     "_send_lobby_state",
     "is_valid_card_code",
     "next_seat",

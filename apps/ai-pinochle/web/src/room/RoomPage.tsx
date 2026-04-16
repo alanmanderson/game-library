@@ -43,6 +43,12 @@ export function RoomPage({ roomCode, onLeave }: Props) {
     west: null,
   });
   const [mySeat, setMySeat] = useState<string | null>(null);
+  const [isHost, setIsHost] = useState(false);
+  const [pendingSwap, setPendingSwap] = useState<{
+    from_seat: string;
+    to_seat: string;
+    from_player: string;
+  } | null>(null);
   const [error, setError] = useState("");
   const [gameStarted, setGameStarted] = useState(false);
   const [copied, setCopied] = useState<"code" | "link" | null>(null);
@@ -59,6 +65,8 @@ export function RoomPage({ roomCode, onLeave }: Props) {
         const p = event.payload;
         setSeats(normalizeSeats(p.seats));
         if (p.your_seat) setMySeat(p.your_seat.toLowerCase());
+        setIsHost(p.is_host ?? false);
+        setPendingSwap(p.pending_swap ?? null);
         setError("");
         return;
       }
@@ -95,6 +103,24 @@ export function RoomPage({ roomCode, onLeave }: Props) {
 
   function handleStart() {
     sendAction(sendMessage, { action: "START_GAME", payload: {} });
+  }
+
+  function handleSwapRequest(targetSeat: string) {
+    sendAction(sendMessage, {
+      action: "SWAP_SEAT_REQUEST",
+      payload: { target_seat: targetSeat.toUpperCase() },
+    });
+  }
+
+  function handleSwapAccept() {
+    sendAction(sendMessage, { action: "SWAP_SEAT_ACCEPT", payload: {} });
+  }
+
+  function handleKick(targetSeat: string) {
+    sendAction(sendMessage, {
+      action: "KICK_PLAYER",
+      payload: { seat: targetSeat.toUpperCase() },
+    });
   }
 
   const allSeated = SEATS.every((s) => seats[s]);
@@ -175,7 +201,30 @@ export function RoomPage({ roomCode, onLeave }: Props) {
             >
               <p className={styles.seatLabel}>{SEAT_LABELS_LOWER[seat]}</p>
               {occupant ? (
-                <p className={styles.seatPlayer}>{occupant}</p>
+                <>
+                  <p className={styles.seatPlayer}>{occupant}</p>
+                  {!isSelf && (
+                    <div className={styles.seatActions}>
+                      {mySeat !== null && (
+                        <Button
+                          size="sm"
+                          onClick={() => handleSwapRequest(seat)}
+                        >
+                          Swap
+                        </Button>
+                      )}
+                      {isHost && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleKick(seat)}
+                        >
+                          Kick
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </>
               ) : (
                 <>
                   <p className={styles.seatEmpty}>Empty</p>
@@ -188,6 +237,27 @@ export function RoomPage({ roomCode, onLeave }: Props) {
           );
         })}
       </div>
+
+      {pendingSwap !== null && (
+        <div className={styles.swapBanner} role="status">
+          {mySeat?.toUpperCase() === pendingSwap.to_seat ? (
+            <>
+              <p className={styles.swapBannerText}>
+                {pendingSwap.from_player} wants to swap seats with you
+              </p>
+              <Button size="sm" onClick={handleSwapAccept}>
+                Accept
+              </Button>
+            </>
+          ) : (
+            <p className={styles.swapBannerText}>
+              {pendingSwap.from_player} wants to swap with{" "}
+              {pendingSwap.to_seat.charAt(0) +
+                pendingSwap.to_seat.slice(1).toLowerCase()}
+            </p>
+          )}
+        </div>
+      )}
 
       {allSeated && (
         <Button size="lg" onClick={handleStart} style={{ marginBottom: "1rem" }}>

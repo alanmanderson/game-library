@@ -38,6 +38,7 @@ const ErrorCodeSchema = z.enum([
   "ALREADY_ACKNOWLEDGED",
   "INVALID_CARD", "ILLEGAL_PLAY",
   "REMATCH_NOT_AVAILABLE", "ALREADY_REQUESTED_REMATCH",
+  "NO_PENDING_SWAP", "SWAP_NOT_FOR_YOU", "CANNOT_KICK_SELF",
 ]);
 
 const MeldSchema = z.object({
@@ -68,11 +69,19 @@ const ErrorEvent = z.object({
   }),
 });
 
+const PendingSwapSchema = z.object({
+  from_seat: z.string(),
+  to_seat: z.string(),
+  from_player: z.string(),
+});
+
 const LobbyStateUpdatedEvent = z.object({
   event: z.literal("LOBBY_STATE_UPDATED"),
   payload: z.object({
     seats: z.record(z.string(), z.string().nullable()),
     your_seat: z.string().nullable(),
+    is_host: z.boolean().optional(),
+    pending_swap: PendingSwapSchema.nullable().optional(),
   }),
 });
 
@@ -422,6 +431,21 @@ const LeaveToLobbyAction = z.object({
   payload: z.object({}).loose(),
 });
 
+const SwapSeatRequestAction = z.object({
+  action: z.literal("SWAP_SEAT_REQUEST"),
+  payload: z.object({ target_seat: z.string() }),
+});
+
+const SwapSeatAcceptAction = z.object({
+  action: z.literal("SWAP_SEAT_ACCEPT"),
+  payload: z.object({}).loose(),
+});
+
+const KickPlayerAction = z.object({
+  action: z.literal("KICK_PLAYER"),
+  payload: z.object({ seat: z.string() }),
+});
+
 export const WsActionSchema = z.discriminatedUnion("action", [
   SelectSeatAction,
   StartGameAction,
@@ -433,6 +457,9 @@ export const WsActionSchema = z.discriminatedUnion("action", [
   AcknowledgeHandResultAction,
   RematchRequestAction,
   LeaveToLobbyAction,
+  SwapSeatRequestAction,
+  SwapSeatAcceptAction,
+  KickPlayerAction,
 ]);
 
 export type WsAction = z.infer<typeof WsActionSchema>;

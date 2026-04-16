@@ -55,6 +55,11 @@ class ErrorCode(StrEnum):
     REMATCH_NOT_AVAILABLE = "REMATCH_NOT_AVAILABLE"
     ALREADY_REQUESTED_REMATCH = "ALREADY_REQUESTED_REMATCH"
 
+    # Seat swap / kick
+    NO_PENDING_SWAP = "NO_PENDING_SWAP"
+    SWAP_NOT_FOR_YOU = "SWAP_NOT_FOR_YOU"
+    CANNOT_KICK_SELF = "CANNOT_KICK_SELF"
+
 
 class GameRuleError(Exception):
     """Raised by pure reducers when an action violates a game rule.

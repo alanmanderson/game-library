@@ -25,7 +25,8 @@ export type ServerEvent =
 export type ClientAction =
   | "SELECT_SEAT" | "START_GAME" | "SUBMIT_BID" | "DECLARE_TRUMP"
   | "PASS_CARDS" | "ACKNOWLEDGE_MELD" | "PLAY_CARD" | "ACKNOWLEDGE_HAND_RESULT"
-  | "REMATCH_REQUEST" | "LEAVE_TO_LOBBY";
+  | "REMATCH_REQUEST" | "LEAVE_TO_LOBBY"
+  | "SWAP_SEAT_REQUEST" | "SWAP_SEAT_ACCEPT" | "KICK_PLAYER";
 
 /**
  * Stable, machine-readable error codes returned in `ERROR` event payloads.
@@ -43,7 +44,8 @@ export type ErrorCode =
   | "NOT_BIDDING_TEAM" | "ALREADY_PASSED" | "INVALID_PASS_CARDS" | "CARD_NOT_IN_HAND"
   | "ALREADY_ACKNOWLEDGED"
   | "INVALID_CARD" | "ILLEGAL_PLAY"
-  | "REMATCH_NOT_AVAILABLE" | "ALREADY_REQUESTED_REMATCH";
+  | "REMATCH_NOT_AVAILABLE" | "ALREADY_REQUESTED_REMATCH"
+  | "NO_PENDING_SWAP" | "SWAP_NOT_FOR_YOU" | "CANNOT_KICK_SELF";
 
 export interface WsErrorPayload {
   code: ErrorCode;

@@ -18,6 +18,7 @@ from app.engine.meld import SUIT_LETTER
 from app.engine.tricks import card_suit, get_legal_cards, trick_winner
 from app.websocket.handlers import (
     handle_message,
+    _build_lobby_payload,
     _build_seats_dict,
     _your_seat,
     SEAT_COLUMNS,
@@ -116,10 +117,10 @@ async def _run_websocket(
 
     # Send current game state on connect
     seats = await _build_seats_dict(game, db)
-    your_seat = _your_seat(game, user.id)
+    lobby_payload = await _build_lobby_payload(game, db, seats, user.id)
     await manager.send_personal(websocket, {
         "event": "LOBBY_STATE_UPDATED",
-        "payload": {"seats": seats, "your_seat": your_seat},
+        "payload": lobby_payload,
     })
 
     await _send_game_state_on_reconnect(websocket, game, user.id, db)
