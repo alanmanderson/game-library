@@ -60,6 +60,13 @@
   letter-spacing: 0.1em;
 }
 
+.practiceSubtitle {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  margin: var(--space-2) 0 0;
+  text-align: center;
+}
+
 /* Visually hidden but readable by screen readers */
 .srOnly {
   position: absolute;

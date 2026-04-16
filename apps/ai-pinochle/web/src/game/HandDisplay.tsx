@@ -49,6 +49,7 @@ interface Props {
   onCardClick?: (card: string) => void;
   legalCards?: string[];
   currentTrick?: CardPlayed[];
+  suggestedCards?: string[];
 }
 
 // Memoized: `cards` and `legalCards` keep reference identity across reducer
@@ -61,6 +62,7 @@ export const HandDisplay = memo(function HandDisplay({
   onCardClick,
   legalCards,
   currentTrick,
+  suggestedCards,
 }: Props) {
   const trumpLetter = trumpSuit ? SUIT_LETTER[trumpSuit] ?? null : null;
   // Memoize sortHand: `cards` is reference-stable across most renders, so we
@@ -132,11 +134,13 @@ export const HandDisplay = memo(function HandDisplay({
           const clickable = interactive && isLegal;
           const key = `${card}-${i}`;
 
+          const isSuggested = suggestedCards?.includes(card) ?? false;
           const classes = [
             styles.card,
             interactive
               ? isLegal ? styles.legal : styles.disabled
               : isTrump ? styles.trump : "",
+            isSuggested ? styles.suggested : "",
           ].filter(Boolean).join(" ");
 
           return (

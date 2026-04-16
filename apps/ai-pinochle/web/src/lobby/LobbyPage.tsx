@@ -72,7 +72,7 @@ export function LobbyPage() {
     try {
       const data = await postAuth<CreateResponse>(
         "/games/create-vs-ai",
-        {},
+        { hints_enabled: true },
         token!,
       );
       enterRoom(data.room_code);
@@ -227,8 +227,9 @@ export function LobbyPage() {
               disabled={aiLoading}
               block
             >
-              {aiLoading ? "Starting..." : "Play vs AI"}
+              {aiLoading ? "Starting..." : "Practice vs AI"}
             </Button>
+            <p className={styles.practiceSubtitle}>Play against bots with hints to help you learn</p>
             {aiError && (
               <p className="alert alert--error" role="alert">
                 {aiError}

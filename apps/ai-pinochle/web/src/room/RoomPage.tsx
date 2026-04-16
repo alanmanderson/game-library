@@ -51,6 +51,7 @@ export function RoomPage({ roomCode, onLeave }: Props) {
     from_player: string;
   } | null>(null);
   const [error, setError] = useState("");
+  const [hintsEnabled, setHintsEnabled] = useState(false);
   const [gameStarted, setGameStarted] = useState(false);
   const [copied, setCopied] = useState<"code" | "link" | null>(null);
 
@@ -67,6 +68,7 @@ export function RoomPage({ roomCode, onLeave }: Props) {
         setSeats(normalizeSeats(p.seats));
         if (p.your_seat) setMySeat(p.your_seat.toLowerCase());
         setIsHost(p.is_host ?? false);
+        setHintsEnabled(p.hints_enabled ?? false);
         setPendingSwap(p.pending_swap ?? null);
         setBotSeats((p.bot_seats ?? []).map((s) => s.toLowerCase()));
         setError("");
@@ -142,6 +144,8 @@ export function RoomPage({ roomCode, onLeave }: Props) {
             mySeat={mySeat.toUpperCase()}
             seatPlayers={seats}
             onLeave={onLeave}
+            hintsEnabled={hintsEnabled}
+            roomCode={roomCode}
           />
         </Suspense>
       </GameErrorBoundary>

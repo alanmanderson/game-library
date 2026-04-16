@@ -83,6 +83,7 @@ const LobbyStateUpdatedEvent = z.object({
     is_host: z.boolean().optional(),
     pending_swap: PendingSwapSchema.nullable().optional(),
     bot_seats: z.array(z.string()).optional(),
+    hints_enabled: z.boolean().optional(),
   }),
 });
 

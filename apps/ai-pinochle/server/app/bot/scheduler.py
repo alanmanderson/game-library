@@ -182,9 +182,12 @@ async def _execute_bot_turn(room_code: str, bot_seat: str) -> None:
                         )
                         return
 
-                    # Preserve bot_seats across state-rebuilding reducers.
+                    # Preserve bot_seats and hints_enabled across state-rebuilding reducers.
                     if bot_seats and "bot_seats" not in new_state:
                         new_state["bot_seats"] = bot_seats
+
+                    if state.get("hints_enabled") and "hints_enabled" not in new_state:
+                        new_state["hints_enabled"] = True
 
                     save_extra = _collect_save_extra(action, side_effects)
 

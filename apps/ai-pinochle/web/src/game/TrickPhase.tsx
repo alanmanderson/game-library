@@ -9,6 +9,11 @@ import styles from "./TrickPhase.module.css";
 
 type Position = "bottom" | "left" | "top" | "right";
 
+interface HintResult {
+  phase: string;
+  suggestion: Record<string, unknown>;
+}
+
 interface Props {
   trickNumber: number;
   currentTrick: CardPlayed[];
@@ -19,6 +24,10 @@ interface Props {
   mySeat: string;
   trumpSuit: string | null;
   gameScores: Record<string, number>;
+  hintsEnabled: boolean;
+  hint: HintResult | null;
+  hintLoading: boolean;
+  onRequestHint: () => void;
 }
 
 function getPositionForSeat(seat: string, mySeat: string): Position {
@@ -39,6 +48,10 @@ export function TrickPhase({
   mySeat,
   trumpSuit,
   gameScores,
+  hintsEnabled,
+  hint,
+  hintLoading,
+  onRequestHint,
 }: Props) {
   const trumpInfo = trumpSuit ? SUITS.find((s) => s.key === trumpSuit) : null;
   const positionCards: Record<Position, CardPlayed | null> = {
@@ -167,6 +180,13 @@ export function TrickPhase({
         </div>
       </div>
 
+      {hintsEnabled && isMyTurn && hint && (
+        <div className={styles.hintBanner}>
+          <span className={styles.hintLabel}>Hint:</span>
+          <span>{hint.suggestion.reason as string}</span>
+        </div>
+      )}
+
       <div className={styles.turnIndicator} role="status" aria-live="polite">
         {isMyTurn ? (
           <span className={styles.yourTurn}>Your turn &mdash; select a card</span>
@@ -175,6 +195,15 @@ export function TrickPhase({
             Waiting for {SEAT_LABELS[nextToActSeat]}...
           </span>
         ) : null}
+        {hintsEnabled && isMyTurn && !hint && (
+          <button
+            className={styles.hintButton}
+            onClick={onRequestHint}
+            disabled={hintLoading}
+          >
+            {hintLoading ? "Loading..." : "Show hint"}
+          </button>
+        )}
       </div>
     </div>
   );

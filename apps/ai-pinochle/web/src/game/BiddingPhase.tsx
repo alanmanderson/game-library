@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import type { BiddingState } from "@pinochle/shared";
 import { SEAT_LABELS, sendAction } from "@pinochle/shared";
+import { useHint } from "../hooks/useHint.ts";
 import { playSound } from "../audio/sounds";
 import styles from "./BiddingPhase.module.css";
 
@@ -8,6 +9,8 @@ interface Props {
   biddingState: BiddingState;
   mySeat: string;
   sendMessage: (msg: Record<string, unknown>) => void;
+  hintsEnabled: boolean;
+  roomCode: string;
 }
 
 function seatLabel(seat: string): string {
@@ -16,10 +19,20 @@ function seatLabel(seat: string): string {
 
 const MAX_BID = 1500;
 
-export function BiddingPhase({ biddingState, mySeat, sendMessage }: Props) {
+export function BiddingPhase({ biddingState, mySeat, sendMessage, hintsEnabled, roomCode }: Props) {
   const { current_highest_bid, highest_bidder_seat, next_to_act_seat, minimum_valid_bid } = biddingState;
   const isMyTurn = next_to_act_seat === mySeat;
   const [bidAmount, setBidAmount] = useState(minimum_valid_bid);
+
+  const { hint, fetchHint, clearHint } = useHint(roomCode, hintsEnabled);
+
+  // Auto-fetch hint when it becomes our turn
+  useEffect(() => {
+    if (isMyTurn && hintsEnabled) {
+      clearHint();
+      fetchHint();
+    }
+  }, [isMyTurn, hintsEnabled, fetchHint, clearHint]);
 
   // Only reset when the new minimum invalidates the user's typed bid. If they
   // already typed a value at or above the new minimum, preserve it (slow
@@ -83,6 +96,12 @@ export function BiddingPhase({ biddingState, mySeat, sendMessage }: Props) {
       {isMyTurn ? (
         <div className={styles.controls}>
           <p className={styles.turnLabel}>Your turn to bid</p>
+          {hint && (
+            <div className={styles.hintBanner}>
+              <span className={styles.hintLabel}>Hint:</span>
+              <span>{hint.suggestion.reason as string}</span>
+            </div>
+          )}
           <div className={styles.stepperRow} role="group" aria-label="Bid amount">
             <button
               type="button"

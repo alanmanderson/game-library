@@ -17,6 +17,7 @@ import { GameOverScreen } from "./GameOverScreen.tsx";
 import { MoonCelebration } from "./MoonCelebration.tsx";
 import { PlayerAvatar } from "./PlayerAvatar.tsx";
 import { OtherPlayerHand } from "./OtherPlayerHand.tsx";
+import { useHint } from "../hooks/useHint.ts";
 import { MuteToggle, RulesDrawer } from "../ui";
 import styles from "./GamePage.module.css";
 
@@ -29,6 +30,8 @@ interface Props {
   mySeat: string;
   seatPlayers: Record<string, string | null>;
   onLeave: () => void;
+  hintsEnabled: boolean;
+  roomCode: string;
 }
 
 export function GamePage({
@@ -38,6 +41,8 @@ export function GamePage({
   mySeat,
   seatPlayers,
   onLeave,
+  hintsEnabled,
+  roomCode,
 }: Props) {
   const {
     state: {
@@ -91,6 +96,24 @@ export function GamePage({
 
   const [showRules, setShowRules] = useState(false);
 
+  // Trick-play hint state lives here so we can pass suggestedCards to
+  // HandDisplay (which is rendered in bottomArea, outside TrickPhase).
+  const trickHint = useHint(roomCode, hintsEnabled);
+
+  // Clear the trick hint when the trick number advances (new trick).
+  const prevTrickRef = useRef(trickNumber);
+  useEffect(() => {
+    if (trickNumber !== prevTrickRef.current) {
+      trickHint.clearHint();
+      prevTrickRef.current = trickNumber;
+    }
+  }, [trickNumber, trickHint.clearHint]);
+
+  const trickSuggestedCards: string[] =
+    phase === "TRICK_PLAYING" && trickHint.hint?.suggestion?.card
+      ? [trickHint.hint.suggestion.card as string]
+      : [];
+
   // Warn before closing the tab while a game is active.
   useEffect(() => {
     const isActiveGame = phase !== "LOBBY_WAITING" && phase !== "GAME_OVER";
@@ -126,7 +149,7 @@ export function GamePage({
   }
 
   return (
-    <div className={styles.table}>
+    <div className={`${styles.table} ${hintsEnabled ? styles.practiceMode : ""}`}>
       {activeMoon && (
         <MoonCelebration
           outcome={activeMoon}
@@ -141,7 +164,7 @@ export function GamePage({
         </div>
       )}
       <div className={styles.statusBar}>
-        <span className={styles.phaseLabel}>{phaseLabel(phase)}</span>
+        <span className={styles.phaseLabel}>{hintsEnabled ? `Practice \u2014 ${phaseLabel(phase)}` : phaseLabel(phase)}</span>
         <span
           className={`${styles.connectionDot} ${connected ? styles.dotConnected : styles.dotDisconnected}`}
           aria-label={connected ? "Connected" : "Disconnected"}
@@ -175,6 +198,8 @@ export function GamePage({
             biddingState={biddingState}
             mySeat={mySeat}
             sendMessage={sendMessage}
+            hintsEnabled={hintsEnabled}
+            roomCode={roomCode}
           />
         )}
 
@@ -183,6 +208,8 @@ export function GamePage({
             biddingResult={biddingResult}
             isBidWinner={biddingResult.winning_seat === mySeat}
             sendMessage={sendMessage}
+            hintsEnabled={hintsEnabled}
+            roomCode={roomCode}
           />
         )}
 
@@ -194,6 +221,8 @@ export function GamePage({
             submittedSeats={passingState.submitted_seats}
             hasSubmitted={passingState.submitted_seats.includes(mySeat)}
             sendMessage={sendMessage}
+            hintsEnabled={hintsEnabled}
+            roomCode={roomCode}
           />
         )}
 
@@ -218,6 +247,10 @@ export function GamePage({
             mySeat={mySeat}
             trumpSuit={trumpSuit}
             gameScores={gameScores}
+            hintsEnabled={hintsEnabled}
+            hint={trickHint.hint}
+            hintLoading={trickHint.loading}
+            onRequestHint={trickHint.fetchHint}
           />
         )}
 
@@ -260,6 +293,7 @@ export function GamePage({
             onCardClick={isMyTurn ? playCard : undefined}
             legalCards={isMyTurn ? legalCards : undefined}
             currentTrick={currentTrick}
+            suggestedCards={isTrickPhase ? trickSuggestedCards : undefined}
           />
         )}
       </div>

@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { TEAM_FOR_SEAT, cardLabel, sendAction } from "@pinochle/shared";
+import { useHint } from "../hooks/useHint.ts";
 import { CardImage } from "./CardImage";
 import styles from "./PassCardsPhase.module.css";
 
@@ -10,6 +11,8 @@ interface Props {
   submittedSeats: string[];
   hasSubmitted: boolean;
   sendMessage: (msg: Record<string, unknown>) => void;
+  hintsEnabled: boolean;
+  roomCode: string;
 }
 
 export function PassCardsPhase({
@@ -19,10 +22,25 @@ export function PassCardsPhase({
   submittedSeats,
   hasSubmitted,
   sendMessage,
+  hintsEnabled,
+  roomCode,
 }: Props) {
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
 
   const isOnBiddingTeam = TEAM_FOR_SEAT[mySeat] === biddingTeam;
+  const needsToPass = isOnBiddingTeam && !hasSubmitted;
+
+  const { hint, fetchHint } = useHint(roomCode, hintsEnabled);
+
+  // Auto-fetch hint when the player needs to pass cards
+  useEffect(() => {
+    if (needsToPass && hintsEnabled) {
+      fetchHint();
+    }
+  }, [needsToPass, hintsEnabled, fetchHint]);
+
+  const suggestedCards: string[] =
+    hint?.suggestion?.cards ? (hint.suggestion.cards as string[]) : [];
 
   if (!isOnBiddingTeam) {
     const teamLabel = biddingTeam === "NS" ? "North/South" : "East/West";
@@ -67,12 +85,22 @@ export function PassCardsPhase({
       <h3 className={styles.title}>Pass 3 Cards to Partner</h3>
       <p className={styles.subtitle}>Select 3 cards to pass</p>
 
+      {hint && (
+        <div className={styles.hintBanner}>
+          <span className={styles.hintLabel}>Hint:</span>
+          <span>{hint.suggestion.reason as string}</span>
+        </div>
+      )}
+
       <div className={styles.cardGrid}>
         {hand.map((card, i) => {
           const isSelected = selectedIndices.has(i);
-          const classes = [styles.card, isSelected ? styles.selected : ""]
-            .filter(Boolean)
-            .join(" ");
+          const isSuggested = suggestedCards.includes(card);
+          const classes = [
+            styles.card,
+            isSelected ? styles.selected : "",
+            isSuggested ? styles.suggested : "",
+          ].filter(Boolean).join(" ");
           return (
             <CardImage
               key={`${card}-${i}`}

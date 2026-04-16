@@ -12,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_current_user
 from app.database import get_db
+from app.engine.meld import calculate_melds
+from app.engine.tricks import RANK_ORDER, card_suit, get_legal_cards
 from app.models.game import Game
 from app.models.user import User
 
@@ -67,12 +69,17 @@ async def create_game(
     raise RuntimeError("failed to generate unique room code")
 
 
+class CreateVsAiRequest(BaseModel):
+    hints_enabled: bool = True
+
+
 @router.post(
     "/create-vs-ai",
     response_model=CreateGameResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_vs_ai(
+    body: CreateVsAiRequest | None = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -81,6 +88,7 @@ async def create_vs_ai(
 
     await get_or_create_bots(db)
 
+    hints = body.hints_enabled if body else True
     bot_seats = ["NORTH", "EAST", "WEST"]
 
     for _ in range(10):
@@ -93,6 +101,7 @@ async def create_vs_ai(
                 "phase": "LOBBY_WAITING",
                 "created_by": str(user.id),
                 "bot_seats": bot_seats,
+                "hints_enabled": hints,
             },
             south_player_id=user.id,
             north_player_id=BOT_UUIDS["NORTH"],
@@ -443,3 +452,203 @@ async def get_game_replay(
         players=players,
         hands=replay_hands,
     )
+
+
+# ---------------------------------------------------------------------------
+# Hint endpoint — practice-mode suggestions
+# ---------------------------------------------------------------------------
+
+SUIT_NAMES = {"H": "HEARTS", "S": "SPADES", "D": "DIAMONDS", "C": "CLUBS"}
+SUIT_CHARS = {"HEARTS": "H", "SPADES": "S", "DIAMONDS": "D", "CLUBS": "C"}
+
+
+class HintResponse(BaseModel):
+    phase: str
+    suggestion: dict
+
+
+def _suggest_bid(hand: list[str], bidding_state: dict) -> dict:
+    """Evaluate hand strength and suggest a bid or pass with explanation."""
+    best_meld = 0
+    best_suit = "HEARTS"
+    for suit_char, suit_name in SUIT_NAMES.items():
+        melds = calculate_melds(hand, suit_name)
+        total = sum(m["points"] for m in melds)
+        if total > best_meld:
+            best_meld = total
+            best_suit = suit_name
+
+    high_cards = sum(1 for c in hand if c[:-1] in ("A", "10"))
+    strength = best_meld + high_cards
+    winning_bid = bidding_state.get("winning_bid")
+    # minimum_valid_bid isn't in persisted state — compute from winning_bid
+    minimum = (winning_bid + 1) if winning_bid is not None else 25
+
+    dealer_forced = (
+        winning_bid is None
+        and len(bidding_state.get("passed_seats", [])) == 3
+    )
+
+    if dealer_forced or (
+        strength >= 20 and (winning_bid is None or minimum <= strength + 5)
+    ):
+        reason = (
+            f"Your hand has {best_meld} meld points (best in {best_suit}) "
+            f"and {high_cards} high cards"
+        )
+        if dealer_forced:
+            reason += ". As dealer, you must bid"
+        return {"action": "bid", "amount": minimum, "reason": reason}
+
+    return {
+        "action": "pass",
+        "amount": None,
+        "reason": (
+            f"Your hand has only {best_meld} meld points and "
+            f"{high_cards} high cards — not strong enough to bid"
+        ),
+    }
+
+
+def _suggest_trump(hand: list[str]) -> dict:
+    """Pick the best trump suit with explanation."""
+    best_suit_char = "H"
+    best_score = -1
+    details: dict[str, dict] = {}
+
+    for suit_char, suit_name in SUIT_NAMES.items():
+        count = sum(1 for c in hand if card_suit(c) == suit_char)
+        melds = calculate_melds(hand, suit_name)
+        meld_total = sum(m["points"] for m in melds)
+        score = count * 2 + meld_total
+        details[suit_name] = {"count": count, "meld": meld_total}
+        if score > best_score:
+            best_score = score
+            best_suit_char = suit_char
+
+    best_name = SUIT_NAMES[best_suit_char]
+    info = details[best_name]
+    return {
+        "suit": best_name,
+        "reason": (
+            f"You have {info['count']} {best_name.capitalize()} "
+            f"with {info['meld']} meld points in that suit"
+        ),
+    }
+
+
+def _suggest_pass_cards(hand: list[str], trump_suit: str) -> dict:
+    """Suggest 3 weakest non-trump cards to pass."""
+    trump_char = SUIT_CHARS.get(trump_suit, trump_suit)
+    non_trump = [c for c in hand if card_suit(c) != trump_char]
+
+    if len(non_trump) >= 3:
+        non_trump.sort(key=lambda c: RANK_ORDER.get(c[:-1], 0))
+        cards = non_trump[:3]
+    else:
+        sorted_hand = sorted(hand, key=lambda c: RANK_ORDER.get(c[:-1], 0))
+        cards = sorted_hand[:3]
+
+    return {
+        "cards": cards,
+        "reason": "Pass your weakest non-trump cards to your partner",
+    }
+
+
+def _suggest_card(hand: list[str], state: dict, seat: str) -> dict:
+    """Pick a strategic card with explanation."""
+    trick_play = state.get("current_hand", {}).get("trick_play", {})
+    cards_played = trick_play.get("cards_played", [])
+    trump_suit = state.get("current_hand", {}).get("trump_suit", "HEARTS")
+    trump_char = SUIT_CHARS.get(trump_suit, trump_suit)
+
+    led_suit = None
+    if cards_played:
+        led_suit = card_suit(cards_played[0]["card"])
+
+    legal = get_legal_cards(hand, led_suit, trump_char, cards_played)
+    if not legal:
+        legal = list(hand)
+
+    if not legal:
+        return {"card": None, "reason": "No cards available to play"}
+
+    # Sort legal cards by rank (highest first)
+    sorted_legal = sorted(
+        legal, key=lambda c: RANK_ORDER.get(c[:-1], 0), reverse=True
+    )
+
+    if not cards_played:
+        # Leading: play highest card (prefer trump, then off-suit aces)
+        trump_cards = [c for c in sorted_legal if card_suit(c) == trump_char]
+        if trump_cards:
+            return {"card": trump_cards[0], "reason": "Lead with your strongest trump card"}
+        return {"card": sorted_legal[0], "reason": "Lead with your strongest card"}
+
+    # Following: try to win with the minimum winning card, else dump lowest
+    # Check which legal cards would win
+    from app.engine.tricks import _would_win
+    winners = [c for c in sorted_legal if _would_win(c, cards_played, trump_char)]
+
+    if winners:
+        # Play the lowest card that still wins (conserve strong cards)
+        best = sorted(winners, key=lambda c: RANK_ORDER.get(c[:-1], 0))[0]
+        if card_suit(best) == trump_char and led_suit != trump_char:
+            return {"card": best, "reason": "Trump in to win this trick"}
+        return {"card": best, "reason": "Play your lowest card that wins the trick"}
+
+    # Can't win — dump the lowest card to save strong cards
+    worst = sorted_legal[-1]
+    return {"card": worst, "reason": "You can't win this trick — play your lowest card"}
+
+
+@router.get("/{room_code}/hint", response_model=HintResponse)
+async def get_hint(
+    room_code: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return a context-aware hint for the human player's current situation."""
+    result = await db.execute(
+        select(Game).where(Game.room_code == room_code, Game.status == "IN_PROGRESS")
+    )
+    game = result.scalar_one_or_none()
+    if game is None:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    state = game.current_state_json or {}
+
+    if not state.get("hints_enabled"):
+        raise HTTPException(status_code=403, detail="Hints are not enabled for this game")
+
+    # Resolve the human's seat (state uses uppercase keys like "SOUTH")
+    seat = None
+    for s in SEAT_COLUMNS:
+        col = f"{s}_player_id"
+        if getattr(game, col) == user.id:
+            seat = s.upper()
+            break
+
+    if seat is None:
+        raise HTTPException(status_code=403, detail="You are not seated in this game")
+
+    phase = state.get("phase", "LOBBY_WAITING")
+    hand = state.get("player_hands", {}).get(seat, [])
+    current_hand = state.get("current_hand", {})
+
+    if phase == "BIDDING":
+        bidding = current_hand.get("bidding", {})
+        suggestion = _suggest_bid(hand, bidding)
+    elif phase == "NAMING_TRUMP":
+        suggestion = _suggest_trump(hand)
+    elif phase == "PASSING_CARDS":
+        trump = current_hand.get("trump_suit", "HEARTS")
+        suggestion = _suggest_pass_cards(hand, trump)
+    elif phase == "TRICK_PLAYING":
+        suggestion = _suggest_card(hand, state, seat)
+    elif phase in ("SHOWING_MELD", "HAND_COMPLETE"):
+        suggestion = {"action": "acknowledge", "reason": "Click to continue"}
+    else:
+        suggestion = {"action": "none", "reason": f"No hint available for phase {phase}"}
+
+    return HintResponse(phase=phase, suggestion=suggestion)

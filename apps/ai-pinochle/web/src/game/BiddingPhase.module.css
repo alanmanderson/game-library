@@ -132,6 +132,25 @@
   color: #888;
 }
 
+.hintBanner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  border: 1px solid var(--color-accent-soft);
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  color: var(--color-text);
+  margin-bottom: var(--space-3);
+}
+
+.hintLabel {
+  font-weight: 600;
+  color: var(--color-accent);
+  white-space: nowrap;
+}
+
 /* Visually hidden but readable by screen readers */
 .bidLabel {
   position: absolute;

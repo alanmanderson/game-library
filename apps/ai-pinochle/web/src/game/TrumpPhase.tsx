@@ -1,17 +1,29 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { BiddingResult } from "@pinochle/shared";
 import { SUITS, SEAT_LABELS, sendAction } from "@pinochle/shared";
+import { useHint } from "../hooks/useHint.ts";
 import styles from "./TrumpPhase.module.css";
 
 interface Props {
   biddingResult: BiddingResult;
   isBidWinner: boolean;
   sendMessage: (msg: Record<string, unknown>) => void;
+  hintsEnabled: boolean;
+  roomCode: string;
 }
 
-export function TrumpPhase({ biddingResult, isBidWinner, sendMessage }: Props) {
+export function TrumpPhase({ biddingResult, isBidWinner, sendMessage, hintsEnabled, roomCode }: Props) {
   const [shootTheMoon, setShootTheMoon] = useState(false);
   const [pendingSuit, setPendingSuit] = useState<string | null>(null);
+
+  const { hint, fetchHint } = useHint(roomCode, hintsEnabled);
+
+  // Auto-fetch hint when the bid winner needs to choose trump
+  useEffect(() => {
+    if (isBidWinner && hintsEnabled) {
+      fetchHint();
+    }
+  }, [isBidWinner, hintsEnabled, fetchHint]);
 
   function submit(suit: string, moon: boolean) {
     sendAction(sendMessage, {
@@ -54,6 +66,13 @@ export function TrumpPhase({ biddingResult, isBidWinner, sendMessage }: Props) {
       <p className={styles.subtitle}>
         You won the bid with <strong>{biddingResult.winning_bid}</strong>
       </p>
+
+      {hint && (
+        <div className={styles.hintBanner}>
+          <span className={styles.hintLabel}>Hint:</span>
+          <span>{hint.suggestion.reason as string}</span>
+        </div>
+      )}
 
       <div className={styles.suits}>
         {SUITS.map((s) => (

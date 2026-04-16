@@ -189,10 +189,14 @@ async def _apply(
 
     save_extra = _collect_save_extra(action, side_effects)
 
-    # Preserve bot_seats across state-rebuilding actions (START_GAME, REMATCH).
+    # Preserve bot_seats and hints_enabled across state-rebuilding actions
+    # (START_GAME, REMATCH, ACKNOWLEDGE_HAND_RESULT).
     old_bot_seats = state.get("bot_seats", [])
     if old_bot_seats and "bot_seats" not in new_state:
         new_state["bot_seats"] = old_bot_seats
+
+    if state.get("hints_enabled") and "hints_enabled" not in new_state:
+        new_state["hints_enabled"] = True
 
     if not await _save_or_conflict(
         websocket, db, game, new_state, extra=save_extra or None
@@ -664,6 +668,7 @@ async def _build_lobby_payload(
         "is_host": is_host,
         "pending_swap": pending_swap_payload,
         "bot_seats": [s.lower() for s in state.get("bot_seats", [])],
+        "hints_enabled": state.get("hints_enabled", False),
     }
 
 
