@@ -415,6 +415,40 @@ function GameReplay() {
     return null;
   }, [analysis]);
 
+  /** Per-player summary: quality distribution + error rate. */
+  const playerSummaries = useMemo(() => {
+    if (!analysis) return null;
+    const colors = ["white", "black"] as const;
+    const summaries: Record<
+      string,
+      {
+        nickname: string;
+        totalMoves: number;
+        totalEquityLoss: number;
+        qualityCounts: Record<string, number>;
+      }
+    > = {};
+    for (const c of colors) {
+      summaries[c] = {
+        nickname: c === "white"
+          ? (replayData?.white_player_nickname ?? "White")
+          : (replayData?.black_player_nickname ?? "Black"),
+        totalMoves: 0,
+        totalEquityLoss: 0,
+        qualityCounts: {},
+      };
+    }
+    for (const m of analysis.move_analyses) {
+      const s = summaries[m.player_color];
+      if (!s) continue;
+      s.totalMoves++;
+      s.totalEquityLoss += m.equity_loss;
+      const label = QUALITY_LABEL[m.quality] ?? m.quality;
+      s.qualityCounts[label] = (s.qualityCounts[label] ?? 0) + 1;
+    }
+    return summaries;
+  }, [analysis, replayData]);
+
   // Orient the board to the logged-in player's perspective when they were
   // one of the two seats. Fall back to white for spectators/unauthed viewers.
   const storedPlayerId = useMemo(() => readStoredPlayerId(), []);
@@ -757,6 +791,75 @@ function GameReplay() {
               {analysisSource !== "gnubg" && !analysis.ml_available && (
                 <div className="replay-analysis-banner">
                   ML model unavailable — showing pip-count fallback analysis.
+                </div>
+              )}
+
+              {playerSummaries && (
+                <div className="replay-analysis-section">
+                  <h3 className="replay-analysis-heading">Game summary</h3>
+                  <div className="replay-summary-grid">
+                    {(["white", "black"] as const).map((c) => {
+                      const s = playerSummaries[c];
+                      if (!s || s.totalMoves === 0) return null;
+                      const avgLoss = s.totalEquityLoss / s.totalMoves;
+                      const qualityOrder = [
+                        "Best",
+                        "Very good",
+                        "Good",
+                        "Inaccuracy",
+                        "Doubtful",
+                        "Mistake",
+                        "Bad",
+                        "Blunder",
+                        "Very bad",
+                      ];
+                      return (
+                        <div key={c} className="replay-summary-player">
+                          <span
+                            className={`replay-player-badge replay-player-${c}`}
+                          >
+                            {s.nickname}
+                          </span>
+                          <div className="replay-summary-stat">
+                            <span className="replay-summary-label">
+                              Avg error
+                            </span>
+                            <span className="replay-summary-value">
+                              {avgLoss.toFixed(3)}
+                            </span>
+                          </div>
+                          <div className="replay-summary-stat">
+                            <span className="replay-summary-label">
+                              Total loss
+                            </span>
+                            <span className="replay-summary-value">
+                              {s.totalEquityLoss.toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="replay-summary-qualities">
+                            {qualityOrder.map((label) => {
+                              const count = s.qualityCounts[label];
+                              if (!count) return null;
+                              const cssKey = Object.entries(QUALITY_LABEL).find(
+                                ([, v]) => v === label,
+                              )?.[0] as MoveQuality | undefined;
+                              const css = cssKey
+                                ? QUALITY_CSS_CLASS[cssKey]
+                                : "good";
+                              return (
+                                <span
+                                  key={label}
+                                  className={`replay-summary-quality replay-quality--${css}`}
+                                >
+                                  {count} {label}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 

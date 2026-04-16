@@ -362,6 +362,56 @@
   font-size: 0.85rem;
 }
 
+/* Game summary */
+.replay-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.replay-summary-player {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.6rem 0.75rem;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+}
+
+.replay-summary-stat {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+}
+
+.replay-summary-label {
+  color: var(--text-secondary, #9a9ab0);
+}
+
+.replay-summary-value {
+  font-weight: 600;
+  font-family: monospace;
+  color: var(--text-primary, #e8e8e8);
+}
+
+.replay-summary-qualities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.5rem;
+  margin-top: 0.15rem;
+}
+
+.replay-summary-quality {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+@media (max-width: 480px) {
+  .replay-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .replay-analysis-section {
   display: flex;
   flex-direction: column;
