@@ -111,11 +111,28 @@ jobs:
           name: web-dist
           path: web/dist
 
+      - name: Diagnose variable/secret scope
+        env:
+          VARS_JSON: ${{ toJSON(vars) }}
+        run: |
+          echo "---- vars context keys ----"
+          echo "$VARS_JSON" | jq 'keys'
+          echo "---- vars.AZURE_VM_HOST length ----"
+          echo -n "${{ vars.AZURE_VM_HOST }}" | wc -c
+          echo "---- secrets.AZURE_VM_HOST set? (non-empty => set as a secret) ----"
+          if [ -n "${{ secrets.AZURE_VM_HOST }}" ]; then echo "YES (it was stored as a secret, not a variable)"; else echo "no"; fi
+
       - name: Configure SSH
         env:
           SSH_PRIVATE_KEY: ${{ secrets.AZURE_VM_SSH_KEY }}
-          HOST: ${{ vars.AZURE_VM_HOST }}
+          # Accept either a variable (preferred) or a secret (in case it was
+          # stored on the wrong page by mistake). Secrets get masked in logs.
+          HOST: ${{ vars.AZURE_VM_HOST || secrets.AZURE_VM_HOST }}
         run: |
+          if [ -z "$HOST" ]; then
+            echo "::error::AZURE_VM_HOST is empty. Set it in Settings → Secrets and variables → Actions → Variables tab."
+            exit 1
+          fi
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
