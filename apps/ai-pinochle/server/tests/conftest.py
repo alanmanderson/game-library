@@ -147,11 +147,14 @@ _ANALYTICS_DROP = ["DROP TABLE IF EXISTS tricks", "DROP TABLE IF EXISTS bids", "
 @pytest.fixture(autouse=True)
 async def _setup_db():
     from app.api.auth import _login_attempts
+    from app.bot import scheduler as bot_scheduler
     from app.websocket import background as bg
     from app.websocket.connection_manager import manager
 
-    # Point the background task's session factory at the test engine.
-    bg.set_session_factory(async_sessionmaker(engine, expire_on_commit=False))
+    # Point the background task's and bot scheduler's session factory at the test engine.
+    test_session = async_sessionmaker(engine, expire_on_commit=False)
+    bg.set_session_factory(test_session)
+    bot_scheduler.set_session_factory(test_session)
 
     def _create_analytics(sync_conn):
         for ddl in _ANALYTICS_DDL:

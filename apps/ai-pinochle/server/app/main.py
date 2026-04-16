@@ -9,7 +9,9 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.auth import router as auth_router
 from app.api.games import router as games_router
+from app.bot.scheduler import set_session_factory as set_bot_session_factory
 from app.config import settings
+from app.database import AsyncSessionLocal
 from app.websocket.background import maintenance_loop
 from app.websocket.broker import RedisBroker
 from app.websocket.connection_manager import manager
@@ -20,6 +22,9 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Wire up session factory for bot scheduler (before anything runs).
+    set_bot_session_factory(AsyncSessionLocal)
+
     broker: RedisBroker | None = None
     if settings.redis_url:
         broker = RedisBroker(settings.redis_url, manager.deliver_remote)

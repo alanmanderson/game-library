@@ -125,6 +125,27 @@ async def _run_websocket(
 
     await _send_game_state_on_reconnect(websocket, game, user.id, db)
 
+    # Auto-start AI games when the human connects and all seats are filled.
+    state = game.current_state_json or {}
+    bot_seats = state.get("bot_seats", [])
+    if (
+        state.get("phase") == "LOBBY_WAITING"
+        and bot_seats
+        and all(
+            getattr(game, f"{s.lower()}_player_id") is not None
+            for s in ["NORTH", "EAST", "SOUTH", "WEST"]
+        )
+    ):
+        async with manager.get_room_lock(room_code):
+            await handle_message(
+                websocket,
+                {"action": "START_GAME", "payload": {}},
+                room_code,
+                user.id,
+                db,
+            )
+            await db.commit()
+
     revalidate_interval = max(1, settings.ws_jwt_revalidate_seconds)
 
     try:

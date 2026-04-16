@@ -109,6 +109,18 @@
   background: color-mix(in srgb, var(--color-accent) 25%, transparent);
 }
 
+.seatBot {
+  border-color: var(--color-text-muted);
+  background: color-mix(in srgb, var(--color-text-muted) 12%, transparent);
+  opacity: 0.85;
+}
+
+.botBadge {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: color-mix(in srgb, #fff 60%, transparent);
+}
+
 .seatLabel {
   margin: 0;
   font-size: 0.75rem;

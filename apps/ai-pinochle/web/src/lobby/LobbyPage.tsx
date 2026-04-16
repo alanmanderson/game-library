@@ -36,6 +36,9 @@ export function LobbyPage() {
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState("");
 
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState("");
+
   const [joinCode, setJoinCode] = useState("");
   const [joinLoading, setJoinLoading] = useState(false);
   const [joinError, setJoinError] = useState("");
@@ -59,6 +62,25 @@ export function LobbyPage() {
       );
     } finally {
       setCreateLoading(false);
+    }
+  }
+
+  async function handlePlayVsAI() {
+    setAiLoading(true);
+    setAiError("");
+    try {
+      const data = await postAuth<CreateResponse>(
+        "/games/create-vs-ai",
+        {},
+        token!,
+      );
+      enterRoom(data.room_code);
+    } catch (err) {
+      setAiError(
+        err instanceof ApiError ? err.detail : "Failed to start AI game",
+      );
+    } finally {
+      setAiLoading(false);
     }
   }
 
@@ -192,6 +214,22 @@ export function LobbyPage() {
             {createError && (
               <p className="alert alert--error" role="alert">
                 {createError}
+              </p>
+            )}
+          </section>
+
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>Practice</h2>
+            <Button
+              onClick={handlePlayVsAI}
+              disabled={aiLoading}
+              block
+            >
+              {aiLoading ? "Starting..." : "Play vs AI"}
+            </Button>
+            {aiError && (
+              <p className="alert alert--error" role="alert">
+                {aiError}
               </p>
             )}
           </section>

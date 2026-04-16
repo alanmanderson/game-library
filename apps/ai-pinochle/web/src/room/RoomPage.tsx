@@ -44,6 +44,7 @@ export function RoomPage({ roomCode, onLeave }: Props) {
   });
   const [mySeat, setMySeat] = useState<string | null>(null);
   const [isHost, setIsHost] = useState(false);
+  const [botSeats, setBotSeats] = useState<string[]>([]);
   const [pendingSwap, setPendingSwap] = useState<{
     from_seat: string;
     to_seat: string;
@@ -67,6 +68,7 @@ export function RoomPage({ roomCode, onLeave }: Props) {
         if (p.your_seat) setMySeat(p.your_seat.toLowerCase());
         setIsHost(p.is_host ?? false);
         setPendingSwap(p.pending_swap ?? null);
+        setBotSeats((p.bot_seats ?? []).map((s) => s.toLowerCase()));
         setError("");
         return;
       }
@@ -121,6 +123,10 @@ export function RoomPage({ roomCode, onLeave }: Props) {
       action: "KICK_PLAYER",
       payload: { seat: targetSeat.toUpperCase() },
     });
+  }
+
+  function handleFillAI() {
+    sendAction(sendMessage, { action: "FILL_AI", payload: {} });
   }
 
   const allSeated = SEATS.every((s) => seats[s]);
@@ -192,18 +198,26 @@ export function RoomPage({ roomCode, onLeave }: Props) {
         {positions.map(({ seat, position }) => {
           const occupant = seats[seat];
           const isSelf = seat === mySeat;
+          const isBot = botSeats.includes(seat);
           const posClass = styles[`seat_${position}`];
 
           return (
             <div
               key={seat}
-              className={`${styles.seat} ${posClass} ${isSelf ? styles.seatSelf : occupant ? styles.seatOccupied : ""}`}
+              className={`${styles.seat} ${posClass} ${
+                isSelf ? styles.seatSelf :
+                isBot ? styles.seatBot :
+                occupant ? styles.seatOccupied : ""
+              }`}
             >
               <p className={styles.seatLabel}>{SEAT_LABELS_LOWER[seat]}</p>
               {occupant ? (
                 <>
-                  <p className={styles.seatPlayer}>{occupant}</p>
-                  {!isSelf && (
+                  <p className={styles.seatPlayer}>
+                    {occupant}
+                    {isBot && <span className={styles.botBadge}> (Bot)</span>}
+                  </p>
+                  {!isSelf && !isBot && (
                     <div className={styles.seatActions}>
                       {mySeat !== null && (
                         <Button
@@ -257,6 +271,12 @@ export function RoomPage({ roomCode, onLeave }: Props) {
             </p>
           )}
         </div>
+      )}
+
+      {isHost && mySeat && !allSeated && botSeats.length === 0 && (
+        <Button variant="secondary" onClick={handleFillAI} style={{ marginBottom: "1rem" }}>
+          Fill with bots
+        </Button>
       )}
 
       {allSeated && (

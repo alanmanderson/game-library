@@ -67,6 +67,48 @@ async def create_game(
     raise RuntimeError("failed to generate unique room code")
 
 
+@router.post(
+    "/create-vs-ai",
+    response_model=CreateGameResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_vs_ai(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a new game with the human at SOUTH and 3 bots filling the rest."""
+    from app.bot.users import BOT_UUIDS, get_or_create_bots
+
+    await get_or_create_bots(db)
+
+    bot_seats = ["NORTH", "EAST", "WEST"]
+
+    for _ in range(10):
+        code = _generate_room_code()
+        game = Game(
+            room_code=code,
+            status="IN_PROGRESS",
+            current_state_json={
+                "room_code": code,
+                "phase": "LOBBY_WAITING",
+                "created_by": str(user.id),
+                "bot_seats": bot_seats,
+            },
+            south_player_id=user.id,
+            north_player_id=BOT_UUIDS["NORTH"],
+            east_player_id=BOT_UUIDS["EAST"],
+            west_player_id=BOT_UUIDS["WEST"],
+        )
+        db.add(game)
+        try:
+            await db.flush()
+            return CreateGameResponse(room_code=code)
+        except IntegrityError:
+            await db.rollback()
+
+    raise RuntimeError("failed to generate unique room code")
+
+
 SEAT_COLUMNS = ["north", "east", "south", "west"]
 
 

@@ -26,7 +26,7 @@ export type ClientAction =
   | "SELECT_SEAT" | "START_GAME" | "SUBMIT_BID" | "DECLARE_TRUMP"
   | "PASS_CARDS" | "ACKNOWLEDGE_MELD" | "PLAY_CARD" | "ACKNOWLEDGE_HAND_RESULT"
   | "REMATCH_REQUEST" | "LEAVE_TO_LOBBY"
-  | "SWAP_SEAT_REQUEST" | "SWAP_SEAT_ACCEPT" | "KICK_PLAYER";
+  | "SWAP_SEAT_REQUEST" | "SWAP_SEAT_ACCEPT" | "KICK_PLAYER" | "FILL_AI";
 
 /**
  * Stable, machine-readable error codes returned in `ERROR` event payloads.

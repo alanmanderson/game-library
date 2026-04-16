@@ -82,6 +82,7 @@ const LobbyStateUpdatedEvent = z.object({
     your_seat: z.string().nullable(),
     is_host: z.boolean().optional(),
     pending_swap: PendingSwapSchema.nullable().optional(),
+    bot_seats: z.array(z.string()).optional(),
   }),
 });
 
@@ -446,6 +447,11 @@ const KickPlayerAction = z.object({
   payload: z.object({ seat: z.string() }),
 });
 
+const FillAiAction = z.object({
+  action: z.literal("FILL_AI"),
+  payload: z.object({}).loose(),
+});
+
 export const WsActionSchema = z.discriminatedUnion("action", [
   SelectSeatAction,
   StartGameAction,
@@ -460,6 +466,7 @@ export const WsActionSchema = z.discriminatedUnion("action", [
   SwapSeatRequestAction,
   SwapSeatAcceptAction,
   KickPlayerAction,
+  FillAiAction,
 ]);
 
 export type WsAction = z.infer<typeof WsActionSchema>;

@@ -140,6 +140,9 @@ async def handle_message(
     if action == "KICK_PLAYER":
         await handle_kick_player(websocket, payload, room_code, user_id, db)
         return
+    if action == "FILL_AI":
+        await handle_fill_ai(websocket, payload, room_code, user_id, db)
+        return
 
     if not supports(action):
         await _send_error(
@@ -186,6 +189,11 @@ async def _apply(
 
     save_extra = _collect_save_extra(action, side_effects)
 
+    # Preserve bot_seats across state-rebuilding actions (START_GAME, REMATCH).
+    old_bot_seats = state.get("bot_seats", [])
+    if old_bot_seats and "bot_seats" not in new_state:
+        new_state["bot_seats"] = old_bot_seats
+
     if not await _save_or_conflict(
         websocket, db, game, new_state, extra=save_extra or None
     ):
@@ -200,6 +208,10 @@ async def _apply(
         manager.disconnect_times.pop(room_code, None)
     elif action == "REMATCH_REQUEST" and new_state.get("phase") == "BIDDING":
         manager.disconnect_times.pop(room_code, None)
+
+    # If the next actor is a bot, schedule their turn.
+    from app.bot.scheduler import maybe_schedule_bot_turn
+    maybe_schedule_bot_turn(game, new_state, room_code)
 
 
 def _build_metadata(game: Game, action: str, user_id: uuid.UUID) -> dict:
@@ -516,6 +528,70 @@ async def handle_kick_player(
 
 
 # ---------------------------------------------------------------------------
+# FILL_AI (fill empty seats with bots)
+# ---------------------------------------------------------------------------
+
+
+async def handle_fill_ai(
+    websocket: WebSocket,
+    payload: dict,
+    room_code: str,
+    user_id: uuid.UUID,
+    db: AsyncSession,
+) -> None:
+    """Fill all empty seats with bots. Only the host (creator) can do this."""
+    game = await _load_game(db, room_code)
+    if game is None:
+        await _send_error(websocket, ErrorCode.GAME_NOT_FOUND, "Game not found")
+        return
+
+    state = game.current_state_json or {}
+    if state.get("phase") != "LOBBY_WAITING":
+        await _send_error(websocket, ErrorCode.WRONG_PHASE, "Can only fill AI in lobby")
+        return
+
+    if str(user_id) != state.get("created_by"):
+        await _send_error(
+            websocket, ErrorCode.NOT_GAME_CREATOR, "Only the creator can add bots"
+        )
+        return
+
+    caller_seat = _seat_for_user(game, user_id)
+    if caller_seat is None:
+        await _send_error(websocket, ErrorCode.NOT_SEATED, "You must be seated first")
+        return
+
+    from app.bot.users import BOT_UUIDS, get_or_create_bots
+    await get_or_create_bots(db)
+
+    bot_seats = []
+    extra_columns: dict = {}
+    for seat, col in SEAT_COLUMNS.items():
+        if getattr(game, col) is None:
+            bot_id = BOT_UUIDS[seat]
+            extra_columns[col] = bot_id
+            bot_seats.append(seat)
+
+    if not bot_seats:
+        # All seats already filled
+        seats = await _build_seats_dict(game, db)
+        await _send_lobby_state(game, room_code, seats, db)
+        return
+
+    new_state = copy.deepcopy(state)
+    new_state["bot_seats"] = bot_seats
+
+    if not await _save_or_conflict(
+        websocket, db, game, new_state, extra=extra_columns
+    ):
+        return
+
+    await db.refresh(game)
+    seats = await _build_seats_dict(game, db)
+    await _send_lobby_state(game, room_code, seats, db)
+
+
+# ---------------------------------------------------------------------------
 # Shared helpers (also imported by routes.py / background.py)
 # ---------------------------------------------------------------------------
 
@@ -587,6 +663,7 @@ async def _build_lobby_payload(
         "your_seat": your_seat,
         "is_host": is_host,
         "pending_swap": pending_swap_payload,
+        "bot_seats": [s.lower() for s in state.get("bot_seats", [])],
     }
 
 
