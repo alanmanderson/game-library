@@ -20,6 +20,14 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Idempotent: a prior deploy partially applied this migration (table
+    # + index got created, but alembic_version never advanced because a
+    # duplicate op.create_index blew up). If the table is already there,
+    # skip and let alembic bump the version.
+    bind = op.get_bind()
+    if sa.inspect(bind).has_table("cube_action_records"):
+        return
+
     op.create_table(
         "cube_action_records",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
@@ -48,15 +56,7 @@ def upgrade() -> None:
             server_default=sa.func.now(),
         ),
     )
-    op.create_index(
-        "ix_cube_action_records_player_id",
-        "cube_action_records",
-        ["player_id"],
-    )
 
 
 def downgrade() -> None:
-    op.drop_index(
-        "ix_cube_action_records_player_id", table_name="cube_action_records"
-    )
     op.drop_table("cube_action_records")
