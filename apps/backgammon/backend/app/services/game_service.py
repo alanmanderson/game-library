@@ -719,6 +719,10 @@ class GameManager:
         await _record_cube_action(
             db, table_id, player_id, "offer", engine, color, cube_value_before
         )
+        await self._record_cube_move(
+            db, table_id, player_id,
+            f"Doubles => {cube_value_before * 2}", engine,
+        )
         return True
 
     async def accept_double(self, db: AsyncSession, table_id: str, player_id: str) -> bool:
@@ -741,6 +745,7 @@ class GameManager:
         await _record_cube_action(
             db, table_id, player_id, "accept", engine, color, cube_value_before
         )
+        await self._record_cube_move(db, table_id, player_id, "Takes", engine)
         return True
 
     async def decline_double(self, db: AsyncSession, table_id: str, player_id: str) -> dict:
@@ -766,6 +771,7 @@ class GameManager:
         if table:
             table.game_state = engine.get_state_snapshot()
         await _increment_cube_counter(db, player_id, "cube_declines")
+        await self._record_cube_move(db, table_id, player_id, "Drops", engine)
         # Persist the CubeActionRecord using the pre-decline equity we
         # captured above. We inline the write here (rather than calling
         # _record_cube_action) so the post-finish engine state doesn't
@@ -843,6 +849,32 @@ class GameManager:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    async def _record_cube_move(
+        self,
+        db: AsyncSession,
+        table_id: str,
+        player_id: str,
+        notation: str,
+        engine: BackgammonEngine,
+    ) -> None:
+        """Record a cube action as a MoveRecord for replay/export visibility."""
+        result = await db.execute(
+            select(func.count(MoveRecord.id)).where(
+                MoveRecord.table_id == table_id
+            )
+        )
+        existing_count = result.scalar()
+        db.add(
+            MoveRecord(
+                table_id=table_id,
+                player_id=player_id,
+                move_number=existing_count + 1,
+                dice_roll="",
+                moves_notation=notation,
+                game_state_after=engine.get_state_snapshot(),
+            )
+        )
 
     async def _record_moves(
         self, db: AsyncSession, table_id: str, player_id: str, engine: BackgammonEngine

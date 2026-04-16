@@ -103,7 +103,8 @@ function GameInfo({ table, gameStatus, isOpen: externalIsOpen, onToggle }: GameI
             <>
               {moveHistory.map((record) => (
                 <div key={record.move_number} className="move-history-entry">
-                  <strong>#{record.move_number}</strong> [{record.dice_roll}]{" "}
+                  <strong>#{record.move_number}</strong>{" "}
+                  {record.dice_roll ? `[${record.dice_roll}] ` : ""}
                   {record.moves_notation}
                 </div>
               ))}

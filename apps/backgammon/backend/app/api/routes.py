@@ -957,13 +957,19 @@ async def export_game(
 
         white_part = ""
         if white_rec:
-            dice = white_rec.dice_roll.replace("-", "")
-            white_part = f"{dice}: {white_rec.moves_notation}"
+            if white_rec.dice_roll:
+                dice = white_rec.dice_roll.replace("-", "")
+                white_part = f"{dice}: {white_rec.moves_notation}"
+            else:
+                white_part = white_rec.moves_notation
 
         black_part = ""
         if black_rec:
-            dice = black_rec.dice_roll.replace("-", "")
-            black_part = f"{dice}: {black_rec.moves_notation}"
+            if black_rec.dice_roll:
+                dice = black_rec.dice_roll.replace("-", "")
+                black_part = f"{dice}: {black_rec.moves_notation}"
+            else:
+                black_part = black_rec.moves_notation
 
         # Left column is fixed-width so left/right turns are aligned.
         line = f" {turn_num}) {white_part:<34} {black_part}"
