@@ -1,5 +1,6 @@
 import { useMemo, useCallback, useState, useEffect, useRef } from "react";
 import type { GameState, Color, Move, HintMove } from "../types/game";
+import type { ParsedMove } from "../utils/notation";
 import { resolveBoardTheme, resolveCheckerStyle } from "../constants/themes";
 import "./styles/Board.css";
 
@@ -21,10 +22,10 @@ interface BoardProps {
   cubeOwner: Color | null;
   animatingMove?: AnimatingMove | null;
   hintMoves?: HintMove[];
-  /** Points where checkers landed on the most recent move (replay: yellow outline). */
-  movedPoints?: Set<number>;
-  /** Points that the engine's recommended move would have touched (replay: red outline). */
-  bestMovePoints?: Set<number>;
+  /** Arrows showing the actual move (yellow). One entry per die use. */
+  moveArrows?: ParsedMove[];
+  /** Arrows showing the engine's recommended move (red). One entry per die use. */
+  bestMoveArrows?: ParsedMove[];
   /** Board theme ID (e.g. "classic", "dark-marble"). Defaults to "classic". */
   boardTheme?: string;
   /** Checker style ID (e.g. "classic", "marble"). Defaults to "classic". */
@@ -54,8 +55,6 @@ const HIGHLIGHT_SOURCE = "rgba(212, 168, 67, 0.35)";
 const HIGHLIGHT_SELECTED = "rgba(255, 215, 0, 0.6)";
 const HIGHLIGHT_DEST = "rgba(46, 204, 113, 0.5)";
 const HIGHLIGHT_HINT = "rgba(52, 152, 219, 0.5)";
-const HIGHLIGHT_MOVED = "rgba(255, 215, 0, 0.55)";
-const HIGHLIGHT_BEST_MOVE = "rgba(231, 76, 60, 0.5)";
 const WHITE_CHECKER_FILL = "#f0e6d3";
 const WHITE_CHECKER_STROKE = "#b8a88a";
 const BLACK_CHECKER_FILL = "#2b2b2b";
@@ -76,8 +75,8 @@ function Board({
   cubeOwner,
   animatingMove,
   hintMoves = [],
-  movedPoints,
-  bestMovePoints,
+  moveArrows,
+  bestMoveArrows,
   boardTheme,
   checkerStyle,
 }: BoardProps) {
@@ -599,16 +598,10 @@ function Board({
 
     let fillColor: string | null = null;
     const isHintPoint = hintFromPoints.has(point) || hintToPoints.has(point);
-    const isMovedPoint = movedPoints?.has(point) ?? false;
-    const isBestMovePoint = bestMovePoints?.has(point) ?? false;
     if (selectedPoint === point) {
       fillColor = HIGHLIGHT_SELECTED;
     } else if (validDestinations.has(point)) {
       fillColor = HIGHLIGHT_DEST;
-    } else if (isMovedPoint) {
-      fillColor = HIGHLIGHT_MOVED;
-    } else if (isBestMovePoint) {
-      fillColor = HIGHLIGHT_BEST_MOVE;
     } else if (isHintPoint) {
       fillColor = HIGHLIGHT_HINT;
     } else if (selectedPoint === null && validSourcePoints.has(point)) {
@@ -702,6 +695,53 @@ function Board({
         <ellipse cx={cx - 5} cy={cy - 6} rx={10} ry={7} fill="url(#glass-shine)" />
       </g>
     );
+  }
+
+  function arrowCoord(point: number | "bar" | "off"): { cx: number; cy: number } {
+    if (point === "bar") {
+      return { cx: layout.barX + BAR_WIDTH / 2, cy: BOARD_HEIGHT / 2 };
+    }
+    if (point === "off") {
+      const isBottom = myColor === "white";
+      return {
+        cx: layout.bearoffX + BEAROFF_WIDTH / 2,
+        cy: isBottom ? BOARD_HEIGHT - MARGIN - TRIANGLE_HEIGHT * 0.4 : MARGIN + TRIANGLE_HEIGHT * 0.4,
+      };
+    }
+    const pos = pointPositions[point];
+    if (!pos) return { cx: 0, cy: 0 };
+    const cx = columnX(pos.col);
+    const cy = pos.isTop
+      ? MARGIN + TRIANGLE_HEIGHT * 0.4
+      : BOARD_HEIGHT - MARGIN - TRIANGLE_HEIGHT * 0.4;
+    return { cx, cy };
+  }
+
+  function renderArrows(arrows: ParsedMove[], color: string, markerId: string) {
+    return arrows.map((m, i) => {
+      const start = arrowCoord(m.from);
+      const end = arrowCoord(m.to);
+      const dx = end.cx - start.cx;
+      const dy = end.cy - start.cy;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      if (len < 1) return null;
+      const perpX = (-dy / len) * 25;
+      const perpY = (dx / len) * 25;
+      const midX = (start.cx + end.cx) / 2 + perpX;
+      const midY = (start.cy + end.cy) / 2 + perpY;
+      return (
+        <path
+          key={`arrow-${markerId}-${i}`}
+          d={`M ${start.cx} ${start.cy} Q ${midX} ${midY} ${end.cx} ${end.cy}`}
+          fill="none"
+          stroke={color}
+          strokeWidth={3}
+          strokeLinecap="round"
+          markerEnd={`url(#${markerId})`}
+          pointerEvents="none"
+        />
+      );
+    });
   }
 
   function renderPointClickArea(point: number) {
@@ -887,6 +927,13 @@ function Board({
             <stop offset="95%" stopColor="#999999" stopOpacity={0.4} />
             <stop offset="100%" stopColor="#666666" stopOpacity={0.15} />
           </radialGradient>
+          {/* Arrowhead markers for move arrows */}
+          <marker id="arrow-yellow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth={6} markerHeight={6} orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(255, 215, 0, 0.85)" />
+          </marker>
+          <marker id="arrow-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth={6} markerHeight={6} orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(231, 76, 60, 0.7)" />
+          </marker>
         </defs>
 
         {/* Board background - total width is always the same regardless of orientation */}
@@ -971,6 +1018,10 @@ function Board({
 
         {/* Bear-off checkers */}
         {renderBearOffCheckers()}
+
+        {/* Move arrows (drawn over checkers so they're visible) */}
+        {bestMoveArrows && bestMoveArrows.length > 0 && renderArrows(bestMoveArrows, "rgba(231, 76, 60, 0.7)", "arrow-red")}
+        {moveArrows && moveArrows.length > 0 && renderArrows(moveArrows, "rgba(255, 215, 0, 0.85)", "arrow-yellow")}
 
         {/* Ghost checker preview */}
         {renderGhostChecker()}

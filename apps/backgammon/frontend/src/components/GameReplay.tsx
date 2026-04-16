@@ -26,26 +26,8 @@ import { getAnalysis, getReplay } from "../services/api";
 import Board from "./Board";
 import Dice from "./Dice";
 import { STORAGE_KEY } from "../constants";
-import { parseMovesNotation, type ParsedMove } from "../utils/notation";
+import { parseMovesNotationRaw } from "../utils/notation";
 import "./styles/GameReplay.css";
-
-/** Return the set of on-board destination points touched by the parsed moves. */
-function destinationPoints(moves: ParsedMove[]): Set<number> {
-  const out = new Set<number>();
-  for (const m of moves) {
-    if (typeof m.to === "number" && m.to >= 1 && m.to <= 24) out.add(m.to);
-  }
-  return out;
-}
-
-/** Return the set of on-board source + destination points touched by the moves. */
-function sourceAndDestPoints(moves: ParsedMove[]): Set<number> {
-  const out = destinationPoints(moves);
-  for (const m of moves) {
-    if (typeof m.from === "number" && m.from >= 1 && m.from <= 24) out.add(m.from);
-  }
-  return out;
-}
 
 /** Read the logged-in player from localStorage, if present. */
 function readStoredPlayerId(): string | null {
@@ -513,23 +495,19 @@ function GameReplay() {
   const cubeValue = displayState.cube_value ?? 1;
   const cubeOwner = displayState.cube_owner ?? null;
 
-  // Destinations of the checkers that moved in the current step — rendered as
-  // a yellow triangle highlight so the viewer can see what just changed.
-  const movedPoints = currentMove
-    ? destinationPoints(parseMovesNotation(currentMove.moves_notation))
+  // Yellow arrows showing the actual move — one arrow per die use.
+  const moveArrows = currentMove
+    ? parseMovesNotationRaw(currentMove.moves_notation)
     : undefined;
 
-  // When the player didn't pick the engine's top move, outline the engine's
-  // intended source + destination points in red so the recommended play is
-  // visible on the board.
-  const bestMovePoints =
+  // Red arrows showing the engine's recommended move when the player
+  // didn't pick the top play.
+  const bestMoveArrows =
     currentAnalysis &&
     currentAnalysis.best_move_notation &&
     currentAnalysis.quality !== "best" &&
     currentAnalysis.quality !== "very_good"
-      ? sourceAndDestPoints(
-          parseMovesNotation(currentAnalysis.best_move_notation),
-        )
+      ? parseMovesNotationRaw(currentAnalysis.best_move_notation)
       : undefined;
 
   // Dice to show on the board: parsed from the current move record. For moves
@@ -604,8 +582,8 @@ function GameReplay() {
           onBearOffClick={() => {}}
           cubeValue={cubeValue}
           cubeOwner={cubeOwner}
-          movedPoints={movedPoints}
-          bestMovePoints={bestMovePoints}
+          moveArrows={moveArrows}
+          bestMoveArrows={bestMoveArrows}
         />
         {replayDice && (
           <div className="replay-dice-overlay">

@@ -101,6 +101,30 @@ export function parseMovesNotation(notation: string): ParsedMove[] {
 }
 
 /**
+ * Like {@link parseMovesNotation} but does NOT consolidate chained hops.
+ * ``"24/22 22/18"`` yields two entries: ``{from:24, to:22}`` and
+ * ``{from:22, to:18}``.  Useful when each individual die use should be
+ * visualised separately (e.g. one arrow per die).
+ */
+export function parseMovesNotationRaw(notation: string): ParsedMove[] {
+  if (!notation) return [];
+  const results: ParsedMove[] = [];
+  for (const rawSegment of notation.trim().split(/\s+/)) {
+    const clean = rawSegment.replace(/\*$/, "");
+    const isHit = rawSegment.endsWith("*");
+    const [fromStr, toStr] = clean.split("/");
+    if (!fromStr || !toStr) continue;
+    const from: number | "bar" =
+      fromStr === "bar" ? "bar" : parseInt(fromStr, 10);
+    const to: number | "off" = toStr === "off" ? "off" : parseInt(toStr, 10);
+    if (typeof from === "number" && Number.isNaN(from)) continue;
+    if (typeof to === "number" && Number.isNaN(to)) continue;
+    results.push({ from, to, is_hit: isHit });
+  }
+  return results;
+}
+
+/**
  * Translate an internal point number (1-24) into the display number the
  * player actually sees, which depends on which side of the board they are
  * sitting on.

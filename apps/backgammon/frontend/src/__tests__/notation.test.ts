@@ -10,6 +10,7 @@ import {
   moveToNotation,
   formatDiceRoll,
   parseMovesNotation,
+  parseMovesNotationRaw,
   pointToDisplayNumber,
 } from "../utils/notation";
 
@@ -141,6 +142,33 @@ describe("parseMovesNotation", () => {
     expect(parseMovesNotation("13/11 garbage 6/5")).toEqual([
       { from: 13, to: 11, is_hit: false },
       { from: 6, to: 5, is_hit: false },
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseMovesNotationRaw
+// ---------------------------------------------------------------------------
+
+describe("parseMovesNotationRaw", () => {
+  it("does NOT consolidate chained hops", () => {
+    expect(parseMovesNotationRaw("24/22 22/18")).toEqual([
+      { from: 24, to: 22, is_hit: false },
+      { from: 22, to: 18, is_hit: false },
+    ]);
+  });
+
+  it("parses independent moves the same as consolidated parser", () => {
+    expect(parseMovesNotationRaw("13/11 6/5")).toEqual([
+      { from: 13, to: 11, is_hit: false },
+      { from: 6, to: 5, is_hit: false },
+    ]);
+  });
+
+  it("preserves bar and off as strings", () => {
+    expect(parseMovesNotationRaw("bar/22 5/off")).toEqual([
+      { from: "bar", to: 22, is_hit: false },
+      { from: 5, to: "off", is_hit: false },
     ]);
   });
 });

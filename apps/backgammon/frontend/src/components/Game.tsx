@@ -5,7 +5,7 @@ import { BOT_PLAYER_ID } from "../constants";
 import { useGameState } from "../hooks/useGameState";
 import { useGameKeyboard } from "../hooks/useGameKeyboard";
 import Board from "./Board";
-import { parseMovesNotation } from "../utils/notation";
+import { parseMovesNotationRaw } from "../utils/notation";
 import Dice from "./Dice";
 import GameControls from "./GameControls";
 import GameInfo from "./GameInfo";
@@ -43,20 +43,15 @@ function Game() {
   const isMovingPhase = gameState?.status === "moving";
   const validMoves = gameState?.valid_moves ?? [];
 
-  // Highlight the opponent's most recent move while we're about to roll so
-  // the player can see what just happened. Clears once the dice are rolled
-  // (status transitions from "rolling" to "moving").
-  const previousMovePoints = useMemo<Set<number> | undefined>(() => {
+  // Show yellow arrows for the opponent's most recent move while we're about
+  // to roll. Clears once the dice are rolled (status → "moving").
+  const previousMoveArrows = useMemo(() => {
     if (!gameState) return undefined;
     if (gameState.status !== "rolling") return undefined;
     if (!gameState.last_turn_notation) return undefined;
     if (gameState.last_turn_color === myColor) return undefined;
-    const parsed = parseMovesNotation(gameState.last_turn_notation);
-    const pts = new Set<number>();
-    for (const m of parsed) {
-      if (typeof m.to === "number" && m.to >= 1 && m.to <= 24) pts.add(m.to);
-    }
-    return pts.size > 0 ? pts : undefined;
+    const arrows = parseMovesNotationRaw(gameState.last_turn_notation);
+    return arrows.length > 0 ? arrows : undefined;
   }, [gameState, myColor]);
   const diceColor = useMemo((): Color => {
     if (!gameState) return "white";
@@ -233,7 +228,7 @@ function Game() {
           <PlayerInfoRow name={opponentName} player={opponentPlayer} pips={opponentPips} isOpponent={true} isConnected={opponentConnected} isBotGame={isBotGame} botDifficulty={table.bot_difficulty} isTimed={isTimed} timeMs={opponentTimeMs} isClockActive={!isMyTurn && gameState.status !== "finished"} matchPoints={table.match_points} matchScore={opponentScore} isCrawfordGame={gameState.is_crawford_game} formatClock={formatClock} getClockClass={getClockClass} />
 
           <div className={`board-area perspective-${myColor}`}>
-            <Board gameState={gameState} myColor={myColor} selectedPoint={selectedPoint} validMoves={isMyTurn ? validMoves : []} onPointClick={handlePointClick} onBarClick={handleBarClick} onBearOffClick={handleBearOffClick} cubeValue={gameState.cube_value} cubeOwner={gameState.cube_owner} animatingMove={animatingMove} hintMoves={hintMoves} movedPoints={previousMovePoints} boardTheme={myPlayer?.board_theme} checkerStyle={myPlayer?.checker_style} />
+            <Board gameState={gameState} myColor={myColor} selectedPoint={selectedPoint} validMoves={isMyTurn ? validMoves : []} onPointClick={handlePointClick} onBarClick={handleBarClick} onBearOffClick={handleBearOffClick} cubeValue={gameState.cube_value} cubeOwner={gameState.cube_owner} animatingMove={animatingMove} hintMoves={hintMoves} moveArrows={previousMoveArrows} boardTheme={myPlayer?.board_theme} checkerStyle={myPlayer?.checker_style} />
             <div className="board-overlay">
               <Dice dice={gameState.dice} remainingDice={gameState.remaining_dice} currentTurn={diceColor} openingRoll={gameState.opening_roll} />
               <GameControls gameState={gameState} myColor={myColor} opponentName={opponentName} onRollDice={actions.rollDice} onEndTurn={actions.endTurn} onUndoTurn={actions.undoTurn} onOfferDouble={actions.offerDouble} onAcceptDouble={actions.acceptDouble} onDeclineDouble={actions.declineDouble} onRequestHint={actions.requestHint} hintsRemaining={hintsRemaining} />
