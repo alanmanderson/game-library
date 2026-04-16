@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -205,4 +205,199 @@ async def join_game(
         phase=phase,
         seats=seats,
         your_seat=your_seat,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Replay endpoint — response models
+# ---------------------------------------------------------------------------
+
+
+class ReplayBid(BaseModel):
+    seat: str
+    bid_amount: int | None  # None = pass
+    is_shoot_the_moon: bool
+
+
+class ReplayTrick(BaseModel):
+    trick_number: int
+    led_by_seat: str | None
+    won_by_seat: str | None
+    cards: dict[str, str | None]  # {"north": "AH", "east": "KH", ...}
+    trick_points: int | None
+
+
+class ReplayHand(BaseModel):
+    hand_number: int
+    winning_bidder_seat: str | None
+    winning_bid_amount: int | None
+    is_shoot_the_moon: bool
+    trump_suit: str | None  # uppercase e.g. "HEARTS", or None
+    ns_meld_score: int | None
+    ew_meld_score: int | None
+    ns_trick_score: int | None
+    ew_trick_score: int | None
+    is_set: bool | None
+    bids: list[ReplayBid]
+    tricks: list[ReplayTrick]
+
+
+class ReplayResponse(BaseModel):
+    room_code: str
+    status: str
+    final_scores: dict[str, int]  # {"ns": 150, "ew": 90}
+    players: dict[str, str | None]  # {"north": "Alice", ...}
+    hands: list[ReplayHand]
+
+
+# ---------------------------------------------------------------------------
+# Replay endpoint
+# ---------------------------------------------------------------------------
+
+
+def _in_placeholders(ids: list[str]) -> tuple[str, dict[str, str]]:
+    """Return (sql_fragment, params) for a cross-DB compatible IN clause.
+
+    Example: ids=["a","b"] -> ("IN (:id0, :id1)", {"id0":"a","id1":"b"})
+    """
+    placeholders = ", ".join(f":id{i}" for i in range(len(ids)))
+    params = {f"id{i}": hid for i, hid in enumerate(ids)}
+    return f"IN ({placeholders})", params
+
+
+@router.get("/{room_code}/replay", response_model=ReplayResponse)
+async def get_game_replay(
+    room_code: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Game).where(Game.room_code == room_code))
+    game = result.scalar_one_or_none()
+    if game is None:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    # Only players who were seated at the table may view the replay.
+    seat_player_ids = [
+        getattr(game, f"{seat}_player_id") for seat in SEAT_COLUMNS
+    ]
+    if user.id not in seat_player_ids:
+        raise HTTPException(status_code=403, detail="You were not a player in this game")
+
+    # Build player UUID -> seat map
+    player_id_to_seat: dict[str, str] = {}
+    all_player_ids: list[uuid.UUID] = []
+    for seat in SEAT_COLUMNS:
+        pid = getattr(game, f"{seat}_player_id")
+        if pid is not None:
+            player_id_to_seat[str(pid)] = seat
+            all_player_ids.append(pid)
+
+    # Batch-fetch player first names
+    id_to_name: dict[str, str] = {}
+    if all_player_ids:
+        rows = await db.execute(select(User).where(User.id.in_(all_player_ids)))
+        for u in rows.scalars():
+            id_to_name[str(u.id)] = u.first_name
+
+    players: dict[str, str | None] = {seat: None for seat in SEAT_COLUMNS}
+    for pid_str, seat in player_id_to_seat.items():
+        players[seat] = id_to_name.get(pid_str)
+
+    # Load all hands for this game ordered by hand_number
+    hands_result = await db.execute(
+        text(
+            "SELECT id, hand_number, winning_bidder_id, winning_bid_amount, "
+            "is_shoot_the_moon, trump_suit, ns_meld_score, ew_meld_score, "
+            "ns_trick_score, ew_trick_score, is_set "
+            "FROM hands WHERE game_id = :game_id ORDER BY hand_number"
+        ),
+        {"game_id": str(game.id)},
+    )
+    hand_rows = hands_result.mappings().all()
+
+    replay_hands: list[ReplayHand] = []
+
+    if hand_rows:
+        hand_ids = [str(h["id"]) for h in hand_rows]
+        in_clause, in_params = _in_placeholders(hand_ids)
+
+        # Load all bids for these hands in one query
+        bids_result = await db.execute(
+            text(
+                f"SELECT hand_id, player_id, bid_amount, is_shoot_the_moon, bid_sequence "
+                f"FROM bids WHERE hand_id {in_clause} ORDER BY hand_id, bid_sequence"
+            ),
+            in_params,
+        )
+        bids_by_hand: dict[str, list] = defaultdict(list)
+        for row in bids_result.mappings():
+            bids_by_hand[str(row["hand_id"])].append(row)
+
+        # Load all tricks for these hands in one query
+        tricks_result = await db.execute(
+            text(
+                f"SELECT hand_id, trick_number, led_by_player_id, won_by_player_id, "
+                f"north_card, east_card, south_card, west_card, trick_points "
+                f"FROM tricks WHERE hand_id {in_clause} ORDER BY hand_id, trick_number"
+            ),
+            in_params,
+        )
+        tricks_by_hand: dict[str, list] = defaultdict(list)
+        for row in tricks_result.mappings():
+            tricks_by_hand[str(row["hand_id"])].append(row)
+
+        def pid_to_seat(pid_str: str | None) -> str | None:
+            return player_id_to_seat.get(str(pid_str)) if pid_str else None
+
+        for hand in hand_rows:
+            hid = str(hand["id"])
+
+            replay_bids = [
+                ReplayBid(
+                    seat=pid_to_seat(str(b["player_id"])) or str(b["player_id"]),
+                    bid_amount=b["bid_amount"],
+                    is_shoot_the_moon=bool(b["is_shoot_the_moon"]),
+                )
+                for b in bids_by_hand[hid]
+            ]
+
+            replay_tricks = [
+                ReplayTrick(
+                    trick_number=t["trick_number"],
+                    led_by_seat=pid_to_seat(t["led_by_player_id"]),
+                    won_by_seat=pid_to_seat(t["won_by_player_id"]),
+                    cards={
+                        "north": t["north_card"],
+                        "east": t["east_card"],
+                        "south": t["south_card"],
+                        "west": t["west_card"],
+                    },
+                    trick_points=t["trick_points"],
+                )
+                for t in tricks_by_hand[hid]
+            ]
+
+            replay_hands.append(
+                ReplayHand(
+                    hand_number=hand["hand_number"],
+                    winning_bidder_seat=pid_to_seat(hand["winning_bidder_id"]),
+                    winning_bid_amount=hand["winning_bid_amount"],
+                    is_shoot_the_moon=bool(hand["is_shoot_the_moon"]),
+                    trump_suit=hand["trump_suit"],
+                    ns_meld_score=hand["ns_meld_score"],
+                    ew_meld_score=hand["ew_meld_score"],
+                    ns_trick_score=hand["ns_trick_score"],
+                    ew_trick_score=hand["ew_trick_score"],
+                    is_set=bool(hand["is_set"]) if hand["is_set"] is not None else None,
+                    bids=replay_bids,
+                    tricks=replay_tricks,
+                )
+            )
+
+    return ReplayResponse(
+        room_code=game.room_code,
+        status=game.status,
+        final_scores={"ns": game.ns_total_score, "ew": game.ew_total_score},
+        players=players,
+        hands=replay_hands,
     )

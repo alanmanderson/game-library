@@ -13,6 +13,40 @@ from sqlalchemy import String, event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
+# ---------------------------------------------------------------------------
+# SQLite/aiosqlite compatibility patch
+#
+# The test engine uses StaticPool with creator=lambda: _persistent_conn, which
+# feeds a raw sqlite3.Connection (instead of an aiosqlite connection) to the
+# aiosqlite dialect. This bypasses aiosqlite's cursor wrapping, so the cursor
+# returned by SELECT text() queries is a sqlite3.Cursor instead of an
+# AsyncAdapt_aiosqlite_cursor — the latter has _async_soft_close(), the former
+# does not. SQLAlchemy 2.x's _ensure_sync_result calls _async_soft_close on the
+# cursor after buffering results, which fails for raw sqlite3.Cursor.
+#
+# Patching the session module's local reference to _ensure_sync_result with a
+# version that skips the async close for raw sqlite3.Cursor fixes SELECT text()
+# queries in tests without affecting the production asyncpg path.
+# ---------------------------------------------------------------------------
+import sqlalchemy.ext.asyncio.result as _sa_async_result
+import sqlalchemy.ext.asyncio.session as _sa_async_session
+
+_original_ensure_sync_result = _sa_async_result._ensure_sync_result
+
+
+async def _patched_ensure_sync_result(result, calling_method):  # type: ignore[no-untyped-def]
+    try:
+        if result._is_cursor and result.cursor is not None:
+            if not hasattr(result.cursor, "_async_soft_close"):
+                # Raw sqlite3.Cursor from StaticPool bypass — skip async close.
+                return result
+    except AttributeError:
+        pass
+    return await _original_ensure_sync_result(result, calling_method)
+
+
+_sa_async_session._ensure_sync_result = _patched_ensure_sync_result
+
 from app.models.base import Base
 from app.models.game import Game
 from app.models.user import User

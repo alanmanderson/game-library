@@ -15,6 +15,9 @@ const RoomPage = lazy(() =>
 const MyGamesPage = lazy(() =>
   import("../game/MyGamesPage.tsx").then((m) => ({ default: m.MyGamesPage })),
 );
+const ReplayPage = lazy(() =>
+  import("../game/ReplayPage.tsx").then((m) => ({ default: m.ReplayPage })),
+);
 
 function extractRoomCode(pathname: string): string {
   const match = pathname.match(/^\/([A-Z]{4})$/);
@@ -38,6 +41,7 @@ export function LobbyPage() {
   const [joinError, setJoinError] = useState("");
 
   const [showMyGames, setShowMyGames] = useState(false);
+  const [replayRoomCode, setReplayRoomCode] = useState<string | null>(null);
 
   async function handleCreate() {
     setCreateLoading(true);
@@ -127,6 +131,17 @@ export function LobbyPage() {
     );
   }
 
+  if (replayRoomCode) {
+    return (
+      <Suspense fallback={<Loading />}>
+        <ReplayPage
+          roomCode={replayRoomCode}
+          onBack={() => setReplayRoomCode(null)}
+        />
+      </Suspense>
+    );
+  }
+
   if (showMyGames) {
     return (
       <Suspense fallback={<Loading />}>
@@ -135,6 +150,10 @@ export function LobbyPage() {
           onOpenGame={(code) => {
             setShowMyGames(false);
             enterRoom(code);
+          }}
+          onReplay={(code) => {
+            setShowMyGames(false);
+            setReplayRoomCode(code);
           }}
         />
       </Suspense>

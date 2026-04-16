@@ -29,6 +29,10 @@ export type {
   CreateResponse,
   JoinResponse,
   GameSummary,
+  ReplayBid,
+  ReplayTrick,
+  ReplayHand,
+  ReplayResponse,
 } from "./types";
 
 export {

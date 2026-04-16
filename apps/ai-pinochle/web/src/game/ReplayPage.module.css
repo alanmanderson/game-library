@@ -1,0 +1,306 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  padding: var(--space-6) var(--space-4);
+  gap: var(--space-4);
+}
+
+/* ── Header ─────────────────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  max-width: 800px;
+}
+
+.header h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.5rem;
+  color: var(--color-text);
+}
+
+/* ── Scoreboard ──────────────────────────────────────────── */
+.scoreboard {
+  display: flex;
+  gap: var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-5);
+  font-size: 0.875rem;
+  box-shadow: var(--shadow-card);
+}
+
+.scoreTeam {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.scoreTeamLabel {
+  font-weight: 700;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+
+.scoreTeamPlayers {
+  color: var(--color-text);
+}
+
+.scoreTeamPoints {
+  font-size: 1.25rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--color-primary);
+}
+
+.scoreDivider {
+  width: 1px;
+  background: var(--color-border);
+  margin: var(--space-2) 0;
+}
+
+/* ── Hand navigation ─────────────────────────────────────── */
+.handNav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.handLabel {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--color-text);
+  min-width: 80px;
+  text-align: center;
+}
+
+/* ── Step scrubber ───────────────────────────────────────── */
+.scrubber {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  justify-content: center;
+  max-width: 800px;
+}
+
+.scrubberPill {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+  line-height: 1.6;
+}
+
+.scrubberPill:hover {
+  background: var(--color-accent-soft);
+  border-color: var(--color-accent);
+  color: var(--color-secondary);
+}
+
+.scrubberPill:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.scrubberPillActive {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
+.scrubberPillActive:hover {
+  background: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+  color: #fff;
+}
+
+/* ── Content frame ───────────────────────────────────────── */
+.frame {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-5);
+  width: 100%;
+  max-width: 540px;
+}
+
+/* ── Bidding table ───────────────────────────────────────── */
+.biddingHeader {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: var(--space-3);
+  color: var(--color-text);
+  font-family: var(--font-display);
+}
+
+.biddingTable {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.875rem;
+}
+
+.biddingTable th {
+  text-align: left;
+  padding: var(--space-1) var(--space-3);
+  color: var(--color-text-muted);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.biddingTable td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.biddingTable tr:last-child td {
+  border-bottom: none;
+}
+
+.biddingPass {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.biddingWinner {
+  margin-top: var(--space-3);
+  font-size: 0.875rem;
+  color: var(--color-text);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+/* ── Trick compass layout ────────────────────────────────── */
+.trickLayout {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  grid-template-rows: auto auto auto;
+  gap: var(--space-2);
+  align-items: center;
+  justify-items: center;
+}
+
+.trickCenter {
+  background: var(--color-felt);
+  border-radius: var(--radius-sm);
+  width: 40px;
+  height: 40px;
+  box-shadow: inset 0 0 8px rgba(0,0,0,0.4);
+}
+
+.cardCell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.cardCellName {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-align: center;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardCellSeat {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  text-transform: capitalize;
+}
+
+.trickInfo {
+  margin-top: var(--space-4);
+  display: flex;
+  justify-content: center;
+  gap: var(--space-5);
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+.trickInfoItem strong {
+  color: var(--color-text);
+}
+
+/* ── Hand summary ────────────────────────────────────────── */
+.summaryGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2) var(--space-5);
+  font-size: 0.875rem;
+  margin-top: var(--space-3);
+}
+
+.summaryLabel {
+  color: var(--color-text-muted);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.summaryValue {
+  color: var(--color-text);
+}
+
+.summaryResult {
+  grid-column: 1 / -1;
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.summaryResultSet {
+  background: color-mix(in srgb, var(--color-error) 10%, var(--color-surface));
+  color: var(--color-error);
+  border: 1px solid color-mix(in srgb, var(--color-error) 30%, transparent);
+}
+
+.summaryResultWon {
+  background: color-mix(in srgb, var(--color-success) 10%, var(--color-surface));
+  color: var(--color-success);
+  border: 1px solid color-mix(in srgb, var(--color-success) 30%, transparent);
+}
+
+/* ── Empty / loading states ──────────────────────────────── */
+.empty {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  text-align: center;
+  max-width: 420px;
+}
+
+.loading {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}

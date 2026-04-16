@@ -209,3 +209,40 @@ export interface GameSummary {
   started_at: string | null;
   ended_at: string | null;
 }
+
+export interface ReplayBid {
+  seat: string;
+  bid_amount: number | null;
+  is_shoot_the_moon: boolean;
+}
+
+export interface ReplayTrick {
+  trick_number: number;
+  led_by_seat: string | null;
+  won_by_seat: string | null;
+  cards: Record<string, string | null>;
+  trick_points: number | null;
+}
+
+export interface ReplayHand {
+  hand_number: number;
+  winning_bidder_seat: string | null;
+  winning_bid_amount: number | null;
+  is_shoot_the_moon: boolean;
+  trump_suit: string | null;
+  ns_meld_score: number | null;
+  ew_meld_score: number | null;
+  ns_trick_score: number | null;
+  ew_trick_score: number | null;
+  is_set: boolean | null;
+  bids: ReplayBid[];
+  tricks: ReplayTrick[];
+}
+
+export interface ReplayResponse {
+  room_code: string;
+  status: string;
+  final_scores: { ns: number; ew: number };
+  players: Record<string, string | null>;
+  hands: ReplayHand[];
+}

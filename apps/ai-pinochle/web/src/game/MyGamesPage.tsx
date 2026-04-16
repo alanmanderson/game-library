@@ -19,9 +19,10 @@ const PHASE_LABELS: Record<string, string> = {
 interface Props {
   onBack: () => void;
   onOpenGame: (roomCode: string) => void;
+  onReplay: (roomCode: string) => void;
 }
 
-export function MyGamesPage({ onBack, onOpenGame }: Props) {
+export function MyGamesPage({ onBack, onOpenGame, onReplay }: Props) {
   const { token } = useAuth();
   const [games, setGames] = useState<GameSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -93,6 +94,7 @@ export function MyGamesPage({ onBack, onOpenGame }: Props) {
               <th>NS Score</th>
               <th>EW Score</th>
               <th>Players</th>
+              <th>Replay</th>
             </tr>
           </thead>
           <tbody>
@@ -112,6 +114,13 @@ export function MyGamesPage({ onBack, onOpenGame }: Props) {
                 <td>{game.ns_score}</td>
                 <td>{game.ew_score}</td>
                 <td>{playerList(game)}</td>
+                <td>
+                  {game.status === "COMPLETED" && (
+                    <Button size="sm" variant="secondary" onClick={() => onReplay(game.room_code)}>
+                      Replay
+                    </Button>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
