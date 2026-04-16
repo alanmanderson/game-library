@@ -3,7 +3,7 @@ import type { CreateResponse, JoinResponse } from "@pinochle/shared";
 import { useAuth } from "../auth/AuthContext.tsx";
 import { postAuth, ApiError } from "../api/client.ts";
 import { Loading } from "../ui/Loading.tsx";
-import { BrandHeader, Button, TextInput } from "../ui";
+import { BrandHeader, Button, TextInput, RulesDrawer } from "../ui";
 import styles from "./LobbyPage.module.css";
 
 // RoomPage transitively pulls in the game surface (cards, phase components,
@@ -44,6 +44,7 @@ export function LobbyPage() {
   const [joinError, setJoinError] = useState("");
 
   const [showMyGames, setShowMyGames] = useState(false);
+  const [showRules, setShowRules] = useState(false);
   const [replayRoomCode, setReplayRoomCode] = useState<string | null>(null);
 
   async function handleCreate() {
@@ -188,13 +189,14 @@ export function LobbyPage() {
         userName={user!.first_name}
         onLogout={logout}
         extras={
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowMyGames(true)}
-          >
-            My Games
-          </Button>
+          <>
+            <Button variant="ghost" size="sm" onClick={() => setShowRules(true)}>
+              Rules
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setShowMyGames(true)}>
+              My Games
+            </Button>
+          </>
         }
       />
 
@@ -263,6 +265,7 @@ export function LobbyPage() {
           </section>
         </div>
       </main>
+      <RulesDrawer open={showRules} onClose={() => setShowRules(false)} />
     </div>
   );
 }

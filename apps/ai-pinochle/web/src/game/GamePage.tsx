@@ -17,7 +17,7 @@ import { GameOverScreen } from "./GameOverScreen.tsx";
 import { MoonCelebration } from "./MoonCelebration.tsx";
 import { PlayerAvatar } from "./PlayerAvatar.tsx";
 import { OtherPlayerHand } from "./OtherPlayerHand.tsx";
-import { MuteToggle } from "../ui";
+import { MuteToggle, RulesDrawer } from "../ui";
 import styles from "./GamePage.module.css";
 
 type SendMessage = (msg: Record<string, unknown>) => boolean | void;
@@ -89,6 +89,8 @@ export function GamePage({
     }
   }, [moonOutcome]);
 
+  const [showRules, setShowRules] = useState(false);
+
   // Warn before closing the tab while a game is active.
   useEffect(() => {
     const isActiveGame = phase !== "LOBBY_WAITING" && phase !== "GAME_OVER";
@@ -146,6 +148,9 @@ export function GamePage({
           role="status"
         />
         <MuteToggle />
+        <button className={styles.leaveButton} onClick={() => setShowRules(true)}>
+          Rules
+        </button>
         <button className={styles.leaveButton} onClick={onLeave}>
           Leave
         </button>
@@ -254,9 +259,11 @@ export function GamePage({
             trumpSuit={trumpSuit}
             onCardClick={isMyTurn ? playCard : undefined}
             legalCards={isMyTurn ? legalCards : undefined}
+            currentTrick={currentTrick}
           />
         )}
       </div>
+      <RulesDrawer open={showRules} onClose={() => setShowRules(false)} />
     </div>
   );
 }

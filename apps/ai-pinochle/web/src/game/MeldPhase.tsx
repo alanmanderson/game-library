@@ -17,13 +17,34 @@ const SUIT_LETTER_TO_SYMBOL: Record<string, string> = {
   S: "\u2660",
 };
 
+const MELD_DESCRIPTIONS: Record<string, string> = {
+  "Run": "A-10-K-Q-J of trump",
+  "Double Run": "Two runs in trump",
+  "Aces Around": "An Ace in each suit",
+  "Double Aces Around": "Two Aces in each suit",
+  "Kings Around": "A King in each suit",
+  "Double Kings Around": "Two Kings in each suit",
+  "Queens Around": "A Queen in each suit",
+  "Double Queens Around": "Two Queens in each suit",
+  "Jacks Around": "A Jack in each suit",
+  "Double Jacks Around": "Two Jacks in each suit",
+  "Pinochle": "J\u2666 + Q\u2660",
+  "Double Pinochle": "Two J\u2666 + two Q\u2660",
+  "Royal Marriage": "K + Q of trump",
+  "Marriage": "K + Q of same suit",
+  "Dix": "9 of trump",
+};
+
 function formatMeld(m: Meld): string {
+  const desc = MELD_DESCRIPTIONS[m.name];
   const suits = new Set(m.cards.map((c) => c.slice(-1)));
-  if (suits.size === 1) {
-    const symbol = SUIT_LETTER_TO_SYMBOL[[...suits][0]] ?? "";
-    return `${m.name} (${symbol}): ${m.points}`;
-  }
-  return `${m.name}: ${m.points}`;
+  const suitHint = suits.size === 1
+    ? SUIT_LETTER_TO_SYMBOL[[...suits][0]] ?? ""
+    : "";
+  const detail = desc ?? suitHint;
+  return detail
+    ? `${m.name} (${detail}): ${m.points} pts`
+    : `${m.name}: ${m.points} pts`;
 }
 
 export function MeldPhase({

@@ -64,3 +64,13 @@
 .disabled:hover {
   transform: none;
 }
+
+.hintBanner {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-1) var(--space-3);
+  font-size: 0.8rem;
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+  border-radius: var(--radius-sm);
+  text-align: center;
+}
