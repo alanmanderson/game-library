@@ -343,6 +343,23 @@ function GameReplay() {
     }
   }, [autoPlaying, moveIndex, totalMoves, stopAutoPlay]);
 
+  // Arrow-key navigation: left = previous move, right = next move.
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        stopAutoPlay();
+        goTo(moveIndex - 1);
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        stopAutoPlay();
+        goTo(moveIndex + 1);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [moveIndex, goTo, stopAutoPlay]);
+
   const fetchAnalysis = useCallback(async () => {
     if (analysis || !tableId) return;
     setAnalysisLoading(true);
@@ -419,6 +436,29 @@ function GameReplay() {
         currentAnalysis.chosen_win_prob ?? currentAnalysis.chosen_probs?.win,
       )
     : null;
+
+  // Pre-compute best-move arrows (must be a hook, so placed before early returns).
+  // Arrows that exactly match a chosen-move arrow are filtered to prevent overlap.
+  const bestMoveArrowsComputed = useMemo(() => {
+    if (
+      !currentAnalysis ||
+      !currentAnalysis.best_move_notation ||
+      currentAnalysis.quality === "best" ||
+      currentAnalysis.quality === "very_good"
+    )
+      return undefined;
+    const best = parseMovesNotationRaw(currentAnalysis.best_move_notation);
+    // We need the chosen notation from the current move.
+    const chosenNotation =
+      replayData && moveIndex > 0
+        ? replayData.moves[moveIndex - 1]?.moves_notation
+        : null;
+    if (!chosenNotation) return best;
+    const chosen = parseMovesNotationRaw(chosenNotation);
+    const chosenKeys = new Set(chosen.map((a) => `${a.from}/${a.to}`));
+    const filtered = best.filter((a) => !chosenKeys.has(`${a.from}/${a.to}`));
+    return filtered.length > 0 ? filtered : undefined;
+  }, [currentAnalysis, replayData, moveIndex]);
 
   const toggleMoveDetails = useCallback((moveNumber: number) => {
     setExpandedMoves((prev) => {
@@ -500,15 +540,7 @@ function GameReplay() {
     ? parseMovesNotationRaw(currentMove.moves_notation)
     : undefined;
 
-  // Red arrows showing the engine's recommended move when the player
-  // didn't pick the top play.
-  const bestMoveArrows =
-    currentAnalysis &&
-    currentAnalysis.best_move_notation &&
-    currentAnalysis.quality !== "best" &&
-    currentAnalysis.quality !== "very_good"
-      ? parseMovesNotationRaw(currentAnalysis.best_move_notation)
-      : undefined;
+  const bestMoveArrows = bestMoveArrowsComputed;
 
   // Dice to show on the board: parsed from the current move record. For moves
   // other than the very first, both dice belong to the same player; for move
