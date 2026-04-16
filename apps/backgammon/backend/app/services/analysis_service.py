@@ -378,6 +378,19 @@ _GNUBG_QUALITY_MAP = {
 }
 
 
+def _moves_to_backend_notation(moves: list[dict], color: Color) -> str:
+    """Build notation string from gnubg response moves (backend coordinates)."""
+    bar = 25 if color == Color.WHITE else 0
+    off = 0 if color == Color.WHITE else 25
+    parts: list[str] = []
+    for m in moves:
+        fp, tp = m.get("from_point", 0), m.get("to_point", 0)
+        src = "bar" if fp == bar else str(fp)
+        dst = "off" if tp == off else str(tp)
+        parts.append(f"{src}/{dst}")
+    return " ".join(parts)
+
+
 def _compute_analysis_gnubg(
     initial_state: dict,
     move_records: list[dict],
@@ -457,6 +470,15 @@ def _compute_analysis_gnubg(
         gnubg_quality = str(resp.get("quality") or "good")
         quality = _GNUBG_QUALITY_MAP.get(gnubg_quality, "good")
 
+        # Build best-move notation from the backend-coordinate moves list
+        # so it matches the game's own notation format.  gnubg's raw
+        # notation uses the on-roll player's perspective numbering.
+        best_moves_list = best.get("moves") or []
+        if best_moves_list:
+            best_notation = _moves_to_backend_notation(best_moves_list, color)
+        else:
+            best_notation = best.get("notation")
+
         analyses.append(
             {
                 "move_number": int(record.get("move_number") or 0),
@@ -473,7 +495,7 @@ def _compute_analysis_gnubg(
                 "best_equity": round(best_equity, 4),
                 "equity_loss": round(equity_loss, 4),
                 "quality": quality,
-                "best_move_notation": best.get("notation"),
+                "best_move_notation": best_notation,
                 "best_probs": best_probs,
                 "chosen_probs": chosen_probs,
                 "best_win_prob": (

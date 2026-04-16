@@ -847,6 +847,13 @@ async def get_game_analysis(
 
     initial_state = BackgammonEngine().get_state_snapshot()
 
+    # Correct the starting player: a fresh engine defaults to white, but
+    # the first move record tells us who actually went first.
+    if records:
+        first_player_id = records[0].player_id
+        if first_player_id == table.black_player_id:
+            initial_state["current_turn"] = "black"
+
     record_dicts = [
         {
             "player_id": r.player_id,
