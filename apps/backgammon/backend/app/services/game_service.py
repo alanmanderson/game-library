@@ -415,6 +415,20 @@ class GameManager:
         # Store the restored engine
         self._engines[table_id] = engine
 
+        # Auto-complete a stuck turn: if the server restarted while a player
+        # had used all their dice but hadn't yet confirmed end-turn, the stored
+        # state has status=MOVING + remaining_dice=[].  Since turn_moves is
+        # reset to [] on restore, neither the "Confirm Turn" nor "End Turn"
+        # button would appear in the UI.  End the turn now so the game can
+        # proceed, and persist the corrected state.
+        if s.status == GameStatus.MOVING and not s.remaining_dice:
+            engine.end_turn()
+            if table:
+                table.game_state = engine.get_state_snapshot()
+            logger.info(
+                "Auto-completed stuck turn on restore for table %s", table_id
+            )
+
         # Restore Crawford state from snapshot
         if snap.get("crawford_game_used"):
             self._crawford_used[table_id] = True

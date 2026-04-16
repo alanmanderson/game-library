@@ -69,11 +69,14 @@ function GameControls({
     gameState.turn_moves_count > 0 &&
     (gameState.remaining_dice.length === 0 || gameState.valid_moves.length === 0);
 
+  // End Turn shows when no valid moves remain and no "confirm" button is shown.
+  // This covers both the normal blocked case (dice still in hand) and the edge
+  // case where the server restarted mid-turn and turn_moves_count was reset to 0
+  // even though all dice were already used (remaining_dice is empty).
   const showEndTurnButton =
     isMyTurn &&
     gameState.status === "moving" &&
     gameState.valid_moves.length === 0 &&
-    gameState.remaining_dice.length > 0 &&
     gameState.turn_moves_count === 0;
 
   const showHintButton =
