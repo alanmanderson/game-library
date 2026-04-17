@@ -30,10 +30,10 @@ from app.game_engine import BackgammonEngine, Color
 logger = logging.getLogger(__name__)
 
 
-# Timeouts chosen per the plan: fast ops get 5s, analysis is heavier (may
-# enumerate all candidate moves on a slow subprocess) so allow 10s.
-_TIMEOUT_FAST = httpx.Timeout(5.0, connect=2.0)
-_TIMEOUT_SLOW = httpx.Timeout(10.0, connect=2.0)
+# Timeouts chosen per the plan: fast ops get 10s, analysis is heavier (may
+# enumerate all candidate moves on a slow subprocess) so allow 30s for 2-ply evaluation.
+_TIMEOUT_FAST = httpx.Timeout(10.0, connect=2.0)  # Increased from 5s to 10s for 2-ply
+_TIMEOUT_SLOW = httpx.Timeout(30.0, connect=2.0)  # Increased from 10s to 30s for 2-ply
 
 
 _client: Optional[httpx.AsyncClient] = None

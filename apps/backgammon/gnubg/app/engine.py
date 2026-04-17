@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 # giving a reliable framing marker without relying on prompt format.
 _SENTINEL = "__gnubg_sentinel_done__"
 _STARTUP_TIMEOUT = 15.0
-_COMMAND_TIMEOUT = 30.0
+_COMMAND_TIMEOUT = 60.0  # Increased from 30s to 60s for 2-ply evaluation
 
 
 class GnubgUnavailableError(RuntimeError):
@@ -107,14 +107,27 @@ class GnubgEngine:
                                                   initial=True)
         self._version = parser.parse_version(banner)
 
-        # Configure gnubg: single-ply evaluator for low-latency turns.
+        # Configure gnubg: 2-ply evaluator for stronger play.
         # "set cache" / "set threads" would bloat the B1s; use defaults.
         await self._raw_command("set output cubeful on")
         await self._raw_command("set output matchpc off")
         await self._raw_command("set output winpc off")
+
+        # Set 2-ply evaluation for both chequer play and cube decisions
+        await self._raw_command("set evaluation chequer ply 2")
+        await self._raw_command("set evaluation cube ply 2")
+
+        # Enable move filtering to improve performance with 2-ply
+        # Format: set evaluation movefilter n [1-ply-threshold] [2-ply-threshold] [n-extra] [threshold]
+        await self._raw_command("set evaluation movefilter 1 0 0 8 0.16")
+
         # Disable interactive confirmations.
         await self._raw_command("set confirm new off")
         await self._raw_command("set confirm save off")
+
+        # Log the current evaluation settings for verification
+        eval_settings = await self._raw_command("show evaluation")
+        logger.info("gnubg evaluation settings:\n%s", eval_settings)
 
         self._ready = True
         logger.info("gnubg engine started (version=%s)", self._version)
