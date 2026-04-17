@@ -564,3 +564,81 @@ export interface WSSignalMessage {
 
 /** Discriminated union of all WebSocket messages. */
 export type WSMessage = WSGameStateMessage | WSErrorMessage | WSHintMessage | WSChatMessage | WSSignalMessage;
+
+// ---------------------------------------------------------------------------
+// Analysis Mode types
+// ---------------------------------------------------------------------------
+
+export interface AnalysisConfig {
+  game_type: "money" | "match";
+  match_length?: number;
+  player_color: "white" | "black" | "random";
+  gnubg_ply: 0 | 1 | 2 | 3;
+  auto_analysis: "off" | "per_move" | "per_turn";
+}
+
+export interface AnalysisSessionData {
+  id: string;
+  player_id: string;
+  game_type: string;
+  match_length: number | null;
+  player_color: string;
+  gnubg_ply: number;
+  auto_analysis: string;
+  status: string;
+  result: string | null;
+  loaded_from: Record<string, unknown> | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface AnalysisGameState {
+  session: AnalysisSessionData;
+  game_state: GameState;
+  move_count: number;
+  current_view_index: number;
+}
+
+export interface AnalysisMoveRecord {
+  move_number: number;
+  player: string;
+  dice_roll: string;
+  move_notation: string;
+  quality: MoveQuality | null;
+  equity_loss: number | null;
+  annotation: string | null;
+}
+
+export interface AnalysisHintCandidate {
+  rank: number;
+  notation: string;
+  moves: Move[];
+  equity: number;
+  equity_diff: number;
+  probs: MoveProbs | null;
+}
+
+export interface AnalysisCubeAction {
+  recommendation: string;
+  equity_no_double: number;
+  equity_double_take: number;
+  equity_double_drop: number;
+}
+
+export interface AnalysisHintResult {
+  cube_action: AnalysisCubeAction | null;
+  candidates: AnalysisHintCandidate[];
+}
+
+export interface AnalysisEvalResult {
+  equity: number;
+  probs: MoveProbs;
+  position_class?: string;
+}
+
+export interface AnalysisSettings {
+  gnubg_ply: number;
+  auto_analysis: string;
+}
+
+export type AnalysisPanelTab = "moves" | "analysis" | "settings";

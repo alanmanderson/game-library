@@ -24,6 +24,13 @@ import type {
   Tournament,
   TournamentBracket,
   ChallengesData,
+  AnalysisConfig,
+  AnalysisGameState,
+  AnalysisMoveRecord,
+  AnalysisHintResult,
+  AnalysisEvalResult,
+  AnalysisSessionData,
+  AnalysisSettings,
 } from "../types/game";
 import { TOKEN_KEY } from "../constants";
 
@@ -398,5 +405,112 @@ export function startTournament(tournamentId: string): Promise<TournamentBracket
 export function startMatchTable(tournamentId: string, matchId: number): Promise<{ table_id: string }> {
   return request<{ table_id: string }>(`/api/tournaments/${tournamentId}/matches/${matchId}/start-table`, {
     method: "POST",
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Analysis Mode endpoints
+// ---------------------------------------------------------------------------
+
+export function createAnalysisSession(config: AnalysisConfig): Promise<AnalysisGameState> {
+  return request<AnalysisGameState>("/api/analysis/sessions", {
+    method: "POST",
+    body: JSON.stringify(config),
+  });
+}
+
+export function listAnalysisSessions(): Promise<{ sessions: AnalysisSessionData[] }> {
+  return request<{ sessions: AnalysisSessionData[] }>("/api/analysis/sessions");
+}
+
+export function getAnalysisSession(sessionId: string): Promise<AnalysisGameState> {
+  return request<AnalysisGameState>(`/api/analysis/sessions/${sessionId}`);
+}
+
+export function closeAnalysisSession(sessionId: string): Promise<void> {
+  return request<void>(`/api/analysis/sessions/${sessionId}/close`, { method: "POST" });
+}
+
+export function analysisRoll(sessionId: string): Promise<AnalysisGameState> {
+  return request<AnalysisGameState>(`/api/analysis/sessions/${sessionId}/roll`, { method: "POST" });
+}
+
+export function analysisMove(sessionId: string, fromPoint: number, toPoint: number): Promise<AnalysisGameState> {
+  return request<AnalysisGameState>(`/api/analysis/sessions/${sessionId}/move`, {
+    method: "POST",
+    body: JSON.stringify({ from_point: fromPoint, to_point: toPoint }),
+  });
+}
+
+export function analysisEndTurn(sessionId: string): Promise<AnalysisGameState> {
+  return request<AnalysisGameState>(`/api/analysis/sessions/${sessionId}/end-turn`, { method: "POST" });
+}
+
+export function analysisUndo(sessionId: string): Promise<AnalysisGameState> {
+  return request<AnalysisGameState>(`/api/analysis/sessions/${sessionId}/undo`, { method: "POST" });
+}
+
+export function analysisDouble(sessionId: string): Promise<AnalysisGameState> {
+  return request<AnalysisGameState>(`/api/analysis/sessions/${sessionId}/double`, { method: "POST" });
+}
+
+export function analysisRespondDouble(sessionId: string, accept: boolean): Promise<AnalysisGameState> {
+  return request<AnalysisGameState>(`/api/analysis/sessions/${sessionId}/respond-double`, {
+    method: "POST",
+    body: JSON.stringify({ accept }),
+  });
+}
+
+export function analysisHint(sessionId: string): Promise<AnalysisHintResult> {
+  return request<AnalysisHintResult>(`/api/analysis/sessions/${sessionId}/hint`, { method: "POST" });
+}
+
+export function analysisEval(sessionId: string): Promise<AnalysisEvalResult> {
+  return request<AnalysisEvalResult>(`/api/analysis/sessions/${sessionId}/eval`, { method: "POST" });
+}
+
+export function analysisNavigate(sessionId: string, direction: "first" | "prev" | "next" | "last"): Promise<AnalysisGameState> {
+  return request<AnalysisGameState>(`/api/analysis/sessions/${sessionId}/navigate`, {
+    method: "POST",
+    body: JSON.stringify({ direction }),
+  });
+}
+
+export function analysisJump(sessionId: string, moveNumber: number): Promise<AnalysisGameState> {
+  return request<AnalysisGameState>(`/api/analysis/sessions/${sessionId}/jump`, {
+    method: "POST",
+    body: JSON.stringify({ move_number: moveNumber }),
+  });
+}
+
+export function analysisHistory(sessionId: string): Promise<AnalysisMoveRecord[]> {
+  return request<AnalysisMoveRecord[]>(`/api/analysis/sessions/${sessionId}/history`);
+}
+
+export function analysisAnnotate(sessionId: string, moveNumber: number, note: string): Promise<void> {
+  return request<void>(`/api/analysis/sessions/${sessionId}/annotate`, {
+    method: "POST",
+    body: JSON.stringify({ move_number: moveNumber, note }),
+  });
+}
+
+export function analysisLoadGame(sessionId: string, tableId: string, moveNumber?: number): Promise<AnalysisGameState> {
+  return request<AnalysisGameState>(`/api/analysis/sessions/${sessionId}/load-game`, {
+    method: "POST",
+    body: JSON.stringify({ table_id: tableId, move_number: moveNumber }),
+  });
+}
+
+export function analysisLoadPosition(sessionId: string, positionId: string, matchId?: string): Promise<AnalysisGameState> {
+  return request<AnalysisGameState>(`/api/analysis/sessions/${sessionId}/load-position`, {
+    method: "POST",
+    body: JSON.stringify({ position_id: positionId, match_id: matchId }),
+  });
+}
+
+export function analysisUpdateSettings(sessionId: string, settings: Partial<AnalysisSettings>): Promise<AnalysisGameState> {
+  return request<AnalysisGameState>(`/api/analysis/sessions/${sessionId}/settings`, {
+    method: "PUT",
+    body: JSON.stringify(settings),
   });
 }

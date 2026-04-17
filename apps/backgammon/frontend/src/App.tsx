@@ -17,6 +17,9 @@ import GameReplay from "./components/GameReplay";
 import Spectator from "./components/Spectator";
 import AuthModal from "./components/AuthModal";
 import { TournamentList, TournamentDetail } from "./components/Tournament";
+import { lazy, Suspense } from "react";
+
+const Analysis = lazy(() => import("./components/Analysis"));
 
 function App() {
   const [player, setPlayer] = useState<Player | null>(null);
@@ -120,6 +123,14 @@ function App() {
                 <p>Please sign in to view this tournament.</p>
               </div>
             )
+          }
+        />
+        <Route
+          path="/analysis/:sessionId"
+          element={
+            <Suspense fallback={<div className="landing"><p>Loading...</p></div>}>
+              <Analysis />
+            </Suspense>
           }
         />
         <Route path="/spectate/:tableId" element={<Spectator />} />

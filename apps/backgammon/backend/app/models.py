@@ -508,6 +508,73 @@ class PlayerChallenge(Base):
 
 
 
+class AnalysisSession(Base):
+    __tablename__ = "analysis_sessions"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('active', 'completed', 'abandoned')",
+            name="ck_analysis_session_status",
+        ),
+    )
+
+    id: str = Column(String(8), primary_key=True)
+    player_id: str = Column(
+        String(36), ForeignKey("players.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    game_type: str = Column(String(10), nullable=False, default="money")
+    match_length: int | None = Column(Integer, nullable=True)
+    player_color: str = Column(String(5), nullable=False, default="white")
+    gnubg_ply: int = Column(Integer, nullable=False, default=2)
+    auto_analysis: str = Column(String(20), nullable=False, default="off")
+    status: str = Column(String(20), nullable=False, default="active")
+    result: str | None = Column(String(20), nullable=True)
+    loaded_from: dict | None = Column(JSON, nullable=True)
+    game_state_json: dict | None = Column(MutableDict.as_mutable(JSON), nullable=True)
+    created_at: datetime = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    completed_at: datetime | None = Column(DateTime(timezone=True), nullable=True)
+
+    player = relationship("Player", foreign_keys=[player_id])
+
+    def __repr__(self) -> str:
+        return f"<AnalysisSession(id={self.id!r}, player_id={self.player_id!r}, status={self.status!r})>"
+
+
+class AnalysisSessionMove(Base):
+    __tablename__ = "analysis_session_moves"
+
+    id: str = Column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    session_id: str = Column(
+        String(8), ForeignKey("analysis_sessions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    game_number: int = Column(Integer, nullable=False, default=1)
+    move_number: int = Column(Integer, nullable=False)
+    player: str = Column(String(5), nullable=False)
+    dice_roll: str = Column(String(10), nullable=False)
+    move_notation: str = Column(String(200), nullable=False)
+    position_snapshot: dict | None = Column(JSON, nullable=True)
+    best_move_notation: str | None = Column(String(200), nullable=True)
+    equity: float | None = Column(Float, nullable=True)
+    best_equity: float | None = Column(Float, nullable=True)
+    equity_loss: float | None = Column(Float, nullable=True)
+    quality: str | None = Column(String(20), nullable=True)
+    best_probs_json: dict | None = Column(JSON, nullable=True)
+    chosen_probs_json: dict | None = Column(JSON, nullable=True)
+    annotation: str | None = Column(String(1000), nullable=True)
+    created_at: datetime = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+    session = relationship("AnalysisSession", foreign_keys=[session_id])
+
+    def __repr__(self) -> str:
+        return (
+            f"<AnalysisSessionMove(session_id={self.session_id!r}, "
+            f"move_number={self.move_number!r})>"
+        )
+
+
 class CubeActionRecord(Base):
     """Per-action record of a cube decision (offer / accept / decline).
 

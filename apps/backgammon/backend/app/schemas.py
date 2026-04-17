@@ -497,3 +497,120 @@ class TournamentBracketResponse(BaseModel):
     entries: list[TournamentEntryResponse]
     matches: list[TournamentMatchResponse]
     total_rounds: int
+
+
+# ── Analysis Session Schemas ────────────────────────────────────────────
+
+
+class AnalysisSessionCreate(BaseModel):
+    game_type: Literal["money", "match"] = "money"
+    match_length: Optional[int] = Field(default=None, ge=1, le=25)
+    player_color: Literal["white", "black", "random"] = "white"
+    gnubg_ply: int = Field(default=2, ge=0, le=3)
+    auto_analysis: Literal["off", "per_move", "per_turn"] = "off"
+
+
+class AnalysisSessionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    player_id: str
+    game_type: str
+    match_length: Optional[int] = None
+    player_color: str
+    gnubg_ply: int
+    auto_analysis: str
+    status: str
+    result: Optional[str] = None
+    loaded_from: Optional[dict] = None
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+
+
+class AnalysisGameStateResponse(BaseModel):
+    session: AnalysisSessionResponse
+    game_state: dict
+    move_count: int
+    current_view_index: int  # -1 = live position
+
+
+class AnalysisMoveResponse(BaseModel):
+    move_number: int
+    player: str
+    dice_roll: str
+    move_notation: str
+    quality: Optional[str] = None
+    equity_loss: Optional[float] = None
+    annotation: Optional[str] = None
+
+
+class AnalysisHintCandidate(BaseModel):
+    rank: int
+    notation: str
+    moves: list[dict]
+    equity: float
+    equity_diff: float
+    probs: Optional[dict] = None
+
+
+class AnalysisCubeAction(BaseModel):
+    recommendation: str
+    equity_no_double: float
+    equity_double_take: float
+    equity_double_drop: float
+
+
+class AnalysisHintResponse(BaseModel):
+    cube_action: Optional[AnalysisCubeAction] = None
+    candidates: list[AnalysisHintCandidate]
+
+
+class AnalysisEvalResponse(BaseModel):
+    equity: float
+    probs: dict
+    position_class: Optional[str] = None
+
+
+class AnalysisMoveRequest(BaseModel):
+    from_point: int
+    to_point: int
+
+
+class AnalysisNavigateRequest(BaseModel):
+    direction: Literal["first", "prev", "next", "last"]
+
+
+class AnalysisJumpRequest(BaseModel):
+    move_number: int = Field(ge=0)
+
+
+class AnalysisAnnotateRequest(BaseModel):
+    move_number: int = Field(ge=1)
+    note: str = Field(max_length=1000)
+
+
+class AnalysisLoadGameRequest(BaseModel):
+    table_id: str
+    move_number: Optional[int] = None
+
+
+class AnalysisLoadPositionRequest(BaseModel):
+    position_id: str
+    match_id: Optional[str] = None
+
+
+class AnalysisLoadXgidRequest(BaseModel):
+    xgid: str
+
+
+class AnalysisSettingsUpdate(BaseModel):
+    gnubg_ply: Optional[int] = Field(default=None, ge=0, le=3)
+    auto_analysis: Optional[Literal["off", "per_move", "per_turn"]] = None
+
+
+class AnalysisSessionListResponse(BaseModel):
+    sessions: list[AnalysisSessionResponse]
+
+
+class AnalysisRespondDoubleRequest(BaseModel):
+    accept: bool
