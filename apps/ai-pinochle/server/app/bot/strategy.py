@@ -31,8 +31,9 @@ def choose_bid(hand: list[str], bidding_state: dict) -> dict:
     high_cards = sum(1 for c in hand if c[:-1] in ("A", "10"))
     strength = best_meld + high_cards
 
-    minimum = bidding_state.get("minimum_valid_bid", 25) or 25
     winning_bid = bidding_state.get("winning_bid")
+    # minimum_valid_bid isn't in persisted state — compute from winning_bid
+    minimum = (winning_bid + 1) if winning_bid is not None else 25
 
     # In Pinochle the dealer must bid if everyone else passed (winning_bid is
     # still None). Always bid the minimum in that situation to avoid a
