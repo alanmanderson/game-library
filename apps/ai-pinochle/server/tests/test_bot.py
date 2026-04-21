@@ -402,6 +402,9 @@ class TestFullBotGame:
 
     def test_bots_play_until_game_over(self):
         """Simulate an entire game until GAME_OVER (may take many hands)."""
+        import random
+        random.seed(42)  # Deterministic deals for reproducible CI runs
+
         lobby_state = {
             "room_code": "TEST",
             "phase": "LOBBY_WAITING",
