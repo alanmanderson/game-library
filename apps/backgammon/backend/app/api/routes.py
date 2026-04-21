@@ -900,23 +900,84 @@ async def get_game_analysis(
     )
 
 
+def _notation_to_mat(notation: str, is_black: bool) -> str:
+    """Convert internal move notation to gnubg-compatible MAT format.
+
+    Transformations applied:
+    - For Black: mirror point numbers (``25 - point``) so moves are from
+      Black's own perspective.
+    - For both: replace ``bar`` with ``25`` and ``off`` with ``0`` (gnubg
+      uses numeric-only notation).
+
+    Examples (Black):
+        ``"12/15 1/4*"`` → ``"13/10 24/21*"``
+        ``"bar/3"``      → ``"25/22"``
+        ``"22/off"``     → ``"3/0"``
+
+    Examples (White):
+        ``"8/5 6/5"``    → ``"8/5 6/5"``
+        ``"bar/22"``     → ``"25/22"``
+        ``"3/off"``      → ``"3/0"``
+    """
+
+    def _convert_segment(segment: str) -> str:
+        hit_suffix = "*" if segment.endswith("*") else ""
+        clean = segment.rstrip("*")
+        parts = clean.split("/")
+        if len(parts) != 2:
+            return segment
+        src, dst = parts
+
+        # Bar (25) and off (0) are absolute in MAT format — never mirrored.
+        # Only regular board points (1-24) get mirrored for Black.
+        if src == "bar":
+            src = "25"
+        elif is_black:
+            try:
+                src = str(25 - int(src))
+            except ValueError:
+                pass
+
+        if dst == "off":
+            dst = "0"
+        elif is_black:
+            try:
+                dst = str(25 - int(dst))
+            except ValueError:
+                pass
+
+        return f"{src}/{dst}{hit_suffix}"
+
+    # Handle special non-move notations (cube actions, no-move markers, etc.)
+    if not notation:
+        return notation
+    # "(no moves)" → empty string; gnubg expects just the dice (e.g. "65:")
+    if notation.startswith("("):
+        return ""
+    if "/" not in notation:
+        return notation
+
+    segments = notation.split()
+    return " ".join(_convert_segment(s) for s in segments)
+
+
 @router.get("/tables/{table_id}/export")
 async def export_game(
     table_id: str, db: AsyncSession = Depends(get_db)
 ) -> PlainTextResponse:
-    """Export a completed game as a standard backgammon notation (.mat) file.
+    """Export a completed game in gnubg-compatible .mat format.
 
-    Returns plain text in the widely-recognised match format::
+    Follows the Jellyfish/gnubg MAT format so the file can be imported
+    directly into GNU Backgammon for analysis::
 
-        Player 1: WhitePlayer
-        Player 2: BlackPlayer
-        Match to 5 points
+         5 point match
 
-        Game 1
-         1) 31: 8/5 6/5                     42: 24/20 13/11
-         2) 64: 13/7 13/9                   53: 20/15 11/8
-        ...
-        WhitePlayer wins 2 points
+         Game 1
+         White : 0                          Black : 0
+          1) 31: 8/5 6/5                    42: 24/20 13/11
+          2) 64: 13/7 13/9                  53: 20/15 11/8
+         ...
+              Wins 2 points
     """
     table = await db.get(Table, table_id)
     if not table:
@@ -941,15 +1002,18 @@ async def export_game(
     white_records = [r for r in records if r.player_id == white_id]
     black_records = [r for r in records if r.player_id == black_id]
 
+    match_points = table.match_points or 0
     lines: list[str] = [
-        f"Player 1: {white_name}",
-        f"Player 2: {black_name}",
-        f"Match to {table.match_points} points",
+        f" {match_points} point match",
         "",
-        "Game 1",
+        " Game 1",
     ]
 
-    max_turns = max(len(white_records), len(black_records))
+    # Score line: " Name : Score                      Name : Score"
+    left_score = f"{white_name} : 0"
+    lines.append(f" {left_score:<31}{black_name} : 0")
+
+    max_turns = max(len(white_records), len(black_records)) if records else 0
     for i in range(max_turns):
         turn_num = i + 1
         white_rec = white_records[i] if i < len(white_records) else None
@@ -957,30 +1021,34 @@ async def export_game(
 
         white_part = ""
         if white_rec:
+            notation = _notation_to_mat(white_rec.moves_notation, is_black=False)
             if white_rec.dice_roll:
                 dice = white_rec.dice_roll.replace("-", "")
-                white_part = f"{dice}: {white_rec.moves_notation}"
+                white_part = f"{dice}: {notation}"
             else:
-                white_part = white_rec.moves_notation
+                white_part = notation
 
         black_part = ""
         if black_rec:
+            notation = _notation_to_mat(black_rec.moves_notation, is_black=True)
             if black_rec.dice_roll:
                 dice = black_rec.dice_roll.replace("-", "")
-                black_part = f"{dice}: {black_rec.moves_notation}"
+                black_part = f"{dice}: {notation}"
             else:
-                black_part = black_rec.moves_notation
+                black_part = notation
 
-        # Left column is fixed-width so left/right turns are aligned.
-        line = f" {turn_num}) {white_part:<34} {black_part}"
+        # gnubg format: "%3d) %-27s %s"
+        line = f"{turn_num:3d}) {white_part:<28}{black_part}"
         lines.append(line.rstrip())
 
     if table.status == "finished" and table.winner_id:
-        winner_name = white_name if table.winner_id == white_id else black_name
         score = table.final_score or 1
         point_word = "point" if score == 1 else "points"
-        lines.append(f"{winner_name} wins {score} {point_word}")
+        # gnubg places the result indented, aligned with the right column
+        # if Black won (even-indexed final turn) or left-indented if White won.
+        lines.append(f"      Wins {score} {point_word}")
 
+    lines.append("")  # trailing blank line
     content = "\n".join(lines) + "\n"
     return PlainTextResponse(
         content=content,

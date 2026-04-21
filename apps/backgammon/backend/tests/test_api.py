@@ -277,7 +277,7 @@ class TestGameExport:
         assert resp.status_code == 404
 
     async def test_export_empty_game(self, client):
-        """Export of a newly-created table returns valid plain-text with headers."""
+        """Export of a newly-created table returns valid gnubg-compatible MAT format."""
         table, creator_auth, joiner_auth = await create_and_join_table(client, "Alice", "Bob")
         table_id = table["id"]
 
@@ -285,14 +285,15 @@ class TestGameExport:
         assert resp.status_code == 200
         assert "text/plain" in resp.headers["content-type"]
         content = resp.text
-        # Both player nicknames appear (order depends on white/black assignment).
+        # Both player nicknames appear in the score line.
         assert "Alice" in content
         assert "Bob" in content
-        assert "Match to" in content
-        assert "Game 1" in content
+        # gnubg format: "N point match" (not "Match to N points")
+        assert "point match" in content
+        assert " Game 1" in content
 
     async def test_export_with_move_records(self, client, db_session):
-        """Export output includes dice and move notation from recorded moves."""
+        """Export output includes dice and move notation in gnubg MAT format."""
         from app.models import MoveRecord
 
         table, creator_auth, joiner_auth = await create_and_join_table(client, "WhitePlayer", "BlackPlayer")
@@ -322,9 +323,12 @@ class TestGameExport:
         resp = await client.get(f"/api/tables/{table_id}/export")
         assert resp.status_code == 200
         content = resp.text
+        # White's notation unchanged (already from White's perspective)
         assert "31: 8/5 6/5" in content
-        assert "42: 24/20 13/11" in content
-        assert " 1)" in content
+        # Black's internal "24/20 13/11" mirrored to Black's perspective: "1/5 12/14"
+        assert "42: 1/5 12/14" in content
+        # gnubg format: right-justified 3-char move number
+        assert "  1)" in content
 
     async def test_export_content_disposition_header(self, client):
         """The response carries a Content-Disposition attachment header."""
@@ -335,6 +339,68 @@ class TestGameExport:
         cd = resp.headers.get("content-disposition", "")
         assert "attachment" in cd
         assert f"game_{table_id}.mat" in cd
+
+    async def test_export_gnubg_format_structure(self, client, db_session):
+        """Verify the full structure matches gnubg MAT import expectations."""
+        from app.models import MoveRecord, Table
+
+        table, _, _ = await create_and_join_table(client, "Alice", "Bob")
+        table_id = table["id"]
+        white_id = table["white_player"]["id"]
+        black_id = table["black_player"]["id"]
+
+        # Mark as finished with a winner
+        db_table = await db_session.get(Table, table_id)
+        db_table.status = "finished"
+        db_table.winner_id = white_id
+        db_table.final_score = 2
+
+        # Add moves including bar entry and bear-off
+        db_session.add(MoveRecord(
+            table_id=table_id, player_id=white_id, move_number=1,
+            dice_roll="3-1", moves_notation="8/5 6/5",
+        ))
+        db_session.add(MoveRecord(
+            table_id=table_id, player_id=black_id, move_number=2,
+            dice_roll="6-2", moves_notation="bar/3 12/18",
+        ))
+        db_session.add(MoveRecord(
+            table_id=table_id, player_id=white_id, move_number=3,
+            dice_roll="5-1", moves_notation="3/off bar/24",
+        ))
+        await db_session.commit()
+
+        resp = await client.get(f"/api/tables/{table_id}/export")
+        assert resp.status_code == 200
+        lines = resp.text.split("\n")
+
+        # Line 0: match length in gnubg format
+        assert "point match" in lines[0]
+        # The number should be parseable: " N point match"
+        match_line = lines[0].strip()
+        assert match_line.split()[0].isdigit()
+
+        # Line 2: " Game 1"
+        assert lines[2].strip() == "Game 1"
+        assert lines[2].startswith(" ")
+
+        # Line 3: score line with both player names
+        assert "Alice" in lines[3] and "Bob" in lines[3]
+        assert ": 0" in lines[3]
+
+        # Move lines: gnubg uses numeric 25 for bar entry, 0 for bear-off
+        content = resp.text
+        # White's bar/24 → 25/24 (White's bar is 25 in MAT)
+        assert "25/24" in content
+        # White's 3/off → 3/0 (off = 0 in MAT)
+        assert "3/0" in content
+        # Black's bar/3 → from Black's perspective: 25/22 (bar=25, point 3 mirrors to 22)
+        assert "25/22" in content
+        # Black's 12/18 → from Black's perspective: 13/7
+        assert "13/7" in content
+
+        # Result line
+        assert "Wins 2 points" in content
 
 
 class TestPlayerStats:

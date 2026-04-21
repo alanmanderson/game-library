@@ -23,6 +23,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.pool import NullPool
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
@@ -51,7 +52,7 @@ def ws_test_env(tmp_path):
     db_path = tmp_path / "test.db"
     db_url = f"sqlite+aiosqlite:///{db_path}"
 
-    engine = create_async_engine(db_url, echo=False)
+    engine = create_async_engine(db_url, echo=False, poolclass=NullPool)
     session_factory = async_sessionmaker(
         engine, class_=AsyncSession, expire_on_commit=False
     )
@@ -86,11 +87,11 @@ def ws_test_env(tmp_path):
          patch("app.database.async_session", mock_async_session), \
          patch("app.services.bot_service.schedule_bot_turn_if_needed"), \
          patch("app.services.bot_service.schedule_bot_double_response_if_needed"):
-        client = TestClient(app)
-        yield {
-            "client": client,
-            "session_factory": session_factory,
-        }
+        with TestClient(app) as client:
+            yield {
+                "client": client,
+                "session_factory": session_factory,
+            }
 
     app.dependency_overrides.clear()
     game_manager._engines.clear()
@@ -111,8 +112,8 @@ async def _create_schema(engine):
 
 
 def _run_async(coro):
-    """Run an async coroutine in the current event loop."""
-    return asyncio.get_event_loop().run_until_complete(coro)
+    """Run an async coroutine in a fresh, isolated event loop."""
+    return asyncio.run(coro)
 
 
 def _token(player_id: str) -> str:

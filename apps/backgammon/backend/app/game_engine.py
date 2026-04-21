@@ -82,7 +82,12 @@ class Move:
     is_hit: bool = False
 
     def to_notation(self, color: Color) -> str:
-        """Convert to standard backgammon notation.
+        """Convert to standard backgammon notation using internal point numbers.
+
+        Point numbers use the engine's internal coordinate system (1-24) which
+        matches White's perspective.  For export formats (e.g. MAT) that need
+        each player's moves from their own perspective, the caller must mirror
+        Black's point numbers (25 - point) separately.
 
         Examples:
             ``13/7``   -- regular move
