@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   test-backend:
     runs-on: ubuntu-latest
@@ -65,31 +69,28 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image
+      - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: backend/Dockerfile
           platforms: linux/amd64
-          tags: backgammon-server:latest
-          load: true
+          tags: |
+            ghcr.io/alanmanderson/backgammon:${{ github.sha }}
+            ghcr.io/alanmanderson/backgammon:latest
+          push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Save and compress Docker image
-        run: |
-          docker save backgammon-server:latest | zstd -T0 -3 > /tmp/backgammon-server.tar.zst
-
-      - name: Upload Docker image
-        uses: actions/upload-artifact@v4
-        with:
-          name: docker-image
-          path: /tmp/backgammon-server.tar.zst
-          retention-days: 1
-          compression-level: 0
 
   deploy:
     runs-on: ubuntu-latest
@@ -102,12 +103,6 @@ jobs:
         with:
           name: frontend-dist
           path: frontend/dist/
-
-      - name: Download Docker image
-        uses: actions/download-artifact@v4
-        with:
-          name: docker-image
-          path: /tmp/
 
       - name: Setup SSH key
         env:
@@ -130,7 +125,6 @@ jobs:
           SCP="scp -i ~/.ssh/id_deploy"
           SSH="ssh -i ~/.ssh/id_deploy"
 
-          $SCP /tmp/backgammon-server.tar.zst "$REMOTE":/tmp/
           $SCP docker-compose.prod.yml "$REMOTE":/opt/backgammon/docker-compose.yml
           $SCP Caddyfile "$REMOTE":/opt/backgammon/
           $SSH "$REMOTE" "rm -rf /opt/backgammon/web-dist"
@@ -143,12 +137,22 @@ jobs:
           SSH="ssh -i ~/.ssh/id_deploy $REMOTE"
           $SSH "docker tag backgammon-server:latest backgammon-server:previous 2>/dev/null || true"
 
+      - name: Pull Docker image on VM
+        env:
+          REMOTE: azureuser@${{ secrets.VM_HOST }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SSH="ssh -i ~/.ssh/id_deploy $REMOTE"
+          echo "$GH_TOKEN" | $SSH "docker login ghcr.io -u ${{ github.actor }} --password-stdin"
+          $SSH "docker pull ghcr.io/alanmanderson/backgammon:${{ github.sha }}"
+          $SSH "docker tag ghcr.io/alanmanderson/backgammon:${{ github.sha }} backgammon-server:latest"
+          $SSH "docker logout ghcr.io"
+
       - name: Deploy on VM
         env:
           REMOTE: azureuser@${{ secrets.VM_HOST }}
         run: |
           SSH="ssh -i ~/.ssh/id_deploy $REMOTE"
-          $SSH "zstd -d /tmp/backgammon-server.tar.zst -o /tmp/backgammon-server.tar && docker load < /tmp/backgammon-server.tar && rm /tmp/backgammon-server.tar.zst /tmp/backgammon-server.tar"
           $SSH "cd /opt/backgammon && docker compose run --rm fastapi alembic upgrade head"
           $SSH "cd /opt/backgammon && docker compose up -d --force-recreate"
           echo "Deployment complete!"
