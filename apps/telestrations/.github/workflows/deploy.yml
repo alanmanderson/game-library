@@ -1,0 +1,73 @@
+name: Deploy to Azure App Service
+
+on:
+  push:
+    branches: [main, master]
+
+env:
+  AZURE_WEBAPP_NAME: telestrations-app
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Install dependencies for both projects
+      - name: Install server dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Install client dependencies
+        working-directory: client
+        run: npm ci
+
+      # Build client (vite build -> client/dist/)
+      - name: Build client
+        working-directory: client
+        run: npx vite build
+
+      # Build server (tsc -> server/dist/)
+      - name: Build server
+        working-directory: server
+        run: npx tsc
+
+      # Prune server devDependencies to shrink the deploy artifact
+      - name: Prune server devDependencies
+        working-directory: server
+        run: npm prune --production
+
+      # Assemble the deployment package.
+      # Layout mirrors the repo structure so the server's path.resolve(__dirname, "../../client/dist")
+      # resolves correctly from server/dist/app.js -> client/dist.
+      - name: Create deployment package
+        run: |
+          mkdir -p deploy/server/dist
+          mkdir -p deploy/client/dist
+
+          cp -r server/dist/* deploy/server/dist/
+          cp server/package.json deploy/server/
+          cp -r server/node_modules deploy/server/node_modules
+          cp -r client/dist/* deploy/client/dist/
+
+          # web.config goes at the deploy root for Azure/IIS
+          cp server/web.config deploy/web.config
+
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: deploy
+          startup-command: "node server/dist/index.js"

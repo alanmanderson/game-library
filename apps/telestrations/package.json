@@ -1,0 +1,20 @@
+{
+  "name": "telestrations",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Telestrations web game - monorepo root",
+  "scripts": {
+    "install:all": "npm --prefix server ci && npm --prefix client ci",
+    "build": "npm run build:client && npm run build:server",
+    "build:server": "npm --prefix server run build",
+    "build:client": "npm --prefix client run build",
+    "dev": "npx concurrently -n server,client -c blue,green \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
+    "test": "npm --prefix server test",
+    "test:e2e": "npm --prefix e2e test",
+    "start": "node server/dist/index.js",
+    "typecheck": "npm --prefix server run typecheck && npm --prefix client run typecheck"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}

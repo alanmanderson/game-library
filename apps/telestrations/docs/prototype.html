@@ -1,0 +1,1877 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Telestrations -- Design Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ===== RESET & BASE ===== */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  color: #0B0F1A;
+  background: #F3F4F6;
+  line-height: 1.5;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ===== DESIGN TOKENS ===== */
+:root {
+  /* Primary */
+  --primary: #6366F1;
+  --primary-hover: #4F46E5;
+  --primary-active: #4338CA;
+  --primary-tint: #EEF2FF;
+  --primary-light: #E0E7FF;
+
+  /* Neutrals */
+  --gray-950: #0B0F1A;
+  --gray-700: #374151;
+  --gray-500: #6B7280;
+  --gray-300: #D1D5DB;
+  --gray-200: #E5E7EB;
+  --gray-100: #F3F4F6;
+  --gray-50: #F9FAFB;
+  --white: #FFFFFF;
+
+  /* Semantic */
+  --success: #22C55E;
+  --success-light: #F0FDF4;
+  --warning: #F59E0B;
+  --warning-light: #FFFBEB;
+  --error: #EF4444;
+  --error-light: #FEF2F2;
+
+  /* Spacing */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-xs: 0 1px 2px rgba(0,0,0,0.05);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
+  --shadow-lg: 0 12px 32px rgba(0,0,0,0.12), 0 4px 8px rgba(0,0,0,0.06);
+}
+
+/* ===== TYPOGRAPHY ===== */
+h1 { font-size: 2rem; font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; }
+h2 { font-size: 1.5rem; font-weight: 700; line-height: 1.3; letter-spacing: -0.01em; }
+h3 { font-size: 1.25rem; font-weight: 600; line-height: 1.4; letter-spacing: -0.01em; }
+h4 { font-size: 1rem; font-weight: 600; line-height: 1.5; }
+.text-body { font-size: 1rem; font-weight: 400; line-height: 1.5; }
+.text-sm { font-size: 0.875rem; font-weight: 400; line-height: 1.5; }
+.text-caption { font-size: 0.75rem; font-weight: 500; line-height: 1.4; letter-spacing: 0.02em; }
+.text-muted { color: var(--gray-500); }
+.text-center { text-align: center; }
+
+/* ===== PROTOTYPE NAV ===== */
+.proto-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: var(--white);
+  border-bottom: 1px solid var(--gray-200);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  white-space: nowrap;
+  scrollbar-width: none;
+}
+.proto-nav::-webkit-scrollbar { display: none; }
+
+.proto-nav-inner {
+  display: inline-flex;
+  padding: var(--sp-2) var(--sp-4);
+  gap: var(--sp-1);
+}
+
+.proto-tab {
+  display: inline-block;
+  padding: var(--sp-2) var(--sp-3);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--gray-500);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 150ms ease;
+  font-family: inherit;
+}
+.proto-tab:hover { color: var(--gray-700); background: var(--gray-50); }
+.proto-tab.active {
+  color: var(--primary);
+  background: var(--primary-tint);
+  border-color: var(--primary-light);
+}
+
+.proto-label {
+  display: inline-block;
+  padding: var(--sp-2) var(--sp-3);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--gray-300);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* ===== SCREEN CONTAINER ===== */
+.screen {
+  display: none;
+  min-height: 100vh;
+  padding: 60px var(--sp-4) var(--sp-8);
+}
+.screen.active { display: block; }
+
+.screen-content {
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+/* ===== BUTTONS ===== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  min-height: 48px;
+  padding: var(--sp-3) var(--sp-6);
+  font-size: 1rem;
+  font-weight: 600;
+  font-family: inherit;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 100ms ease-in-out;
+  border: none;
+  text-decoration: none;
+  line-height: 1.2;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.btn-primary {
+  background: var(--primary);
+  color: var(--white);
+}
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-primary:active { background: var(--primary-active); }
+
+.btn-secondary {
+  background: var(--white);
+  color: var(--gray-700);
+  border: 1px solid var(--gray-300);
+}
+.btn-secondary:hover { background: var(--gray-50); }
+.btn-secondary:active { background: var(--gray-100); }
+
+.btn-danger {
+  background: var(--error);
+  color: var(--white);
+}
+.btn-danger:hover { background: #DC2626; }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--primary);
+}
+.btn-ghost:hover { background: var(--primary-tint); }
+
+.btn-full { width: 100%; }
+
+.btn-sm {
+  min-height: 36px;
+  padding: var(--sp-2) var(--sp-4);
+  font-size: 0.875rem;
+}
+
+/* ===== INPUTS ===== */
+.form-group {
+  margin-bottom: var(--sp-4);
+}
+
+.form-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--gray-700);
+  margin-bottom: var(--sp-2);
+}
+
+.form-input {
+  width: 100%;
+  height: 48px;
+  padding: var(--sp-3) var(--sp-4);
+  font-size: 1rem;
+  font-family: inherit;
+  color: var(--gray-950);
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.form-input::placeholder { color: var(--gray-500); }
+.form-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+.form-input.error {
+  border-color: var(--error);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+}
+
+.form-error {
+  font-size: 0.875rem;
+  color: var(--error);
+  margin-top: var(--sp-1);
+}
+
+.form-hint {
+  font-size: 0.75rem;
+  color: var(--gray-500);
+  margin-top: var(--sp-1);
+}
+
+textarea.form-input {
+  height: auto;
+  min-height: 80px;
+  resize: vertical;
+}
+
+/* ===== CARDS ===== */
+.card {
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  padding: var(--sp-6);
+}
+.card-elevated {
+  border: none;
+  box-shadow: var(--shadow-sm);
+}
+
+/* ===== GAME CODE ===== */
+.game-code-container {
+  background: var(--primary-tint);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-6) var(--sp-8);
+  text-align: center;
+}
+.game-code {
+  font-size: 3rem;
+  font-weight: 700;
+  color: var(--primary);
+  letter-spacing: 0.12em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  margin-bottom: var(--sp-2);
+}
+.game-code-hint {
+  font-size: 0.875rem;
+  color: var(--primary-hover);
+  opacity: 0.7;
+}
+
+/* ===== TIMER ===== */
+.timer {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 20px;
+  background: var(--gray-100);
+  border-radius: var(--radius-full);
+  font-size: 2.5rem;
+  font-weight: 600;
+  color: var(--gray-700);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.timer-warning {
+  background: var(--warning-light);
+  color: var(--warning);
+}
+.timer-critical {
+  background: var(--error-light);
+  color: var(--error);
+  animation: pulse 0.5s ease-in-out infinite alternate;
+}
+@keyframes pulse {
+  from { transform: scale(1); }
+  to { transform: scale(1.05); }
+}
+
+.timer-icon {
+  width: 24px;
+  height: 24px;
+  opacity: 0.6;
+}
+
+/* ===== PLAYER LIST ===== */
+.player-list {
+  list-style: none;
+}
+.player-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--gray-100);
+}
+.player-item:last-child { border-bottom: none; }
+
+.player-info {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.player-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--gray-950);
+}
+.player-name.disconnected {
+  color: var(--gray-500);
+  text-decoration: line-through;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--sp-2);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-radius: var(--radius-full);
+  text-transform: uppercase;
+}
+.badge-host {
+  background: var(--primary-tint);
+  color: var(--primary);
+}
+.badge-you {
+  background: var(--gray-100);
+  color: var(--gray-500);
+}
+
+.player-status {
+  display: flex;
+  align-items: center;
+}
+.status-check {
+  width: 20px;
+  height: 20px;
+  color: var(--success);
+}
+.status-pending {
+  width: 20px;
+  height: 20px;
+  color: var(--gray-300);
+}
+.status-disconnected {
+  width: 8px;
+  height: 8px;
+  background: var(--gray-300);
+  border-radius: 50%;
+}
+
+.player-remove {
+  background: none;
+  border: none;
+  color: var(--gray-300);
+  cursor: pointer;
+  padding: var(--sp-1);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.player-remove:hover { color: var(--error); background: var(--error-light); }
+
+/* ===== SETTINGS ===== */
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--gray-100);
+}
+.setting-row:last-child { border-bottom: none; }
+.setting-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--gray-700);
+}
+.setting-value {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--gray-950);
+  background: var(--gray-100);
+  padding: var(--sp-1) var(--sp-3);
+  border-radius: var(--radius-sm);
+}
+
+/* ===== SELECT ===== */
+.form-select {
+  height: 48px;
+  padding: var(--sp-3) var(--sp-4);
+  padding-right: 40px;
+  font-size: 1rem;
+  font-family: inherit;
+  color: var(--gray-950);
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-sm);
+  outline: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  cursor: pointer;
+  width: 100%;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.form-select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+/* ===== TOGGLE ===== */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+.toggle {
+  position: relative;
+  width: 48px;
+  height: 28px;
+  flex-shrink: 0;
+}
+.toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+.toggle-track {
+  position: absolute;
+  inset: 0;
+  background: var(--gray-300);
+  border-radius: 14px;
+  transition: background 200ms ease;
+  cursor: pointer;
+}
+.toggle input:checked + .toggle-track {
+  background: var(--primary);
+}
+.toggle-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 24px;
+  height: 24px;
+  background: var(--white);
+  border-radius: 50%;
+  box-shadow: var(--shadow-xs);
+  transition: transform 200ms ease;
+}
+.toggle input:checked + .toggle-track::after {
+  transform: translateX(20px);
+}
+
+/* ===== DRAWING TOOLBAR ===== */
+.drawing-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.drawing-toolbar::-webkit-scrollbar { display: none; }
+
+.tool-group {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex-shrink: 0;
+}
+
+.toolbar-sep {
+  width: 1px;
+  height: 28px;
+  background: var(--gray-200);
+  flex-shrink: 0;
+  margin: 0 var(--sp-1);
+}
+
+.tool-btn {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--gray-700);
+  transition: all 100ms ease;
+  flex-shrink: 0;
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+.tool-btn:hover { background: var(--gray-50); }
+.tool-btn.active {
+  background: var(--primary-tint);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.tool-btn svg { width: 20px; height: 20px; }
+
+/* Color swatches */
+.color-swatches {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-shrink: 0;
+}
+.color-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 100ms ease;
+  flex-shrink: 0;
+  padding: 0;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.color-swatch:hover { transform: scale(1.15); }
+.color-swatch.active {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 2px var(--white);
+}
+.color-swatch-white {
+  box-shadow: inset 0 0 0 1px var(--gray-300);
+}
+.color-swatch-white.active {
+  box-shadow: inset 0 0 0 2px var(--white), 0 0 0 2px var(--primary);
+}
+
+/* Size selectors */
+.size-btn {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 100ms ease;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.size-btn:hover { background: var(--gray-50); }
+.size-btn.active {
+  background: var(--primary-tint);
+  border-color: var(--primary);
+}
+.size-dot {
+  border-radius: 50%;
+  background: var(--gray-700);
+}
+.size-btn.active .size-dot {
+  background: var(--primary);
+}
+
+/* ===== CANVAS AREA ===== */
+.canvas-wrapper {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  position: relative;
+}
+.canvas-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gray-300);
+}
+.canvas-placeholder svg { width: 64px; height: 64px; }
+
+/* Mock drawing */
+.mock-drawing {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--white);
+}
+.mock-drawing-content {
+  width: 60%;
+  height: 60%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-4);
+}
+.mock-sun {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: #FACC15;
+  box-shadow: 0 0 0 12px rgba(250, 204, 21, 0.2);
+}
+.mock-mountain {
+  width: 0;
+  height: 0;
+  border-left: 60px solid transparent;
+  border-right: 60px solid transparent;
+  border-bottom: 80px solid #22C55E;
+}
+.mock-line {
+  width: 100%;
+  height: 3px;
+  background: #92400E;
+  border-radius: 2px;
+}
+
+/* ===== PROMPT BOX ===== */
+.prompt-display {
+  background: var(--primary-tint);
+  border: 1px solid var(--primary-light);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4) var(--sp-6);
+  text-align: center;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--primary-active);
+}
+
+/* ===== WAITING OVERLAY ===== */
+.waiting-state {
+  text-align: center;
+  padding: var(--sp-6) 0;
+}
+.waiting-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--gray-200);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin: 0 auto var(--sp-4);
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ===== ROUND INFO ===== */
+.round-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.875rem;
+  color: var(--gray-500);
+  margin-bottom: var(--sp-4);
+}
+.round-badge {
+  font-weight: 600;
+  color: var(--gray-700);
+}
+
+/* ===== CHAIN REVIEW ===== */
+.chain-header {
+  text-align: center;
+  margin-bottom: var(--sp-6);
+}
+.chain-indicator {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--gray-500);
+  margin-bottom: var(--sp-1);
+}
+.chain-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--gray-950);
+}
+
+.chain-entry {
+  margin-bottom: var(--sp-4);
+  animation: fadeSlideIn 300ms ease-out both;
+}
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.chain-entry-header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+.chain-entry-author {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--gray-500);
+}
+.chain-entry-type {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--gray-500);
+  background: var(--gray-100);
+  padding: 2px var(--sp-2);
+  border-radius: var(--radius-full);
+}
+
+.chain-text-card {
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  padding: var(--sp-8) var(--sp-6);
+  text-align: center;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--gray-950);
+}
+
+.chain-drawing-card {
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  aspect-ratio: 1;
+}
+
+.chain-connector {
+  display: flex;
+  justify-content: center;
+  padding: var(--sp-2) 0;
+  color: var(--gray-300);
+}
+
+/* ===== TRANSITION SCREEN ===== */
+.transition-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 100px);
+  text-align: center;
+  gap: var(--sp-6);
+}
+.transition-icon {
+  width: 64px;
+  height: 64px;
+  color: var(--primary);
+  opacity: 0.8;
+}
+.transition-countdown {
+  font-size: 4rem;
+  font-weight: 700;
+  color: var(--primary);
+  line-height: 1;
+  animation: pulse 0.5s ease-in-out infinite alternate;
+}
+
+/* ===== GAME OVER ===== */
+.game-over-header {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--gray-950);
+  text-align: center;
+  margin-bottom: var(--sp-2);
+}
+.game-over-sub {
+  font-size: 1rem;
+  color: var(--gray-500);
+  text-align: center;
+  margin-bottom: var(--sp-8);
+}
+
+/* ===== SECTION SPACING ===== */
+.section-gap { margin-bottom: var(--sp-6); }
+.section-gap-sm { margin-bottom: var(--sp-4); }
+.section-gap-lg { margin-bottom: var(--sp-8); }
+
+/* ===== LOGO ===== */
+.logo {
+  text-align: center;
+  margin-bottom: var(--sp-2);
+}
+.logo-text {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--gray-950);
+  letter-spacing: -0.03em;
+}
+.logo-text span {
+  color: var(--primary);
+}
+.logo-sub {
+  font-size: 1rem;
+  color: var(--gray-500);
+  margin-top: var(--sp-1);
+}
+
+/* ===== DIVIDER ===== */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  margin: var(--sp-6) 0;
+  color: var(--gray-500);
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.divider::before, .divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--gray-200);
+}
+
+/* ===== INSTRUCTIONS BOX ===== */
+.instructions {
+  background: var(--primary-tint);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4);
+  font-size: 0.875rem;
+  color: var(--primary-active);
+  text-align: center;
+  font-weight: 500;
+  margin-bottom: var(--sp-4);
+}
+
+/* ===== FOOTER LINK ===== */
+.footer-link {
+  text-align: center;
+  padding: var(--sp-8) 0 var(--sp-4);
+}
+.footer-link a {
+  font-size: 0.875rem;
+  color: var(--gray-500);
+  text-decoration: none;
+}
+.footer-link a:hover { color: var(--primary); }
+
+/* ===== HOST CONTROLS (REVIEW) ===== */
+.host-controls {
+  display: flex;
+  gap: var(--sp-3);
+  padding: var(--sp-4) 0;
+}
+.host-controls .btn { flex: 1; }
+
+/* ===== CONNECTION BANNER ===== */
+.connection-banner {
+  background: var(--warning-light);
+  color: #92400E;
+  padding: var(--sp-3) var(--sp-4);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-align: center;
+  border-bottom: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+/* ===== TOAST ===== */
+.toast {
+  position: fixed;
+  bottom: var(--sp-4);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--gray-950);
+  color: var(--white);
+  padding: var(--sp-3) 20px;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-weight: 500;
+  box-shadow: var(--shadow-lg);
+  z-index: 999;
+  white-space: nowrap;
+}
+
+/* ===== SVG ICON INLINE HELPER ===== */
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.icon svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+.icon-lg svg { width: 24px; height: 24px; }
+
+/* ===== REVIEW PROGRESS ===== */
+.progress-dots {
+  display: flex;
+  justify-content: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-6);
+}
+.progress-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gray-200);
+}
+.progress-dot.filled { background: var(--primary); }
+.progress-dot.current {
+  background: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+/* ===== CONFIRM MODAL ===== */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4);
+}
+.modal-card {
+  background: var(--white);
+  border-radius: var(--radius-md);
+  padding: var(--sp-6);
+  max-width: 340px;
+  width: 100%;
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+}
+.modal-card h3 { margin-bottom: var(--sp-2); }
+.modal-card p { margin-bottom: var(--sp-6); color: var(--gray-500); font-size: 0.875rem; }
+.modal-actions {
+  display: flex;
+  gap: var(--sp-3);
+}
+.modal-actions .btn { flex: 1; }
+
+/* ===== RESPONSIVE ===== */
+@media (min-width: 640px) {
+  .screen-content { padding: 0 var(--sp-4); }
+  .card { padding: var(--sp-6); }
+}
+
+@media (min-width: 1024px) {
+  .screen-content.wide { max-width: 640px; }
+  .drawing-layout {
+    display: grid;
+    grid-template-columns: 1fr 80px;
+    gap: var(--sp-4);
+  }
+  .drawing-toolbar-desktop {
+    flex-direction: column;
+    overflow-x: visible;
+    overflow-y: auto;
+  }
+}
+</style>
+</head>
+<body>
+
+<!-- ===== PROTOTYPE NAVIGATION ===== -->
+<nav class="proto-nav" role="navigation" aria-label="Prototype screens">
+  <div class="proto-nav-inner">
+    <span class="proto-label">Screens:</span>
+    <button class="proto-tab active" data-screen="landing" onclick="showScreen('landing')">Landing</button>
+    <button class="proto-tab" data-screen="join" onclick="showScreen('join')">Join Game</button>
+    <button class="proto-tab" data-screen="create" onclick="showScreen('create')">Create Game</button>
+    <button class="proto-tab" data-screen="lobby" onclick="showScreen('lobby')">Lobby</button>
+    <button class="proto-tab" data-screen="prompt" onclick="showScreen('prompt')">Prompt</button>
+    <button class="proto-tab" data-screen="drawing" onclick="showScreen('drawing')">Drawing</button>
+    <button class="proto-tab" data-screen="guessing" onclick="showScreen('guessing')">Guessing</button>
+    <button class="proto-tab" data-screen="waiting" onclick="showScreen('waiting')">Waiting</button>
+    <button class="proto-tab" data-screen="transition" onclick="showScreen('transition')">Transition</button>
+    <button class="proto-tab" data-screen="review" onclick="showScreen('review')">Review</button>
+    <button class="proto-tab" data-screen="gameover" onclick="showScreen('gameover')">Game Over</button>
+  </div>
+</nav>
+
+
+<!-- ===== SCREEN: LANDING ===== -->
+<div class="screen active" id="screen-landing">
+  <div class="screen-content">
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100vh - 120px);">
+      <div class="logo" style="margin-bottom:var(--sp-12);">
+        <div class="logo-text">tele<span>strations</span></div>
+        <p class="logo-sub">Draw, guess, laugh together</p>
+      </div>
+
+      <div style="width:100%;max-width:340px;display:flex;flex-direction:column;gap:var(--sp-3);">
+        <button class="btn btn-primary btn-full" onclick="showScreen('create')" style="height:56px;font-size:1.125rem;">
+          <span class="icon"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
+          Create Game
+        </button>
+        <button class="btn btn-secondary btn-full" onclick="showScreen('join')" style="height:56px;font-size:1.125rem;">
+          <span class="icon"><svg viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg></span>
+          Join Game
+        </button>
+      </div>
+
+      <div class="footer-link">
+        <a href="#">How to play</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ===== SCREEN: JOIN GAME ===== -->
+<div class="screen" id="screen-join">
+  <div class="screen-content">
+    <div style="padding-top:var(--sp-8);">
+      <button class="btn btn-ghost btn-sm" onclick="showScreen('landing')" style="margin-bottom:var(--sp-6);">
+        <span class="icon"><svg viewBox="0 0 24 24"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg></span>
+        Back
+      </button>
+
+      <h1 style="margin-bottom:var(--sp-2);">Join Game</h1>
+      <p class="text-muted" style="margin-bottom:var(--sp-8);">Enter the code from your friend to join their game.</p>
+
+      <div class="card section-gap">
+        <div class="form-group">
+          <label class="form-label" for="join-code">Game Code</label>
+          <input type="text" id="join-code" class="form-input" placeholder="e.g. FROG" value="FROG" maxlength="4" style="text-transform:uppercase;letter-spacing:0.08em;font-weight:600;font-size:1.25rem;text-align:center;">
+          <p class="form-hint">4 letters, provided by the game host</p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="join-name">Your Name</label>
+          <input type="text" id="join-name" class="form-input" placeholder="Enter your display name" value="Alice" maxlength="16">
+          <p class="form-hint">2-16 characters</p>
+        </div>
+
+        <button class="btn btn-primary btn-full" onclick="showScreen('lobby')">Join Game</button>
+      </div>
+
+      <!-- Error state example -->
+      <div class="card" style="border-color:var(--error);background:var(--error-light);">
+        <p style="font-size:0.875rem;color:var(--error);font-weight:500;text-align:center;">
+          <span class="icon" style="vertical-align:-4px;margin-right:4px;color:var(--error);"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>
+          Game not found. Check your code and try again.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ===== SCREEN: CREATE GAME ===== -->
+<div class="screen" id="screen-create">
+  <div class="screen-content">
+    <div style="padding-top:var(--sp-8);">
+      <button class="btn btn-ghost btn-sm" onclick="showScreen('landing')" style="margin-bottom:var(--sp-6);">
+        <span class="icon"><svg viewBox="0 0 24 24"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg></span>
+        Back
+      </button>
+
+      <h1 style="margin-bottom:var(--sp-2);">Create Game</h1>
+      <p class="text-muted" style="margin-bottom:var(--sp-8);">Set up your game and invite friends to play.</p>
+
+      <div class="card section-gap">
+        <div class="form-group">
+          <label class="form-label" for="host-name">Your Name</label>
+          <input type="text" id="host-name" class="form-input" placeholder="Enter your display name" value="Charlie" maxlength="16">
+        </div>
+      </div>
+
+      <div class="card section-gap">
+        <h3 style="margin-bottom:var(--sp-4);">Settings</h3>
+
+        <div class="form-group">
+          <label class="form-label" for="draw-timer">Drawing Timer</label>
+          <select id="draw-timer" class="form-select">
+            <option value="30">30 seconds</option>
+            <option value="45">45 seconds</option>
+            <option value="60" selected>60 seconds</option>
+            <option value="90">90 seconds</option>
+            <option value="120">120 seconds</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="guess-timer">Guessing Timer</label>
+          <select id="guess-timer" class="form-select">
+            <option value="15">15 seconds</option>
+            <option value="20">20 seconds</option>
+            <option value="30" selected>30 seconds</option>
+            <option value="45">45 seconds</option>
+            <option value="60">60 seconds</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="prompt-timer">Prompt Timer</label>
+          <select id="prompt-timer" class="form-select">
+            <option value="15">15 seconds</option>
+            <option value="20">20 seconds</option>
+            <option value="30" selected>30 seconds</option>
+            <option value="45">45 seconds</option>
+            <option value="60">60 seconds</option>
+          </select>
+        </div>
+
+        <div style="border-top:1px solid var(--gray-100);padding-top:var(--sp-4);margin-top:var(--sp-2);">
+          <div class="toggle-row">
+            <div>
+              <div class="form-label" style="margin-bottom:2px;">Use All Rounds</div>
+              <p class="form-hint" style="margin-top:0;">Number of rounds equals players minus one</p>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" checked>
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn-primary btn-full" onclick="showScreen('lobby')" style="height:56px;font-size:1.125rem;">Create Game</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ===== SCREEN: LOBBY ===== -->
+<div class="screen" id="screen-lobby">
+  <div class="screen-content">
+    <div style="padding-top:var(--sp-6);">
+
+      <!-- Game Code -->
+      <div class="game-code-container section-gap">
+        <p style="font-size:0.75rem;font-weight:500;color:var(--primary-hover);opacity:0.7;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:var(--sp-2);">Game Code</p>
+        <div class="game-code">FROG</div>
+        <div style="display:flex;gap:var(--sp-2);justify-content:center;margin-top:var(--sp-4);">
+          <button class="btn btn-sm" style="background:var(--white);color:var(--primary-hover);border:1px solid var(--primary-light);">
+            <span class="icon"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span>
+            Copy
+          </button>
+          <button class="btn btn-sm" style="background:var(--white);color:var(--primary-hover);border:1px solid var(--primary-light);">
+            <span class="icon"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></span>
+            Share
+          </button>
+        </div>
+      </div>
+
+      <!-- Player List -->
+      <div class="card section-gap">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--sp-4);">
+          <h3>Players</h3>
+          <span class="text-sm text-muted">
+            <span style="font-weight:600;color:var(--success);">6</span> / 20
+          </span>
+        </div>
+
+        <ul class="player-list">
+          <li class="player-item">
+            <div class="player-info">
+              <span class="player-name">Charlie</span>
+              <span class="badge badge-host">HOST</span>
+              <span class="badge badge-you">YOU</span>
+            </div>
+            <span class="player-status">
+              <span class="icon status-check" style="color:var(--success);"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>
+            </span>
+          </li>
+          <li class="player-item">
+            <div class="player-info">
+              <span class="player-name">Alice</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:var(--sp-2);">
+              <span class="icon status-check" style="color:var(--success);"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <button class="player-remove" aria-label="Remove Alice">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+          </li>
+          <li class="player-item">
+            <div class="player-info">
+              <span class="player-name">Bob</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:var(--sp-2);">
+              <span class="icon status-check" style="color:var(--success);"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <button class="player-remove" aria-label="Remove Bob">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+          </li>
+          <li class="player-item">
+            <div class="player-info">
+              <span class="player-name">Diana</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:var(--sp-2);">
+              <span class="icon status-check" style="color:var(--success);"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <button class="player-remove" aria-label="Remove Diana">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+          </li>
+          <li class="player-item">
+            <div class="player-info">
+              <span class="player-name">Erik</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:var(--sp-2);">
+              <span class="icon status-check" style="color:var(--success);"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <button class="player-remove" aria-label="Remove Erik">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+          </li>
+          <li class="player-item">
+            <div class="player-info">
+              <span class="player-name disconnected">Faye</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:var(--sp-2);">
+              <span class="status-disconnected"></span>
+              <button class="player-remove" aria-label="Remove Faye">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Settings summary -->
+      <div class="card section-gap">
+        <h3 style="margin-bottom:var(--sp-4);">Settings</h3>
+        <div class="setting-row">
+          <span class="setting-label">Drawing Timer</span>
+          <span class="setting-value">60s</span>
+        </div>
+        <div class="setting-row">
+          <span class="setting-label">Guessing Timer</span>
+          <span class="setting-value">30s</span>
+        </div>
+        <div class="setting-row">
+          <span class="setting-label">Prompt Timer</span>
+          <span class="setting-value">30s</span>
+        </div>
+        <div class="setting-row">
+          <span class="setting-label">Rounds</span>
+          <span class="setting-value">All (5)</span>
+        </div>
+      </div>
+
+      <button class="btn btn-primary btn-full" onclick="showScreen('prompt')" style="height:56px;font-size:1.125rem;">
+        Start Game
+      </button>
+      <p class="text-caption text-muted text-center" style="margin-top:var(--sp-2);">Minimum 4 players required</p>
+    </div>
+  </div>
+</div>
+
+
+<!-- ===== SCREEN: PROMPT PHASE ===== -->
+<div class="screen" id="screen-prompt">
+  <div class="screen-content">
+    <div style="padding-top:var(--sp-6);">
+
+      <!-- Timer -->
+      <div style="text-align:center;margin-bottom:var(--sp-6);">
+        <div class="timer">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          0:24
+        </div>
+      </div>
+
+      <div class="round-info">
+        <span class="round-badge">Prompt Phase</span>
+        <span>Round 0</span>
+      </div>
+
+      <div class="instructions">
+        Write a word or phrase for someone to draw!
+      </div>
+
+      <div class="card">
+        <div class="form-group" style="margin-bottom:var(--sp-4);">
+          <label class="form-label" for="prompt-input">Your prompt</label>
+          <input type="text" id="prompt-input" class="form-input" placeholder="e.g. birthday party, flying elephant..." maxlength="80" value="A cat riding a skateboard" style="font-size:1.125rem;">
+          <p class="form-hint">1-80 characters</p>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="showScreen('waiting')">Submit</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ===== SCREEN: DRAWING PHASE ===== -->
+<div class="screen" id="screen-drawing">
+  <div class="screen-content">
+    <div style="padding-top:var(--sp-6);">
+
+      <!-- Timer -->
+      <div style="text-align:center;margin-bottom:var(--sp-4);">
+        <div class="timer timer-warning">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          0:08
+        </div>
+      </div>
+
+      <div class="round-info">
+        <span class="round-badge">Draw</span>
+        <span>Round 1 of 5</span>
+      </div>
+
+      <!-- Prompt to draw -->
+      <div class="prompt-display section-gap-sm">
+        "A cat riding a skateboard"
+      </div>
+
+      <!-- Canvas -->
+      <div class="canvas-wrapper section-gap-sm">
+        <div class="mock-drawing">
+          <div class="mock-drawing-content">
+            <!-- Simple mock drawing shapes -->
+            <div style="position:relative;width:120px;height:80px;">
+              <!-- Cat body -->
+              <div style="width:80px;height:50px;background:#6B7280;border-radius:50%;position:absolute;bottom:10px;left:20px;"></div>
+              <!-- Cat head -->
+              <div style="width:40px;height:35px;background:#6B7280;border-radius:50%;position:absolute;top:0;left:50px;"></div>
+              <!-- Ears -->
+              <div style="width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:14px solid #6B7280;position:absolute;top:-10px;left:50px;"></div>
+              <div style="width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:14px solid #6B7280;position:absolute;top:-10px;left:68px;"></div>
+              <!-- Skateboard -->
+              <div style="width:80px;height:6px;background:#EF4444;border-radius:3px;position:absolute;bottom:0;left:20px;"></div>
+              <div style="width:10px;height:10px;background:#1A1A1A;border-radius:50%;position:absolute;bottom:-6px;left:28px;"></div>
+              <div style="width:10px;height:10px;background:#1A1A1A;border-radius:50%;position:absolute;bottom:-6px;left:82px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Drawing Toolbar -->
+      <div class="drawing-toolbar section-gap-sm">
+        <!-- Tool group: Pen/Eraser -->
+        <div class="tool-group">
+          <button class="tool-btn active" aria-label="Pen tool">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+          </button>
+          <button class="tool-btn" aria-label="Eraser tool">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>
+          </button>
+        </div>
+
+        <span class="toolbar-sep"></span>
+
+        <!-- Size group -->
+        <div class="tool-group">
+          <button class="size-btn" aria-label="Small brush">
+            <span class="size-dot" style="width:6px;height:6px;"></span>
+          </button>
+          <button class="size-btn active" aria-label="Medium brush">
+            <span class="size-dot" style="width:10px;height:10px;"></span>
+          </button>
+          <button class="size-btn" aria-label="Large brush">
+            <span class="size-dot" style="width:16px;height:16px;"></span>
+          </button>
+        </div>
+
+        <span class="toolbar-sep"></span>
+
+        <!-- Undo/Redo/Clear -->
+        <div class="tool-group">
+          <button class="tool-btn" aria-label="Undo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+          </button>
+          <button class="tool-btn" aria-label="Redo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/></svg>
+          </button>
+          <button class="tool-btn" aria-label="Clear canvas">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Color Swatches -->
+      <div class="drawing-toolbar">
+        <div class="color-swatches">
+          <button class="color-swatch active" style="background:#1A1A1A;" aria-label="Black"></button>
+          <button class="color-swatch" style="background:#6B7280;" aria-label="Dark Gray"></button>
+          <button class="color-swatch" style="background:#EF4444;" aria-label="Red"></button>
+          <button class="color-swatch" style="background:#F97316;" aria-label="Orange"></button>
+          <button class="color-swatch" style="background:#FACC15;" aria-label="Yellow"></button>
+          <button class="color-swatch" style="background:#22C55E;" aria-label="Green"></button>
+          <button class="color-swatch" style="background:#38BDF8;" aria-label="Light Blue"></button>
+          <button class="color-swatch" style="background:#3B82F6;" aria-label="Dark Blue"></button>
+          <button class="color-swatch" style="background:#8B5CF6;" aria-label="Purple"></button>
+          <button class="color-swatch" style="background:#EC4899;" aria-label="Pink"></button>
+          <button class="color-swatch" style="background:#92400E;" aria-label="Brown"></button>
+          <button class="color-swatch color-swatch-white" style="background:#FFFFFF;" aria-label="White (eraser)"></button>
+        </div>
+      </div>
+
+      <div style="margin-top:var(--sp-4);">
+        <button class="btn btn-primary btn-full" onclick="showScreen('waiting')">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ===== SCREEN: GUESSING PHASE ===== -->
+<div class="screen" id="screen-guessing">
+  <div class="screen-content">
+    <div style="padding-top:var(--sp-6);">
+
+      <!-- Timer -->
+      <div style="text-align:center;margin-bottom:var(--sp-4);">
+        <div class="timer timer-critical">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          0:04
+        </div>
+      </div>
+
+      <div class="round-info">
+        <span class="round-badge">Guess</span>
+        <span>Round 2 of 5</span>
+      </div>
+
+      <p class="text-sm text-muted text-center section-gap-sm">What do you think this drawing is?</p>
+
+      <!-- Drawing display -->
+      <div class="canvas-wrapper section-gap-sm" style="border-radius:var(--radius-md);">
+        <div class="mock-drawing">
+          <div class="mock-drawing-content">
+            <div style="position:relative;width:120px;height:80px;">
+              <div style="width:80px;height:50px;background:#6B7280;border-radius:50%;position:absolute;bottom:10px;left:20px;"></div>
+              <div style="width:40px;height:35px;background:#6B7280;border-radius:50%;position:absolute;top:0;left:50px;"></div>
+              <div style="width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:14px solid #6B7280;position:absolute;top:-10px;left:50px;"></div>
+              <div style="width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:14px solid #6B7280;position:absolute;top:-10px;left:68px;"></div>
+              <div style="width:80px;height:6px;background:#EF4444;border-radius:3px;position:absolute;bottom:0;left:20px;"></div>
+              <div style="width:10px;height:10px;background:#1A1A1A;border-radius:50%;position:absolute;bottom:-6px;left:28px;"></div>
+              <div style="width:10px;height:10px;background:#1A1A1A;border-radius:50%;position:absolute;bottom:-6px;left:82px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Guess input -->
+      <div class="card">
+        <div class="form-group" style="margin-bottom:var(--sp-4);">
+          <label class="form-label" for="guess-input">Your guess</label>
+          <input type="text" id="guess-input" class="form-input" placeholder="Type your guess..." maxlength="80" value="Cat on a skateboard" style="font-size:1.125rem;">
+        </div>
+        <button class="btn btn-primary btn-full" onclick="showScreen('waiting')">Submit</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ===== SCREEN: WAITING FOR PLAYERS ===== -->
+<div class="screen" id="screen-waiting">
+  <div class="screen-content">
+    <div style="padding-top:var(--sp-6);">
+
+      <div style="text-align:center;margin-bottom:var(--sp-4);">
+        <div class="timer">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          0:18
+        </div>
+      </div>
+
+      <div class="waiting-state section-gap">
+        <div class="waiting-spinner"></div>
+        <h2 style="margin-bottom:var(--sp-2);">Waiting for other players...</h2>
+        <p class="text-sm text-muted">Your answer has been submitted</p>
+      </div>
+
+      <!-- Submission status list -->
+      <div class="card section-gap">
+        <h4 style="margin-bottom:var(--sp-3);">Submissions</h4>
+        <ul class="player-list">
+          <li class="player-item">
+            <div class="player-info">
+              <span class="player-name">Charlie</span>
+              <span class="badge badge-you">YOU</span>
+            </div>
+            <span class="icon" style="color:var(--success);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+          </li>
+          <li class="player-item">
+            <div class="player-info">
+              <span class="player-name">Alice</span>
+            </div>
+            <span class="icon" style="color:var(--success);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+          </li>
+          <li class="player-item">
+            <div class="player-info">
+              <span class="player-name">Bob</span>
+            </div>
+            <span class="icon" style="color:var(--success);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+          </li>
+          <li class="player-item">
+            <div class="player-info">
+              <span class="player-name">Diana</span>
+            </div>
+            <span class="icon" style="color:var(--gray-300);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg></span>
+          </li>
+          <li class="player-item">
+            <div class="player-info">
+              <span class="player-name">Erik</span>
+            </div>
+            <span class="icon" style="color:var(--gray-300);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg></span>
+          </li>
+          <li class="player-item">
+            <div class="player-info">
+              <span class="player-name disconnected">Faye</span>
+            </div>
+            <span class="status-disconnected"></span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Host-only: end round early -->
+      <button class="btn btn-secondary btn-full" onclick="showScreen('transition')">
+        End Round Early
+      </button>
+      <p class="text-caption text-muted text-center" style="margin-top:var(--sp-1);">Host only -- forces remaining submissions</p>
+    </div>
+  </div>
+</div>
+
+
+<!-- ===== SCREEN: ROUND TRANSITION ===== -->
+<div class="screen" id="screen-transition">
+  <div class="screen-content">
+    <div class="transition-screen">
+      <div>
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.6;">
+          <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+        </svg>
+      </div>
+      <div>
+        <h2 style="margin-bottom:var(--sp-2);color:var(--gray-700);">Round 1 complete!</h2>
+        <p class="text-muted" style="font-size:1.125rem;">Get ready to draw...</p>
+      </div>
+      <div class="transition-countdown">3</div>
+      <button class="btn btn-ghost btn-sm" onclick="showScreen('drawing')" style="margin-top:var(--sp-4);">(click to continue in prototype)</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ===== SCREEN: REVIEW PHASE ===== -->
+<div class="screen" id="screen-review">
+  <div class="screen-content wide" style="max-width:520px;">
+    <div style="padding-top:var(--sp-6);">
+
+      <div class="chain-header">
+        <p class="chain-indicator">Chain 1 of 6</p>
+        <h2 class="chain-title">Started by Charlie</h2>
+      </div>
+
+      <!-- Progress dots -->
+      <div class="progress-dots">
+        <span class="progress-dot filled"></span>
+        <span class="progress-dot filled"></span>
+        <span class="progress-dot filled"></span>
+        <span class="progress-dot current"></span>
+        <span class="progress-dot"></span>
+        <span class="progress-dot"></span>
+      </div>
+
+      <!-- Chain entries -->
+      <div style="display:flex;flex-direction:column;gap:0;">
+
+        <!-- Entry 1: Prompt -->
+        <div class="chain-entry" style="animation-delay:0ms;">
+          <div class="chain-entry-header">
+            <span class="chain-entry-type">Prompt</span>
+            <span class="chain-entry-author">Charlie</span>
+          </div>
+          <div class="chain-text-card">
+            A cat riding a skateboard
+          </div>
+        </div>
+
+        <!-- Connector -->
+        <div class="chain-connector">
+          <svg width="20" height="24" viewBox="0 0 20 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="10" y1="0" x2="10" y2="24"/><polyline points="6 18 10 24 14 18"/></svg>
+        </div>
+
+        <!-- Entry 2: Drawing -->
+        <div class="chain-entry" style="animation-delay:100ms;">
+          <div class="chain-entry-header">
+            <span class="chain-entry-type">Drawing</span>
+            <span class="chain-entry-author">Alice</span>
+          </div>
+          <div class="chain-drawing-card">
+            <div class="mock-drawing">
+              <div class="mock-drawing-content">
+                <div style="position:relative;width:120px;height:80px;">
+                  <div style="width:80px;height:50px;background:#6B7280;border-radius:50%;position:absolute;bottom:10px;left:20px;"></div>
+                  <div style="width:40px;height:35px;background:#6B7280;border-radius:50%;position:absolute;top:0;left:50px;"></div>
+                  <div style="width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:14px solid #6B7280;position:absolute;top:-10px;left:50px;"></div>
+                  <div style="width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:14px solid #6B7280;position:absolute;top:-10px;left:68px;"></div>
+                  <div style="width:80px;height:6px;background:#EF4444;border-radius:3px;position:absolute;bottom:0;left:20px;"></div>
+                  <div style="width:10px;height:10px;background:#1A1A1A;border-radius:50%;position:absolute;bottom:-6px;left:28px;"></div>
+                  <div style="width:10px;height:10px;background:#1A1A1A;border-radius:50%;position:absolute;bottom:-6px;left:82px;"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Connector -->
+        <div class="chain-connector">
+          <svg width="20" height="24" viewBox="0 0 20 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="10" y1="0" x2="10" y2="24"/><polyline points="6 18 10 24 14 18"/></svg>
+        </div>
+
+        <!-- Entry 3: Guess -->
+        <div class="chain-entry" style="animation-delay:200ms;">
+          <div class="chain-entry-header">
+            <span class="chain-entry-type">Guess</span>
+            <span class="chain-entry-author">Bob</span>
+          </div>
+          <div class="chain-text-card">
+            Cat on a skateboard
+          </div>
+        </div>
+
+        <!-- Connector -->
+        <div class="chain-connector">
+          <svg width="20" height="24" viewBox="0 0 20 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="10" y1="0" x2="10" y2="24"/><polyline points="6 18 10 24 14 18"/></svg>
+        </div>
+
+        <!-- Entry 4: Drawing -->
+        <div class="chain-entry" style="animation-delay:300ms;">
+          <div class="chain-entry-header">
+            <span class="chain-entry-type">Drawing</span>
+            <span class="chain-entry-author">Diana</span>
+          </div>
+          <div class="chain-drawing-card">
+            <div class="mock-drawing">
+              <div class="mock-drawing-content">
+                <div style="position:relative;width:100px;height:90px;">
+                  <!-- A more abstracted cat -->
+                  <div style="width:60px;height:40px;background:#F97316;border-radius:50%;position:absolute;bottom:16px;left:20px;"></div>
+                  <div style="width:30px;height:28px;background:#F97316;border-radius:50%;position:absolute;top:0;left:40px;"></div>
+                  <!-- Eyes -->
+                  <div style="width:4px;height:4px;background:#1A1A1A;border-radius:50%;position:absolute;top:10px;left:48px;"></div>
+                  <div style="width:4px;height:4px;background:#1A1A1A;border-radius:50%;position:absolute;top:10px;left:60px;"></div>
+                  <!-- Board -->
+                  <div style="width:70px;height:5px;background:#3B82F6;border-radius:3px;position:absolute;bottom:6px;left:16px;"></div>
+                  <div style="width:8px;height:8px;background:#1A1A1A;border-radius:50%;position:absolute;bottom:0;left:22px;"></div>
+                  <div style="width:8px;height:8px;background:#1A1A1A;border-radius:50%;position:absolute;bottom:0;left:72px;"></div>
+                  <!-- Tail -->
+                  <div style="width:30px;height:3px;background:#F97316;border-radius:2px;position:absolute;top:30px;left:-4px;transform:rotate(-30deg);"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Host controls -->
+      <div class="host-controls">
+        <button class="btn btn-secondary">
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></span>
+          Previous
+        </button>
+        <button class="btn btn-primary" onclick="showScreen('gameover')">
+          Next
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
+        </button>
+      </div>
+      <p class="text-caption text-muted text-center">Host controls -- all players see the same view</p>
+    </div>
+  </div>
+</div>
+
+
+<!-- ===== SCREEN: GAME OVER ===== -->
+<div class="screen" id="screen-gameover">
+  <div class="screen-content">
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100vh - 120px);">
+
+      <div style="margin-bottom:var(--sp-12);text-align:center;">
+        <!-- Celebration icon -->
+        <div style="width:80px;height:80px;margin:0 auto var(--sp-6);background:var(--primary-tint);border-radius:50%;display:flex;align-items:center;justify-content:center;">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 9l6 6 6-6"/>
+            <path d="M12 3v12"/>
+            <path d="M5 21h14"/>
+            <path d="m15 3 3 3-3 3"/>
+            <path d="m9 3-3 3 3 3"/>
+          </svg>
+        </div>
+        <h1 class="game-over-header">Game Over!</h1>
+        <p class="game-over-sub">Thanks for playing! That was hilarious.</p>
+      </div>
+
+      <div style="width:100%;max-width:340px;display:flex;flex-direction:column;gap:var(--sp-3);">
+        <button class="btn btn-primary btn-full" style="height:56px;font-size:1.125rem;">
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></span>
+          Play Again
+        </button>
+        <p class="text-caption text-muted text-center" style="margin-top:-4px;">Host only -- creates a new game with same players</p>
+
+        <button class="btn btn-secondary btn-full">
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
+          Download Results
+        </button>
+
+        <button class="btn btn-ghost btn-full" onclick="showScreen('landing')">
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
+          Home
+        </button>
+      </div>
+
+      <p class="text-caption text-muted" style="margin-top:var(--sp-8);">Results available for download for 10 minutes</p>
+    </div>
+  </div>
+</div>
+
+
+<!-- ===== TOAST DEMO ===== -->
+<div class="toast" id="toast-demo" style="display:none;">
+  Time's up! A random prompt was assigned.
+</div>
+
+
+<!-- ===== CLEAR CANVAS MODAL (positioned off-screen, shown in drawing) ===== -->
+<!--
+<div class="modal-backdrop">
+  <div class="modal-card">
+    <h3>Clear canvas?</h3>
+    <p>This will erase your entire drawing. This cannot be undone.</p>
+    <div class="modal-actions">
+      <button class="btn btn-secondary btn-sm">Cancel</button>
+      <button class="btn btn-danger btn-sm">Clear</button>
+    </div>
+  </div>
+</div>
+-->
+
+
+<script>
+function showScreen(name) {
+  // Hide all screens
+  document.querySelectorAll('.screen').forEach(function(s) {
+    s.classList.remove('active');
+  });
+  // Deactivate all tabs
+  document.querySelectorAll('.proto-tab').forEach(function(t) {
+    t.classList.remove('active');
+  });
+  // Show target screen
+  var screen = document.getElementById('screen-' + name);
+  if (screen) {
+    screen.classList.add('active');
+  }
+  // Activate target tab
+  var tab = document.querySelector('.proto-tab[data-screen="' + name + '"]');
+  if (tab) {
+    tab.classList.add('active');
+    // Scroll tab into view
+    tab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  }
+  // Scroll page to top
+  window.scrollTo(0, 0);
+}
+
+// Color swatch selection
+document.querySelectorAll('.color-swatch').forEach(function(swatch) {
+  swatch.addEventListener('click', function() {
+    document.querySelectorAll('.color-swatch').forEach(function(s) {
+      s.classList.remove('active');
+    });
+    this.classList.add('active');
+  });
+});
+
+// Tool button selection (pen/eraser)
+document.querySelectorAll('.tool-group').forEach(function(group) {
+  var toolBtns = group.querySelectorAll('.tool-btn');
+  if (toolBtns.length > 0) {
+    toolBtns.forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        toolBtns.forEach(function(b) { b.classList.remove('active'); });
+        this.classList.add('active');
+      });
+    });
+  }
+});
+
+// Size button selection
+document.querySelectorAll('.size-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.size-btn').forEach(function(b) { b.classList.remove('active'); });
+    this.classList.add('active');
+  });
+});
+</script>
+
+</body>
+</html>

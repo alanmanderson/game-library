@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Telestrations -- Review Screen Redesign</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ===== RESET & BASE ===== */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  color: #0B0F1A;
+  background: #F3F4F6;
+  line-height: 1.5;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ===== DESIGN TOKENS ===== */
+:root {
+  /* Primary */
+  --primary: #6366F1;
+  --primary-hover: #4F46E5;
+  --primary-active: #4338CA;
+  --primary-tint: #EEF2FF;
+  --primary-light: #E0E7FF;
+
+  /* Neutrals */
+  --gray-950: #0B0F1A;
+  --gray-700: #374151;
+  --gray-500: #6B7280;
+  --gray-300: #D1D5DB;
+  --gray-200: #E5E7EB;
+  --gray-100: #F3F4F6;
+  --gray-50: #F9FAFB;
+  --white: #FFFFFF;
+
+  /* Semantic */
+  --success: #22C55E;
+  --success-light: #F0FDF4;
+  --warning: #F59E0B;
+  --warning-light: #FFFBEB;
+  --error: #EF4444;
+  --error-light: #FEF2F2;
+
+  /* Spacing */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-xs: 0 1px 2px rgba(0,0,0,0.05);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
+  --shadow-lg: 0 12px 32px rgba(0,0,0,0.12), 0 4px 8px rgba(0,0,0,0.06);
+}
+
+/* ===== TYPOGRAPHY ===== */
+h1 { font-size: 2rem; font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; }
+h2 { font-size: 1.5rem; font-weight: 700; line-height: 1.3; letter-spacing: -0.01em; }
+h3 { font-size: 1.25rem; font-weight: 600; line-height: 1.4; letter-spacing: -0.01em; }
+h4 { font-size: 1rem; font-weight: 600; line-height: 1.5; }
+.text-body { font-size: 1rem; font-weight: 400; line-height: 1.5; }
+.text-sm { font-size: 0.875rem; font-weight: 400; line-height: 1.5; }
+.text-caption { font-size: 0.75rem; font-weight: 500; line-height: 1.4; letter-spacing: 0.02em; }
+.text-muted { color: var(--gray-500); }
+.text-center { text-align: center; }
+
+/* ===== VARIANT TABS (top of page, host vs non-host) ===== */
+.variant-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: var(--white);
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.variant-nav-inner {
+  display: flex;
+  align-items: center;
+  padding: var(--sp-2) var(--sp-4);
+  gap: var(--sp-2);
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.variant-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--gray-300);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  user-select: none;
+  margin-right: var(--sp-1);
+}
+
+.variant-tab {
+  display: inline-block;
+  padding: var(--sp-2) var(--sp-3);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--gray-500);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 150ms ease;
+  font-family: inherit;
+}
+.variant-tab:hover { color: var(--gray-700); background: var(--gray-50); }
+.variant-tab.active {
+  color: var(--primary);
+  background: var(--primary-tint);
+  border-color: var(--primary-light);
+}
+
+.variant-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--gray-200);
+  flex-shrink: 0;
+  margin: 0 var(--sp-1);
+}
+
+.scenario-select {
+  margin-left: auto;
+  padding: var(--sp-1) var(--sp-2);
+  font-size: 0.75rem;
+  font-family: inherit;
+  font-weight: 500;
+  color: var(--gray-700);
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  outline: none;
+}
+.scenario-select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+/* ===== SCREEN CONTAINER ===== */
+.screen {
+  display: none;
+  min-height: 100vh;
+  padding: 56px var(--sp-4) 96px; /* top for nav, bottom for sticky bar */
+}
+.screen.active { display: block; }
+
+.screen-content {
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+/* ===== CHAIN HEADER ===== */
+.chain-header {
+  text-align: center;
+  margin-bottom: var(--sp-4);
+  padding-top: var(--sp-6);
+}
+
+.chain-indicator {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--gray-500);
+  margin-bottom: var(--sp-1);
+}
+
+.chain-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--gray-950);
+}
+
+/* ===== ENTRY PROGRESS ===== */
+.entry-progress {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-6);
+}
+
+.progress-dots {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.progress-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gray-200);
+  transition: all 200ms ease;
+}
+.progress-dot.filled { background: var(--primary); }
+.progress-dot.current {
+  background: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.progress-fraction {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--gray-500);
+  letter-spacing: 0.02em;
+}
+
+/* ===== CHAIN ENTRIES ===== */
+.chain-entries {
+  display: flex;
+  flex-direction: column;
+}
+
+.chain-entry {
+  animation: fadeSlideIn 300ms ease-out both;
+}
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.chain-entry-header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+
+.chain-entry-author {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--gray-500);
+}
+
+.chain-entry-type {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--gray-500);
+  background: var(--gray-100);
+  padding: 2px var(--sp-2);
+  border-radius: var(--radius-full);
+}
+
+.chain-text-card {
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  padding: var(--sp-8) var(--sp-6);
+  text-align: center;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--gray-950);
+}
+
+.chain-drawing-card {
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  aspect-ratio: 1;
+}
+
+.chain-connector {
+  display: flex;
+  justify-content: center;
+  padding: var(--sp-2) 0;
+  color: var(--gray-300);
+}
+
+/* Mock drawing placeholder */
+.mock-drawing {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--white);
+}
+.mock-drawing-content {
+  width: 60%;
+  height: 60%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-4);
+}
+
+/* ===== NON-HOST MESSAGE ===== */
+.non-host-msg {
+  text-align: center;
+  padding: var(--sp-4) var(--sp-6);
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  margin-top: var(--sp-4);
+  margin-bottom: var(--sp-4);
+}
+.non-host-msg p {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--gray-500);
+}
+.non-host-msg .icon {
+  color: var(--gray-300);
+  margin-bottom: var(--sp-2);
+}
+
+/* ===== STICKY BOTTOM BAR ===== */
+.review-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: var(--white);
+  border-top: 1px solid var(--gray-200);
+  box-shadow: 0 -4px 12px rgba(0,0,0,0.06);
+}
+
+.review-bar-inner {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: var(--sp-3) var(--sp-4);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+/* The 4 nav buttons */
+.review-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: var(--sp-2) var(--sp-3);
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-family: inherit;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 100ms ease-in-out;
+  border: none;
+  text-decoration: none;
+  line-height: 1.2;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
+}
+.review-btn:active:not(:disabled) { transform: scale(0.97); }
+.review-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+.review-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.4);
+}
+
+/* Entry-level buttons (inner pair) -- primary style */
+.review-btn-entry {
+  background: var(--primary);
+  color: var(--white);
+  flex: 1;
+  min-width: 0;
+}
+.review-btn-entry:hover:not(:disabled) { background: var(--primary-hover); }
+.review-btn-entry:active:not(:disabled) { background: var(--primary-active); }
+
+/* Chain-level buttons (outer pair) -- secondary/ghost style */
+.review-btn-chain {
+  background: var(--white);
+  color: var(--gray-700);
+  border: 1px solid var(--gray-300);
+}
+.review-btn-chain:hover:not(:disabled) { background: var(--gray-50); }
+.review-btn-chain:active:not(:disabled) { background: var(--gray-100); }
+
+/* Finish Game button -- replaces last chain btn on last chain */
+.review-btn-finish {
+  background: var(--success);
+  color: var(--white);
+  border: none;
+  flex-shrink: 0;
+}
+.review-btn-finish:hover:not(:disabled) { background: #16A34A; }
+.review-btn-finish:active:not(:disabled) { background: #15803D; }
+
+/* Button text hidden on mobile, shown on wider screens */
+.review-btn-text {
+  display: none;
+}
+
+@media (min-width: 480px) {
+  .review-btn-text {
+    display: inline;
+  }
+  .review-btn {
+    padding: var(--sp-2) var(--sp-4);
+  }
+}
+
+/* Icon within buttons */
+.review-btn .icon svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+
+/* ===== ICON UTILITY ===== */
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.icon svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+
+/* ===== REDUCED MOTION ===== */
+@media (prefers-reduced-motion: reduce) {
+  .chain-entry {
+    animation: fadeOnly 150ms ease-out both;
+  }
+  @keyframes fadeOnly {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  .review-btn:active:not(:disabled) {
+    transform: none;
+  }
+}
+
+/* ===== RESPONSIVE ===== */
+@media (min-width: 640px) {
+  .screen-content { padding: 0 var(--sp-4); }
+  .chain-text-card { padding: var(--sp-8); }
+}
+
+@media (min-width: 1024px) {
+  .screen-content { max-width: 640px; }
+  .review-bar-inner { max-width: 640px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ===== VARIANT NAVIGATION (switch between host / non-host / scenarios) ===== -->
+<nav class="variant-nav" role="navigation" aria-label="Prototype variants">
+  <div class="variant-nav-inner">
+    <span class="variant-label">View:</span>
+    <button class="variant-tab active" data-variant="host" onclick="showVariant('host')">Host</button>
+    <button class="variant-tab" data-variant="nonhost" onclick="showVariant('nonhost')">Non-Host</button>
+    <span class="variant-sep"></span>
+    <select class="scenario-select" id="scenario-select" onchange="applyScenario(this.value)" aria-label="Choose scenario">
+      <option value="mid-chain">Mid-chain (entry 3 of 5)</option>
+      <option value="first-entry">First entry of chain</option>
+      <option value="last-entry">Last entry of chain</option>
+      <option value="last-chain">Last chain (Finish Game)</option>
+    </select>
+  </div>
+</nav>
+
+
+<!-- ===== HOST VIEW ===== -->
+<div class="screen active" id="screen-host">
+  <div class="screen-content">
+
+    <!-- Chain indicator + title -->
+    <div class="chain-header" id="host-chain-header">
+      <p class="chain-indicator" id="host-chain-indicator">Chain 3 of 6</p>
+      <h2 class="chain-title" id="host-chain-title">Started by Alice</h2>
+    </div>
+
+    <!-- Entry progress -->
+    <div class="entry-progress" id="host-entry-progress">
+      <div class="progress-dots" id="host-progress-dots">
+        <span class="progress-dot filled"></span>
+        <span class="progress-dot filled"></span>
+        <span class="progress-dot current"></span>
+        <span class="progress-dot"></span>
+        <span class="progress-dot"></span>
+      </div>
+      <span class="progress-fraction" id="host-progress-fraction">Entry 3 of 5</span>
+    </div>
+
+    <!-- Chain entries container -->
+    <div class="chain-entries" id="host-chain-entries">
+
+      <!-- Entry 1: Prompt -->
+      <div class="chain-entry" style="animation-delay: 0ms;">
+        <div class="chain-entry-header">
+          <span class="chain-entry-type">Prompt</span>
+          <span class="chain-entry-author">Alice</span>
+        </div>
+        <div class="chain-text-card">
+          A cat riding a skateboard
+        </div>
+      </div>
+
+      <!-- Connector -->
+      <div class="chain-connector">
+        <svg width="20" height="24" viewBox="0 0 20 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="10" y1="0" x2="10" y2="24"/>
+          <polyline points="6 18 10 24 14 18"/>
+        </svg>
+      </div>
+
+      <!-- Entry 2: Drawing -->
+      <div class="chain-entry" style="animation-delay: 100ms;">
+        <div class="chain-entry-header">
+          <span class="chain-entry-type">Drawing</span>
+          <span class="chain-entry-author">Bob</span>
+        </div>
+        <div class="chain-drawing-card">
+          <div class="mock-drawing">
+            <div class="mock-drawing-content">
+              <div style="position:relative;width:120px;height:80px;">
+                <div style="width:80px;height:50px;background:#6B7280;border-radius:50%;position:absolute;bottom:10px;left:20px;"></div>
+                <div style="width:40px;height:35px;background:#6B7280;border-radius:50%;position:absolute;top:0;left:50px;"></div>
+                <div style="width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:14px solid #6B7280;position:absolute;top:-10px;left:50px;"></div>
+                <div style="width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:14px solid #6B7280;position:absolute;top:-10px;left:68px;"></div>
+                <div style="width:80px;height:6px;background:#EF4444;border-radius:3px;position:absolute;bottom:0;left:20px;"></div>
+                <div style="width:10px;height:10px;background:#1A1A1A;border-radius:50%;position:absolute;bottom:-6px;left:28px;"></div>
+                <div style="width:10px;height:10px;background:#1A1A1A;border-radius:50%;position:absolute;bottom:-6px;left:82px;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Connector -->
+      <div class="chain-connector">
+        <svg width="20" height="24" viewBox="0 0 20 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="10" y1="0" x2="10" y2="24"/>
+          <polyline points="6 18 10 24 14 18"/>
+        </svg>
+      </div>
+
+      <!-- Entry 3: Guess (current) -->
+      <div class="chain-entry" style="animation-delay: 200ms;">
+        <div class="chain-entry-header">
+          <span class="chain-entry-type">Guess</span>
+          <span class="chain-entry-author">Charlie</span>
+        </div>
+        <div class="chain-text-card">
+          Cat on a skateboard
+        </div>
+      </div>
+
+    </div>
+    <!-- End chain entries -->
+
+    <!-- Spacer for host controls caption -->
+    <p class="text-caption text-muted text-center" style="margin-top: var(--sp-4); padding-bottom: var(--sp-2);">Host controls -- all players see the same view</p>
+
+  </div>
+</div>
+
+
+<!-- ===== NON-HOST VIEW ===== -->
+<div class="screen" id="screen-nonhost">
+  <div class="screen-content">
+
+    <!-- Chain indicator + title -->
+    <div class="chain-header">
+      <p class="chain-indicator" id="nonhost-chain-indicator">Chain 3 of 6</p>
+      <h2 class="chain-title" id="nonhost-chain-title">Started by Alice</h2>
+    </div>
+
+    <!-- Entry progress -->
+    <div class="entry-progress" id="nonhost-entry-progress">
+      <div class="progress-dots" id="nonhost-progress-dots">
+        <span class="progress-dot filled"></span>
+        <span class="progress-dot filled"></span>
+        <span class="progress-dot current"></span>
+        <span class="progress-dot"></span>
+        <span class="progress-dot"></span>
+      </div>
+      <span class="progress-fraction" id="nonhost-progress-fraction">Entry 3 of 5</span>
+    </div>
+
+    <!-- Chain entries (same content, non-host sees it) -->
+    <div class="chain-entries">
+
+      <div class="chain-entry" style="animation-delay: 0ms;">
+        <div class="chain-entry-header">
+          <span class="chain-entry-type">Prompt</span>
+          <span class="chain-entry-author">Alice</span>
+        </div>
+        <div class="chain-text-card">
+          A cat riding a skateboard
+        </div>
+      </div>
+
+      <div class="chain-connector">
+        <svg width="20" height="24" viewBox="0 0 20 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="10" y1="0" x2="10" y2="24"/>
+          <polyline points="6 18 10 24 14 18"/>
+        </svg>
+      </div>
+
+      <div class="chain-entry" style="animation-delay: 100ms;">
+        <div class="chain-entry-header">
+          <span class="chain-entry-type">Drawing</span>
+          <span class="chain-entry-author">Bob</span>
+        </div>
+        <div class="chain-drawing-card">
+          <div class="mock-drawing">
+            <div class="mock-drawing-content">
+              <div style="position:relative;width:120px;height:80px;">
+                <div style="width:80px;height:50px;background:#6B7280;border-radius:50%;position:absolute;bottom:10px;left:20px;"></div>
+                <div style="width:40px;height:35px;background:#6B7280;border-radius:50%;position:absolute;top:0;left:50px;"></div>
+                <div style="width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:14px solid #6B7280;position:absolute;top:-10px;left:50px;"></div>
+                <div style="width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:14px solid #6B7280;position:absolute;top:-10px;left:68px;"></div>
+                <div style="width:80px;height:6px;background:#EF4444;border-radius:3px;position:absolute;bottom:0;left:20px;"></div>
+                <div style="width:10px;height:10px;background:#1A1A1A;border-radius:50%;position:absolute;bottom:-6px;left:28px;"></div>
+                <div style="width:10px;height:10px;background:#1A1A1A;border-radius:50%;position:absolute;bottom:-6px;left:82px;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="chain-connector">
+        <svg width="20" height="24" viewBox="0 0 20 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="10" y1="0" x2="10" y2="24"/>
+          <polyline points="6 18 10 24 14 18"/>
+        </svg>
+      </div>
+
+      <div class="chain-entry" style="animation-delay: 200ms;">
+        <div class="chain-entry-header">
+          <span class="chain-entry-type">Guess</span>
+          <span class="chain-entry-author">Charlie</span>
+        </div>
+        <div class="chain-text-card">
+          Cat on a skateboard
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Non-host message -->
+    <div class="non-host-msg">
+      <div class="icon" style="margin-bottom: var(--sp-2);">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+      </div>
+      <p>Host is controlling the review</p>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ===== STICKY BOTTOM BAR (host only) ===== -->
+<div class="review-bar" id="review-bar">
+  <div class="review-bar-inner">
+
+    <!-- 1. Prev Chain -->
+    <button class="review-btn review-btn-chain" id="btn-prev-chain" aria-label="Previous chain" onclick="prevChain()">
+      <span class="icon">
+        <svg viewBox="0 0 24 24">
+          <polyline points="11 17 6 12 11 7"/>
+          <polyline points="18 17 13 12 18 7"/>
+        </svg>
+      </span>
+      <span class="review-btn-text">Prev Chain</span>
+    </button>
+
+    <!-- 2. Prev (entry) -->
+    <button class="review-btn review-btn-entry" id="btn-prev-entry" aria-label="Previous entry" onclick="prevEntry()">
+      <span class="icon">
+        <svg viewBox="0 0 24 24">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+      </span>
+      <span class="review-btn-text">Prev</span>
+    </button>
+
+    <!-- 3. Next (entry) -->
+    <button class="review-btn review-btn-entry" id="btn-next-entry" aria-label="Next entry" onclick="nextEntry()">
+      <span class="review-btn-text">Next</span>
+      <span class="icon">
+        <svg viewBox="0 0 24 24">
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+      </span>
+    </button>
+
+    <!-- 4. Next Chain (or Finish Game) -->
+    <button class="review-btn review-btn-chain" id="btn-next-chain" aria-label="Next chain" onclick="nextChain()">
+      <span class="review-btn-text" id="next-chain-text">Next Chain</span>
+      <span class="icon" id="next-chain-icon">
+        <svg viewBox="0 0 24 24">
+          <polyline points="13 17 18 12 13 7"/>
+          <polyline points="6 17 11 12 6 7"/>
+        </svg>
+      </span>
+    </button>
+
+  </div>
+</div>
+
+
+<script>
+// ===== STATE =====
+var state = {
+  variant: 'host',    // 'host' or 'nonhost'
+  chain: 3,           // 1-indexed
+  totalChains: 6,
+  entry: 3,           // 1-indexed, which entry is currently revealed
+  totalEntries: 5,
+  chainStarters: ['Charlie', 'Bob', 'Alice', 'Diana', 'Erik', 'Faye'],
+  // Entry data for display
+  entries: [
+    { type: 'Prompt', author: 'Alice', content: 'text', text: 'A cat riding a skateboard' },
+    { type: 'Drawing', author: 'Bob', content: 'drawing' },
+    { type: 'Guess', author: 'Charlie', content: 'text', text: 'Cat on a skateboard' },
+    { type: 'Drawing', author: 'Diana', content: 'drawing2' },
+    { type: 'Guess', author: 'Erik', content: 'text', text: 'Kitten doing tricks' }
+  ]
+};
+
+// ===== SCENARIOS =====
+function applyScenario(scenario) {
+  switch (scenario) {
+    case 'mid-chain':
+      state.chain = 3;
+      state.entry = 3;
+      break;
+    case 'first-entry':
+      state.chain = 2;
+      state.entry = 1;
+      break;
+    case 'last-entry':
+      state.chain = 4;
+      state.entry = 5;
+      break;
+    case 'last-chain':
+      state.chain = 6;
+      state.entry = 4;
+      break;
+  }
+  render();
+}
+
+// ===== VARIANT SWITCHING =====
+function showVariant(variant) {
+  state.variant = variant;
+  document.querySelectorAll('.variant-tab').forEach(function(t) { t.classList.remove('active'); });
+  document.querySelector('.variant-tab[data-variant="' + variant + '"]').classList.add('active');
+  render();
+}
+
+// ===== NAVIGATION =====
+function prevChain() {
+  if (state.chain > 1) {
+    state.chain--;
+    state.entry = 1;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    render();
+  }
+}
+
+function nextChain() {
+  if (state.chain < state.totalChains) {
+    state.chain++;
+    state.entry = 1;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    render();
+  }
+  // If on last chain, "Finish Game" would end the game
+}
+
+function prevEntry() {
+  if (state.entry > 1) {
+    state.entry--;
+    render();
+  }
+}
+
+function nextEntry() {
+  if (state.entry < state.totalEntries) {
+    state.entry++;
+    render();
+  }
+}
+
+// ===== RENDER =====
+function render() {
+  var isHost = state.variant === 'host';
+
+  // Show/hide screens
+  document.getElementById('screen-host').classList.toggle('active', isHost);
+  document.getElementById('screen-nonhost').classList.toggle('active', !isHost);
+
+  // Show/hide review bar (host only)
+  document.getElementById('review-bar').style.display = isHost ? 'block' : 'none';
+
+  // Update chain header for both views
+  var chainIndicatorText = 'Chain ' + state.chain + ' of ' + state.totalChains;
+  var starter = state.chainStarters[state.chain - 1];
+  var chainTitleText = 'Started by ' + starter;
+
+  document.getElementById('host-chain-indicator').textContent = chainIndicatorText;
+  document.getElementById('host-chain-title').textContent = chainTitleText;
+  document.getElementById('nonhost-chain-indicator').textContent = chainIndicatorText;
+  document.getElementById('nonhost-chain-title').textContent = chainTitleText;
+
+  // Update progress dots and fraction for both views
+  renderProgressDots('host-progress-dots', state.entry, state.totalEntries);
+  renderProgressDots('nonhost-progress-dots', state.entry, state.totalEntries);
+
+  var fractionText = 'Entry ' + state.entry + ' of ' + state.totalEntries;
+  document.getElementById('host-progress-fraction').textContent = fractionText;
+  document.getElementById('nonhost-progress-fraction').textContent = fractionText;
+
+  // Update chain entries (build the visible ones)
+  renderEntries('host-chain-entries');
+
+  // Update buttons
+  renderButtons();
+}
+
+function renderProgressDots(containerId, current, total) {
+  var container = document.getElementById(containerId);
+  var html = '';
+  for (var i = 1; i <= total; i++) {
+    if (i < current) {
+      html += '<span class="progress-dot filled"></span>';
+    } else if (i === current) {
+      html += '<span class="progress-dot current"></span>';
+    } else {
+      html += '<span class="progress-dot"></span>';
+    }
+  }
+  container.innerHTML = html;
+}
+
+function renderEntries(containerId) {
+  var container = document.getElementById(containerId);
+  var html = '';
+
+  for (var i = 0; i < state.entry; i++) {
+    var e = state.entries[i];
+
+    // Connector between entries
+    if (i > 0) {
+      html += '<div class="chain-connector">';
+      html += '<svg width="20" height="24" viewBox="0 0 20 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">';
+      html += '<line x1="10" y1="0" x2="10" y2="24"/>';
+      html += '<polyline points="6 18 10 24 14 18"/>';
+      html += '</svg></div>';
+    }
+
+    html += '<div class="chain-entry" style="animation-delay: ' + (i * 100) + 'ms;">';
+    html += '<div class="chain-entry-header">';
+    html += '<span class="chain-entry-type">' + e.type + '</span>';
+    html += '<span class="chain-entry-author">' + e.author + '</span>';
+    html += '</div>';
+
+    if (e.content === 'text') {
+      html += '<div class="chain-text-card">' + e.text + '</div>';
+    } else if (e.content === 'drawing') {
+      html += renderDrawing1();
+    } else if (e.content === 'drawing2') {
+      html += renderDrawing2();
+    }
+
+    html += '</div>';
+  }
+
+  container.innerHTML = html;
+}
+
+function renderDrawing1() {
+  return '<div class="chain-drawing-card"><div class="mock-drawing"><div class="mock-drawing-content">'
+    + '<div style="position:relative;width:120px;height:80px;">'
+    + '<div style="width:80px;height:50px;background:#6B7280;border-radius:50%;position:absolute;bottom:10px;left:20px;"></div>'
+    + '<div style="width:40px;height:35px;background:#6B7280;border-radius:50%;position:absolute;top:0;left:50px;"></div>'
+    + '<div style="width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:14px solid #6B7280;position:absolute;top:-10px;left:50px;"></div>'
+    + '<div style="width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:14px solid #6B7280;position:absolute;top:-10px;left:68px;"></div>'
+    + '<div style="width:80px;height:6px;background:#EF4444;border-radius:3px;position:absolute;bottom:0;left:20px;"></div>'
+    + '<div style="width:10px;height:10px;background:#1A1A1A;border-radius:50%;position:absolute;bottom:-6px;left:28px;"></div>'
+    + '<div style="width:10px;height:10px;background:#1A1A1A;border-radius:50%;position:absolute;bottom:-6px;left:82px;"></div>'
+    + '</div></div></div></div>';
+}
+
+function renderDrawing2() {
+  return '<div class="chain-drawing-card"><div class="mock-drawing"><div class="mock-drawing-content">'
+    + '<div style="position:relative;width:100px;height:90px;">'
+    + '<div style="width:60px;height:40px;background:#F97316;border-radius:50%;position:absolute;bottom:16px;left:20px;"></div>'
+    + '<div style="width:30px;height:28px;background:#F97316;border-radius:50%;position:absolute;top:0;left:40px;"></div>'
+    + '<div style="width:4px;height:4px;background:#1A1A1A;border-radius:50%;position:absolute;top:10px;left:48px;"></div>'
+    + '<div style="width:4px;height:4px;background:#1A1A1A;border-radius:50%;position:absolute;top:10px;left:60px;"></div>'
+    + '<div style="width:70px;height:5px;background:#3B82F6;border-radius:3px;position:absolute;bottom:6px;left:16px;"></div>'
+    + '<div style="width:8px;height:8px;background:#1A1A1A;border-radius:50%;position:absolute;bottom:0;left:22px;"></div>'
+    + '<div style="width:8px;height:8px;background:#1A1A1A;border-radius:50%;position:absolute;bottom:0;left:72px;"></div>'
+    + '<div style="width:30px;height:3px;background:#F97316;border-radius:2px;position:absolute;top:30px;left:-4px;transform:rotate(-30deg);"></div>'
+    + '</div></div></div></div>';
+}
+
+function renderButtons() {
+  var btnPrevChain = document.getElementById('btn-prev-chain');
+  var btnPrevEntry = document.getElementById('btn-prev-entry');
+  var btnNextEntry = document.getElementById('btn-next-entry');
+  var btnNextChain = document.getElementById('btn-next-chain');
+  var nextChainText = document.getElementById('next-chain-text');
+  var nextChainIcon = document.getElementById('next-chain-icon');
+
+  // Prev Chain: disabled on first chain
+  btnPrevChain.disabled = (state.chain <= 1);
+
+  // Prev Entry: disabled on first entry
+  btnPrevEntry.disabled = (state.entry <= 1);
+
+  // Next Entry: disabled on last entry
+  btnNextEntry.disabled = (state.entry >= state.totalEntries);
+
+  // Next Chain / Finish Game
+  var isLastChain = (state.chain >= state.totalChains);
+
+  if (isLastChain) {
+    // Transform into "Finish Game"
+    btnNextChain.className = 'review-btn review-btn-finish';
+    btnNextChain.setAttribute('aria-label', 'Finish game');
+    nextChainText.textContent = 'Finish';
+    nextChainIcon.innerHTML = '<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>';
+    btnNextChain.disabled = false;
+  } else {
+    // Normal next chain
+    btnNextChain.className = 'review-btn review-btn-chain';
+    btnNextChain.setAttribute('aria-label', 'Next chain');
+    nextChainText.textContent = 'Next Chain';
+    nextChainIcon.innerHTML = '<svg viewBox="0 0 24 24"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>';
+    btnNextChain.disabled = false;
+  }
+}
+
+// ===== KEYBOARD NAVIGATION =====
+document.addEventListener('keydown', function(e) {
+  if (state.variant !== 'host') return;
+
+  if (e.key === 'ArrowLeft' && !e.shiftKey) {
+    e.preventDefault();
+    prevEntry();
+  } else if (e.key === 'ArrowRight' && !e.shiftKey) {
+    e.preventDefault();
+    nextEntry();
+  } else if (e.key === 'ArrowLeft' && e.shiftKey) {
+    e.preventDefault();
+    prevChain();
+  } else if (e.key === 'ArrowRight' && e.shiftKey) {
+    e.preventDefault();
+    nextChain();
+  }
+});
+
+// ===== INITIAL RENDER =====
+render();
+</script>
+
+</body>
+</html>

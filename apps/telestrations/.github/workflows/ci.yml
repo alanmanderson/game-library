@@ -1,0 +1,129 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-typecheck:
+    name: Lint & Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Cache server node_modules
+      - name: Cache server node_modules
+        uses: actions/cache@v4
+        with:
+          path: server/node_modules
+          key: server-node-modules-${{ hashFiles('server/package-lock.json') }}
+          restore-keys: |
+            server-node-modules-
+
+      # Cache client node_modules
+      - name: Cache client node_modules
+        uses: actions/cache@v4
+        with:
+          path: client/node_modules
+          key: client-node-modules-${{ hashFiles('client/package-lock.json') }}
+          restore-keys: |
+            client-node-modules-
+
+      - name: Install server dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Install client dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Typecheck server
+        working-directory: server
+        run: npx tsc --noEmit
+
+      - name: Typecheck client
+        working-directory: client
+        run: npx tsc --noEmit
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Cache server node_modules
+        uses: actions/cache@v4
+        with:
+          path: server/node_modules
+          key: server-node-modules-${{ hashFiles('server/package-lock.json') }}
+          restore-keys: |
+            server-node-modules-
+
+      - name: Install server dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Run server tests
+        working-directory: server
+        run: npx vitest run --passWithNoTests
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Cache server node_modules
+        uses: actions/cache@v4
+        with:
+          path: server/node_modules
+          key: server-node-modules-${{ hashFiles('server/package-lock.json') }}
+          restore-keys: |
+            server-node-modules-
+
+      - name: Cache client node_modules
+        uses: actions/cache@v4
+        with:
+          path: client/node_modules
+          key: client-node-modules-${{ hashFiles('client/package-lock.json') }}
+          restore-keys: |
+            client-node-modules-
+
+      - name: Install server dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Install client dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Build server
+        working-directory: server
+        run: npx tsc
+
+      - name: Build client
+        working-directory: client
+        run: npx vite build
+
+      - name: Verify build artifacts exist
+        run: |
+          test -f server/dist/index.js || (echo "Server build missing index.js" && exit 1)
+          test -f client/dist/index.html || (echo "Client build missing index.html" && exit 1)
