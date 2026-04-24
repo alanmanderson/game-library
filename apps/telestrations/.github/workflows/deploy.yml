@@ -1,11 +1,15 @@
-name: Deploy to Azure App Service
+name: Deploy to Azure Container Apps
 
 on:
   push:
     branches: [main, master]
 
 env:
-  AZURE_WEBAPP_NAME: telestrations-app
+  ACR_NAME: telestrationsacr
+  ACR_LOGIN_SERVER: telestrationsacr.azurecr.io
+  IMAGE_NAME: telestrations
+  CONTAINER_APP_NAME: telestrations-app
+  RESOURCE_GROUP: rg-telestrations
 
 concurrency:
   group: deploy-production
@@ -20,54 +24,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Log in to Azure
+        uses: azure/login@v2
         with:
-          node-version: 20
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      # Install dependencies for both projects
-      - name: Install server dependencies
-        working-directory: server
-        run: npm ci
-
-      - name: Install client dependencies
-        working-directory: client
-        run: npm ci
-
-      # Build client (vite build -> client/dist/)
-      - name: Build client
-        working-directory: client
-        run: npx vite build
-
-      # Build server (tsc -> server/dist/)
-      - name: Build server
-        working-directory: server
-        run: npx tsc
-
-      # Prune server devDependencies to shrink the deploy artifact
-      - name: Prune server devDependencies
-        working-directory: server
-        run: npm prune --production
-
-      # Assemble the deployment package.
-      # Layout mirrors the repo structure so the server's path.resolve(__dirname, "../../client/dist")
-      # resolves correctly from server/dist/app.js -> client/dist.
-      - name: Create deployment package
+      - name: Build image in ACR
         run: |
-          mkdir -p deploy/server/dist
-          mkdir -p deploy/client/dist
+          az acr build \
+            --registry ${{ env.ACR_NAME }} \
+            --image ${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            --image ${{ env.IMAGE_NAME }}:latest \
+            .
 
-          cp -r server/dist/* deploy/server/dist/
-          cp server/package.json deploy/server/
-          cp -r server/node_modules deploy/server/node_modules
-          cp -r client/dist/* deploy/client/dist/
-
-          # web.config goes at the deploy root for Azure/IIS
-          cp server/web.config deploy/web.config
-
-      - name: Deploy to Azure App Service
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: ${{ env.AZURE_WEBAPP_NAME }}
-          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          package: deploy
-          startup-command: "node server/dist/index.js"
+      - name: Deploy to Container App
+        run: |
+          az containerapp update \
+            --name ${{ env.CONTAINER_APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}

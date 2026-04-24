@@ -247,41 +247,30 @@ git remote add origin https://github.com/yourusername/telestrations.git
 git push -u origin main
 ```
 
-### 4.2 Get the Publish Profile from Azure
+### 4.2 Create a Service Principal for GitHub Actions
 
-The publish profile is a credential file Azure uses to authenticate deployments. Download it:
-
-```bash
-az webapp deployment list-publishing-profiles \
-  --name telestrations-app \
-  --resource-group rg-telestrations \
-  --xml \
-  --output tsv
-```
-
-This outputs XML to your terminal. Copy the entire output (from `<publishData>` to `</publishData>`).
-
-Alternatively, download it as a file:
+The deploy workflow authenticates to Azure using a service principal. If one was already created during initial setup, retrieve its credentials. Otherwise, create one:
 
 ```bash
-az webapp deployment list-publishing-profiles \
-  --name telestrations-app \
-  --resource-group rg-telestrations \
-  --xml > publish-profile.xml
+az ad sp create-for-rbac \
+  --name "telestrations-github-deploy" \
+  --role contributor \
+  --scopes "/subscriptions/1a020407-3f63-418b-91be-af42a0a2cfef/resourceGroups/rg-telestrations" \
+  --sdk-auth
 ```
 
-Open the file and copy all of its contents.
+Copy the entire JSON output.
 
 ### 4.3 Add the Secret to GitHub
 
 1. Go to your GitHub repository.
 2. Navigate to **Settings** > **Secrets and variables** > **Actions**.
 3. Click **New repository secret**.
-4. Name: `AZURE_WEBAPP_PUBLISH_PROFILE`
-5. Value: paste the entire XML content you copied.
+4. Name: `AZURE_CREDENTIALS`
+5. Value: paste the entire JSON output from the service principal creation.
 6. Click **Add secret**.
 
-The deploy workflow (`deploy.yml`) references this secret as `${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}`.
+The deploy workflow (`deploy.yml`) references this secret as `${{ secrets.AZURE_CREDENTIALS }}`.
 
 ### 4.4 How the CI/CD Pipelines Work
 
@@ -295,25 +284,9 @@ The deploy workflow (`deploy.yml`) references this secret as `${{ secrets.AZURE_
 
 **Deploy pipeline** (`.github/workflows/deploy.yml`) — runs only on pushes to `main` or `master`:
 
-1. Installs dependencies for both `server/` and `client/` with `npm ci`.
-2. Builds the client with `vite build` (output: `client/dist/`).
-3. Builds the server with `tsc` (output: `server/dist/`).
-4. Prunes server `devDependencies` to reduce artifact size.
-5. Assembles a `deploy/` directory with the layout:
-   ```
-   deploy/
-   ├── web.config              (from server/web.config)
-   ├── server/
-   │   ├── dist/               (compiled TypeScript)
-   │   ├── node_modules/       (production deps only)
-   │   └── package.json
-   └── client/
-       └── dist/               (Vite build output)
-   ```
-6. Deploys the `deploy/` directory to Azure App Service using the publish profile.
-7. Sets the startup command to `node server/dist/index.js`.
-
-The `web.config` at the deploy root configures IIS/iisnode to route all traffic (including `socket.io` paths) to the Node.js process and enables WebSocket support at the IIS layer.
+1. Logs in to Azure using the service principal credentials from the `AZURE_CREDENTIALS` secret.
+2. Builds the Docker image in Azure Container Registry using `az acr build` (no Docker needed on the runner). The image is tagged with both the git SHA and `latest`.
+3. Updates the Container App to use the new image via `az containerapp update`.
 
 The concurrency setting in `deploy.yml` (`cancel-in-progress: false`) ensures deploys are never cancelled mid-flight. If two pushes land close together, the second deploy queues rather than cancelling the first.
 

@@ -4,7 +4,7 @@
 
 import './styles/main.css';
 import { initApp, navigateTo } from './app';
-import { loadSession, setState, saveSession } from './state';
+import { getState, loadSession, setState, saveSession } from './state';
 import { connectSocket } from './socket';
 
 // Initialize the app
@@ -48,10 +48,9 @@ document.addEventListener('visibilitychange', () => {
 
 // Warn before leaving during active game
 window.addEventListener('beforeunload', (e) => {
-  const session = loadSession();
-  if (session) {
-    // Let the browser handle the warning
-    // Modern browsers ignore custom messages
+  const { screen } = getState();
+  const activeScreens = new Set(['lobby', 'prompt', 'drawing', 'guessing', 'waiting', 'transition', 'review']);
+  if (activeScreens.has(screen)) {
     e.preventDefault();
   }
 });
