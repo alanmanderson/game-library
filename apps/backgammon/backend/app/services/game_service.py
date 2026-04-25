@@ -186,6 +186,7 @@ class GameManager:
         """Check if the current player's time has expired.
 
         Returns the Color of the player who timed out, or None if no timeout.
+        This is a read-only check — it does not mutate timer state.
         """
         ts = self._time_state.get(table_id)
         if ts is None:
@@ -214,8 +215,6 @@ class GameManager:
         remaining = ts[time_key] - elapsed_ms
 
         if remaining <= 0:
-            ts[time_key] = 0
-            ts["turn_started_at"] = None
             return current_color
 
         return None
@@ -822,6 +821,9 @@ class GameManager:
         """Check for timeout and finish the game if a player's time expired.
 
         Returns the Color of the player who timed out, or None.
+
+        Caller must hold the per-table lock (_get_lock) to avoid concurrent
+        game-termination attempts.
         """
         timed_out_color = self.check_timeout(table_id)
         if timed_out_color is None:
@@ -830,6 +832,13 @@ class GameManager:
         engine = self._engines.get(table_id)
         if not engine or engine.state.status == GameStatus.FINISHED:
             return None
+
+        # Reset timer state now that the timeout is being applied
+        ts = self._time_state.get(table_id)
+        if ts:
+            time_key = "white_time_ms" if timed_out_color == Color.WHITE else "black_time_ms"
+            ts[time_key] = 0
+            ts["turn_started_at"] = None
 
         # Force the game to end -- the player who timed out loses
         winner_color = Color.BLACK if timed_out_color == Color.WHITE else Color.WHITE

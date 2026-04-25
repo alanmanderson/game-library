@@ -6,6 +6,8 @@ Tests that do NOT require a database session exercise pure in-memory logic
 Tests that DO need a database use the ``db_session`` fixture from conftest.
 """
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from app.services.game_service import GameManager
@@ -593,3 +595,98 @@ class TestCrawfordRule:
         table = await gm.start_next_game(db_session, table.id)
         assert table.game_state.get("crawford_game_used") is True
         assert table.game_state.get("is_crawford_game") is True
+
+
+# -----------------------------------------------------------------------
+# Timeout handling tests
+# -----------------------------------------------------------------------
+
+
+class TestTimeoutHandling:
+    """Regression tests for the timeout race condition fix (issue #54).
+
+    Before the fix, check_timeout() reset turn_started_at as a side effect,
+    so a subsequent call from handle_timeout() would return None and skip
+    game termination — meaning timeouts were detected but never applied.
+    """
+
+    async def _setup_timed_game(self, db_session):
+        """Create a blitz game with both players joined and timer started."""
+        gm = GameManager()
+        p1 = Player(nickname="Alice")
+        p2 = Player(nickname="Bob")
+        db_session.add_all([p1, p2])
+        await db_session.flush()
+
+        table = await gm.create_table(db_session, p1.id, time_control="blitz")
+        await gm.join_table(db_session, table.id, p2.id)
+        return gm, table, p1, p2
+
+    def _expire_current_player_clock(self, gm, table_id):
+        """Force the current player's clock to expire."""
+        ts = gm._time_state.get(table_id)
+        assert ts is not None, "Time state not initialised for table"
+        # Backdating turn_started_at by more than the total time available
+        # guarantees remaining <= 0 regardless of which colour is active.
+        ts["turn_started_at"] = datetime.now(timezone.utc) - timedelta(hours=1)
+
+    async def test_check_timeout_is_idempotent(self, db_session):
+        """check_timeout() must return the same colour on repeated calls."""
+        gm, table, _p1, _p2 = await self._setup_timed_game(db_session)
+        self._expire_current_player_clock(gm, table.id)
+
+        first = gm.check_timeout(table.id)
+        second = gm.check_timeout(table.id)
+
+        assert first is not None
+        assert first == second
+
+    async def test_handle_timeout_finishes_game_after_check_timeout(self, db_session):
+        """handle_timeout() must finish the game even when check_timeout() was
+        already called beforehand (regression for the double-call bug)."""
+        gm, table, _p1, _p2 = await self._setup_timed_game(db_session)
+        self._expire_current_player_clock(gm, table.id)
+
+        # Simulate what websocket.py does: call check_timeout first (inside lock),
+        # then call handle_timeout.
+        timed_out_from_check = gm.check_timeout(table.id)
+        assert timed_out_from_check is not None
+
+        # handle_timeout must still detect and apply the timeout
+        timed_out_from_handle = await gm.handle_timeout(db_session, table.id)
+        assert timed_out_from_handle == timed_out_from_check
+
+        # Game must actually be finished
+        engine = gm.get_engine(table.id)
+        assert engine is None or engine.state.status == GameStatus.FINISHED
+
+    async def test_handle_timeout_resets_timer_state(self, db_session):
+        """After handle_timeout(), timer fields must be explicitly cleared."""
+        gm, table, _p1, _p2 = await self._setup_timed_game(db_session)
+        self._expire_current_player_clock(gm, table.id)
+
+        timed_out_color = await gm.handle_timeout(db_session, table.id)
+        assert timed_out_color is not None
+
+        # Directly verify the timer fields were zeroed (not just relying on
+        # GameStatus.FINISHED short-circuiting check_timeout).
+        ts = gm._time_state.get(table.id)
+        # _time_state may be cleaned up entirely by cleanup_finished_game;
+        # if it still exists the relevant fields must be zeroed.
+        if ts is not None:
+            time_key = "white_time_ms" if timed_out_color == Color.WHITE else "black_time_ms"
+            assert ts[time_key] == 0
+            assert ts["turn_started_at"] is None
+
+    async def test_check_timeout_returns_none_without_time_control(self, db_session):
+        """Games without time control must never trigger a timeout."""
+        gm = GameManager()
+        p1 = Player(nickname="Alice")
+        p2 = Player(nickname="Bob")
+        db_session.add_all([p1, p2])
+        await db_session.flush()
+
+        table = await gm.create_table(db_session, p1.id)  # unlimited (no time_control)
+        await gm.join_table(db_session, table.id, p2.id)
+
+        assert gm.check_timeout(table.id) is None
