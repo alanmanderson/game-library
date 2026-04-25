@@ -21,8 +21,8 @@
 .auth-logo {
   display: block;
   margin: 0 auto 1rem;
-  max-width: 120px;
-  border-radius: 16px;
+  width: 120px;
+  height: auto;
 }
 
 .auth-modal h2 {

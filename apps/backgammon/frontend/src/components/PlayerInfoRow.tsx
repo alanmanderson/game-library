@@ -46,7 +46,22 @@ function PlayerInfoRow({
           className={`connection-dot ${isConnected ? "connected" : "disconnected"}`}
         />
         {isOpponent && isBotGame && (
-          <img src="/images/bot.png" alt="Bot" className="bot-avatar" />
+          <svg
+            className="bot-avatar"
+            role="img"
+            aria-label="Bot"
+            viewBox="0 0 32 32"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            {/* Head */}
+            <rect x="6" y="8" width="20" height="16" rx="3" ry="3" fill="none" stroke="var(--accent)" strokeWidth="2"/>
+            {/* Eyes */}
+            <circle cx="12" cy="16" r="2.5" fill="var(--accent)"/>
+            <circle cx="20" cy="16" r="2.5" fill="var(--accent)"/>
+            {/* Antenna */}
+            <line x1="16" y1="8" x2="16" y2="3" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round"/>
+            <circle cx="16" cy="2" r="1.5" fill="var(--accent)"/>
+          </svg>
         )}
         <span className="pill-name">{name}</span>
         {isOpponent && isBotGame && botDifficulty && (

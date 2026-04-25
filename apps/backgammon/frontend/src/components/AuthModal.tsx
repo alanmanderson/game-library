@@ -230,8 +230,26 @@ function AuthModal({ onAuthenticated }: AuthModalProps) {
   return (
     <div className="auth-overlay" role="dialog" aria-modal="true" ref={modalRef}>
       <div className="auth-modal">
-        <img src="/images/logo.png" alt="Backgammon" className="auth-logo" />
-        <h2>Welcome to Backgammon</h2>
+        <svg
+          className="auth-logo"
+          role="img"
+          aria-label="GammonHub"
+          viewBox="0 0 80 44"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          {/* Die 1 — showing 4 */}
+          <rect x="2" y="2" width="36" height="36" rx="6" ry="6" fill="#1a1a2e" stroke="#d4a843" strokeWidth="2.5"/>
+          <circle cx="14" cy="14" r="3.5" fill="#d4a843"/>
+          <circle cx="26" cy="14" r="3.5" fill="#d4a843"/>
+          <circle cx="14" cy="26" r="3.5" fill="#d4a843"/>
+          <circle cx="26" cy="26" r="3.5" fill="#d4a843"/>
+          {/* Die 2 — showing 3, offset right and down */}
+          <rect x="42" y="6" width="36" height="36" rx="6" ry="6" fill="#1a1a2e" stroke="#d4a843" strokeWidth="2.5"/>
+          <circle cx="54" cy="18" r="3.5" fill="#d4a843"/>
+          <circle cx="60" cy="24" r="3.5" fill="#d4a843"/>
+          <circle cx="66" cy="30" r="3.5" fill="#d4a843"/>
+        </svg>
+        <h2>Welcome to GammonHub</h2>
 
         {/* Tabs */}
         <div className="auth-tabs">

@@ -1,4 +1,4 @@
-"""Main FastAPI application for Backgammon Online."""
+"""Main FastAPI application for GammonHub."""
 
 import asyncio
 import logging
@@ -97,7 +97,7 @@ async def lifespan(app: FastAPI):
     logger.info("Application shut down")
 
 
-app = FastAPI(title="Backgammon Online", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="GammonHub", version="1.0.0", lifespan=lifespan)
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)

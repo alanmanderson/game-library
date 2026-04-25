@@ -115,7 +115,7 @@ function Home({ player, onPlayerUpdate, onSignOut }: HomeProps) {
     <div className="home">
       {/* Welcome Bar */}
       <div className="home-welcome-bar">
-        <span className="app-title">Backgammon Online</span>
+        <span className="app-title">GammonHub</span>
         <span className="welcome-text">
           Welcome, <strong>{player.nickname}</strong>
           {player.is_guest && <span className="guest-badge"> (Guest)</span>}

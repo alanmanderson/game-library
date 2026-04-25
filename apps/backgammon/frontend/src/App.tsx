@@ -96,7 +96,7 @@ function App() {
               <Home player={player} onPlayerUpdate={handleAuthenticated} onSignOut={handleSignOut} />
             ) : (
               <div className="landing">
-                <h1>Backgammon Online</h1>
+                <h1>GammonHub</h1>
                 <p>Please sign in or continue as a guest to play.</p>
               </div>
             )
@@ -111,7 +111,7 @@ function App() {
               <TournamentList player={player} />
             ) : (
               <div className="landing">
-                <h1>Backgammon Online</h1>
+                <h1>GammonHub</h1>
                 <p>Please sign in to view tournaments.</p>
               </div>
             )
@@ -124,7 +124,7 @@ function App() {
               <TournamentDetail player={player} />
             ) : (
               <div className="landing">
-                <h1>Backgammon Online</h1>
+                <h1>GammonHub</h1>
                 <p>Please sign in to view this tournament.</p>
               </div>
             )
