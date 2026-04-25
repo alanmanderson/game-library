@@ -79,14 +79,14 @@ class Table(Base):
     id: str = Column(String(8), primary_key=True)
     created_at: datetime = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     white_player_id: str | None = Column(
-        String(36), ForeignKey("players.id", ondelete="SET NULL"), nullable=True
+        String(36), ForeignKey("players.id", ondelete="SET NULL"), nullable=True, index=True
     )
     black_player_id: str | None = Column(
-        String(36), ForeignKey("players.id", ondelete="SET NULL"), nullable=True
+        String(36), ForeignKey("players.id", ondelete="SET NULL"), nullable=True, index=True
     )
     status: str = Column(String(20), nullable=False, default="waiting", index=True)
     winner_id: str | None = Column(
-        String(36), ForeignKey("players.id", ondelete="SET NULL"), nullable=True
+        String(36), ForeignKey("players.id", ondelete="SET NULL"), nullable=True, index=True
     )
     win_type: str | None = Column(String(20), nullable=True)
     final_score: int | None = Column(Integer, nullable=True)
