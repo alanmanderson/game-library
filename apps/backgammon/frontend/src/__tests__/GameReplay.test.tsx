@@ -433,7 +433,8 @@ describe("GameReplay – analysis panel", () => {
 
     // The blunder should show up in both the key-moments and move list
     expect(screen.getAllByText(/blunder/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/best: 8\/4 6\/4/)).toBeInTheDocument();
+    // best_move_notation "8/4 6/4" for Black is mirrored to "17/21 19/21"
+    expect(screen.getByText(/best: 17\/21 19\/21/)).toBeInTheDocument();
   });
 
   it("shows the 'Analyzed by GNU Backgammon' banner when source is gnubg", async () => {

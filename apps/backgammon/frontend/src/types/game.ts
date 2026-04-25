@@ -208,6 +208,7 @@ export interface PlayerSeasonHistoryEntry {
 /** A single row in the move-history log for a completed turn. */
 export interface MoveRecord {
   move_number: number;
+  player_id: string | null;
   dice_roll: string;
   moves_notation: string;
   created_at: string;

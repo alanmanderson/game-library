@@ -26,7 +26,7 @@ import { getAnalysis, getReplay } from "../services/api";
 import Board from "./Board";
 import Dice from "./Dice";
 import { STORAGE_KEY } from "../constants";
-import { parseMovesNotationRaw } from "../utils/notation";
+import { parseMovesNotationRaw, notationToPlayerPerspective } from "../utils/notation";
 import "./styles/GameReplay.css";
 
 /** Read the logged-in player from localStorage, if present. */
@@ -688,12 +688,12 @@ function GameReplay() {
             <span className={`replay-player-badge replay-player-${movedByColor}`}>
               {movedBy ?? (movedByColor === "white" ? "White" : "Black")}
             </span>
-            <span className="replay-notation">{currentMove.moves_notation}</span>
+            <span className="replay-notation">{notationToPlayerPerspective(currentMove.moves_notation, movedByColor as "white" | "black")}</span>
             {currentAnalysis?.best_move_notation &&
               currentAnalysis.quality !== "best" &&
               currentAnalysis.quality !== "very_good" && (
                 <span className="replay-notation-best">
-                  best: {currentAnalysis.best_move_notation}
+                  best: {notationToPlayerPerspective(currentAnalysis.best_move_notation, movedByColor as "white" | "black")}
                 </span>
               )}
           </>
@@ -885,7 +885,7 @@ function GameReplay() {
                           </span>
                           <span className="replay-key-moment-move">
                             Move {m.move_number} · {m.dice_roll} ·{" "}
-                            {m.moves_notation}
+                            {notationToPlayerPerspective(m.moves_notation, m.player_color)}
                           </span>
                           <span className="replay-key-moment-loss">
                             −{m.equity_loss.toFixed(2)}
@@ -962,11 +962,11 @@ function GameReplay() {
                             {m.player_color === "white" ? "⚪" : "⚫"} {m.dice_roll}
                           </span>
                           <span className="replay-move-item-notation">
-                            {m.moves_notation}
+                            {notationToPlayerPerspective(m.moves_notation, m.player_color)}
                           </span>
                           {m.quality !== "best" && m.best_move_notation && (
                             <span className="replay-move-item-best">
-                              best: {m.best_move_notation}
+                              best: {notationToPlayerPerspective(m.best_move_notation, m.player_color)}
                             </span>
                           )}
                         </button>
@@ -976,7 +976,7 @@ function GameReplay() {
                             {chosenIsBest ? (
                               <span className="replay-move-probs-row">
                                 <span className="replay-move-probs-notation">
-                                  {m.moves_notation}
+                                  {notationToPlayerPerspective(m.moves_notation, m.player_color)}
                                 </span>
                                 <span className="replay-move-probs-pct replay-move-probs-pct--chosen">
                                   {chosenPct} win
@@ -993,7 +993,7 @@ function GameReplay() {
                                       Chosen
                                     </span>
                                     <span className="replay-move-probs-notation">
-                                      {m.moves_notation}
+                                      {notationToPlayerPerspective(m.moves_notation, m.player_color)}
                                     </span>
                                     <span className="replay-move-probs-pct replay-move-probs-pct--chosen">
                                       {chosenPct} win
@@ -1007,7 +1007,7 @@ function GameReplay() {
                                         Best
                                       </span>
                                       <span className="replay-move-probs-notation">
-                                        {m.best_move_notation ?? m.moves_notation}
+                                        {notationToPlayerPerspective(m.best_move_notation ?? m.moves_notation, m.player_color)}
                                       </span>
                                       <span className="replay-move-probs-pct replay-move-probs-pct--best">
                                         {bestPct} win

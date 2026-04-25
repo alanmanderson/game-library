@@ -141,3 +141,44 @@ export function pointToDisplayNumber(
   if (perspective === "white") return point;
   return 25 - point;
 }
+
+/**
+ * Convert a notation string from internal coordinates to the mover's own
+ * perspective.  In standard backgammon each player's moves are expressed so
+ * that their home board is points 1-6 and movement goes from higher to
+ * lower numbers.
+ *
+ * For White the internal numbering already matches, so the string is
+ * returned unchanged.  For Black, board point numbers (1-24) are mirrored
+ * via ``25 - point``.  ``bar`` and ``off`` are left as-is.
+ *
+ * Examples (Black):
+ *   ``"12/15 1/4*"``  → ``"13/10 24/21*"``
+ *   ``"bar/3"``       → ``"bar/22"``
+ *   ``"22/off"``      → ``"3/off"``
+ */
+export function notationToPlayerPerspective(
+  notation: string,
+  moverColor: Color,
+): string {
+  if (moverColor === "white" || !notation) return notation;
+  // Non-move entries (cube actions, no-move markers)
+  if (notation.startsWith("(") || !notation.includes("/")) return notation;
+
+  return notation
+    .split(/\s+/)
+    .map((segment) => {
+      const hitSuffix = segment.endsWith("*") ? "*" : "";
+      const clean = segment.replace(/\*$/, "");
+      const [src, dst] = clean.split("/");
+      if (src === undefined || dst === undefined) return segment;
+
+      const newSrc =
+        src === "bar" ? "bar" : String(25 - parseInt(src, 10));
+      const newDst =
+        dst === "off" ? "off" : String(25 - parseInt(dst, 10));
+
+      return `${newSrc}/${newDst}${hitSuffix}`;
+    })
+    .join(" ");
+}

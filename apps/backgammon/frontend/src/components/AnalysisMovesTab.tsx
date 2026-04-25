@@ -1,4 +1,5 @@
 import type { Color, AnalysisMoveRecord, MoveQuality } from "../types/game";
+import { notationToPlayerPerspective } from "../utils/notation";
 
 interface Props {
   moveHistory: AnalysisMoveRecord[];
@@ -112,7 +113,9 @@ function MoveCell({
     >
       <span className="analysis-moves__dice">{move.dice_roll}</span>
       <span className="analysis-moves__notation">
-        {move.move_notation || "\u2014"}
+        {move.move_notation
+          ? notationToPlayerPerspective(move.move_notation, move.player as Color)
+          : "\u2014"}
       </span>
       {move.quality && (
         <span

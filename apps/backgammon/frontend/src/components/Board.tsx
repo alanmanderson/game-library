@@ -1,6 +1,6 @@
 import { useMemo, useCallback, useState, useEffect, useRef } from "react";
 import type { GameState, Color, Move, HintMove } from "../types/game";
-import type { ParsedMove } from "../utils/notation";
+import { pointToDisplayNumber, type ParsedMove } from "../utils/notation";
 import { resolveBoardTheme, resolveCheckerStyle } from "../constants/themes";
 import "./styles/Board.css";
 
@@ -803,7 +803,7 @@ function Board({
           fontFamily="monospace"
           fontWeight="600"
         >
-          {point}
+          {pointToDisplayNumber(point, myColor)}
         </text>,
       );
     }

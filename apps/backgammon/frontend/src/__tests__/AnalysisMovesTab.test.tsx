@@ -89,7 +89,8 @@ describe("AnalysisMovesTab – move pair rendering", () => {
       />,
     );
     expect(screen.getByText("8/5 6/5")).toBeInTheDocument();
-    expect(screen.getByText("1/7 12/16")).toBeInTheDocument();
+    // Black's "1/7 12/16" is mirrored to Black's perspective: "24/18 13/9"
+    expect(screen.getByText("24/18 13/9")).toBeInTheDocument();
   });
 
   it("renders dice rolls for each move", () => {
@@ -130,7 +131,8 @@ describe("AnalysisMovesTab – move pair rendering", () => {
       />,
     );
     expect(container.querySelectorAll(".analysis-moves__row")).toHaveLength(1);
-    expect(screen.getByText("13/8 13/10")).toBeInTheDocument();
+    // Black's "13/8 13/10" is mirrored to Black's perspective: "12/17 12/15"
+    expect(screen.getByText("12/17 12/15")).toBeInTheDocument();
   });
 
   it("renders the row number", () => {
@@ -393,7 +395,8 @@ describe("AnalysisMovesTab – interaction", () => {
         onJumpToMove={mockJump}
       />,
     );
-    fireEvent.click(screen.getByText("1/7 12/16"));
+    // Black's "1/7 12/16" is displayed as "24/18 13/9"
+    fireEvent.click(screen.getByText("24/18 13/9"));
     expect(mockJump).toHaveBeenCalledWith(2);
   });
 

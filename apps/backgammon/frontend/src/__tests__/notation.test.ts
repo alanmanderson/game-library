@@ -12,6 +12,7 @@ import {
   parseMovesNotation,
   parseMovesNotationRaw,
   pointToDisplayNumber,
+  notationToPlayerPerspective,
 } from "../utils/notation";
 
 // ---------------------------------------------------------------------------
@@ -195,5 +196,49 @@ describe("pointToDisplayNumber", () => {
     // No true midpoint that stays the same except conceptually
     expect(pointToDisplayNumber(12, "black")).toBe(13);
     expect(pointToDisplayNumber(13, "black")).toBe(12);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// notationToPlayerPerspective
+// ---------------------------------------------------------------------------
+
+describe("notationToPlayerPerspective", () => {
+  it("returns white notation unchanged", () => {
+    expect(notationToPlayerPerspective("8/5 6/5", "white")).toBe("8/5 6/5");
+  });
+
+  it("mirrors regular black moves", () => {
+    // Internal 12→15 = Black's 13→10, Internal 1→4 = Black's 24→21
+    expect(notationToPlayerPerspective("12/15 1/4*", "black")).toBe(
+      "13/10 24/21*",
+    );
+  });
+
+  it("preserves bar for black (not mirrored)", () => {
+    expect(notationToPlayerPerspective("bar/3", "black")).toBe("bar/22");
+  });
+
+  it("preserves off for black (not mirrored)", () => {
+    expect(notationToPlayerPerspective("22/off", "black")).toBe("3/off");
+  });
+
+  it("preserves bar and off for white", () => {
+    expect(notationToPlayerPerspective("bar/22", "white")).toBe("bar/22");
+    expect(notationToPlayerPerspective("3/off", "white")).toBe("3/off");
+  });
+
+  it("passes through non-move notations unchanged", () => {
+    expect(notationToPlayerPerspective("(no moves)", "black")).toBe(
+      "(no moves)",
+    );
+    expect(notationToPlayerPerspective("Doubles => 4", "black")).toBe(
+      "Doubles => 4",
+    );
+    expect(notationToPlayerPerspective("Takes", "black")).toBe("Takes");
+  });
+
+  it("handles empty string", () => {
+    expect(notationToPlayerPerspective("", "black")).toBe("");
   });
 });

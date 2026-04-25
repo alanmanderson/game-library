@@ -163,6 +163,7 @@ class MoveRecordResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     move_number: int
+    player_id: Optional[str] = None
     dice_roll: str
     moves_notation: str
     created_at: datetime

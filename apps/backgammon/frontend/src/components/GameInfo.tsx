@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { Table, MoveRecord, GameStatus } from "../types/game";
 import { getGameHistory } from "../services/api";
+import { notationToPlayerPerspective } from "../utils/notation";
 import "./styles/GameInfo.css";
 
 const PAGE_SIZE = 1000;
@@ -101,13 +102,19 @@ function GameInfo({ table, gameStatus, isOpen: externalIsOpen, onToggle }: GameI
             <div className="move-history-empty">No moves yet.</div>
           ) : (
             <>
-              {moveHistory.map((record) => (
-                <div key={record.move_number} className="move-history-entry">
-                  <strong>#{record.move_number}</strong>{" "}
-                  {record.dice_roll ? `[${record.dice_roll}] ` : ""}
-                  {record.moves_notation}
-                </div>
-              ))}
+              {moveHistory.map((record) => {
+                const moverColor =
+                  record.player_id === table.black_player?.id
+                    ? "black" as const
+                    : "white" as const;
+                return (
+                  <div key={record.move_number} className="move-history-entry">
+                    <strong>#{record.move_number}</strong>{" "}
+                    {record.dice_roll ? `[${record.dice_roll}] ` : ""}
+                    {notationToPlayerPerspective(record.moves_notation, moverColor)}
+                  </div>
+                );
+              })}
               {hasMore && (
                 <button
                   className="load-more-btn"
