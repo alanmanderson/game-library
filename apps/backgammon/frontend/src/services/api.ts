@@ -32,7 +32,7 @@ import type {
   AnalysisSessionData,
   AnalysisSettings,
 } from "../types/game";
-import { TOKEN_KEY } from "../constants";
+import { TOKEN_KEY, STORAGE_KEY } from "../constants";
 
 // ---------------------------------------------------------------------------
 // Base URL -- can be overridden via the VITE_API_URL env variable.
@@ -142,6 +142,27 @@ export function createGuest(nickname: string): Promise<AuthResponse> {
 /** Get the currently authenticated player from the JWT. */
 export function getMe(): Promise<Player> {
   return request<Player>("/api/auth/me");
+}
+
+/**
+ * Sign out the current player.
+ *
+ * Fires the backend logout endpoint (fire-and-forget: swallows any error so
+ * that an expired/missing token never blocks the local sign-out path), then
+ * clears the stored JWT, removes the player cache from localStorage, and calls
+ * `window.google?.accounts.id.disableAutoSelect()` to prevent the Google
+ * One-Tap prompt from re-signing the user in silently.
+ */
+export async function logout(): Promise<void> {
+  try {
+    await request<{ message: string }>("/api/auth/logout", { method: "POST" });
+  } catch {
+    // Swallow — token may be expired or network may be down.
+    // Local state is cleared regardless.
+  }
+  clearStoredToken();
+  localStorage.removeItem(STORAGE_KEY);
+  window.google?.accounts.id.disableAutoSelect();
 }
 
 // ---------------------------------------------------------------------------

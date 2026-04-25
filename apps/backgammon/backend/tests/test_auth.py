@@ -342,3 +342,53 @@ class TestGuestStatsRestriction:
         assert resp.status_code == 200
         data = resp.json()
         assert data["total_games"] == 0
+
+
+# -----------------------------------------------------------------------
+# Logout
+# -----------------------------------------------------------------------
+
+
+class TestLogout:
+    async def test_logout_success(self, client):
+        """POST /api/auth/logout with a valid token returns 200."""
+        reg = await client.post(
+            "/api/auth/register",
+            json={"email": "logout@example.com", "password": "secret123", "nickname": "LogoutUser"},
+        )
+        token = reg.json()["token"]
+
+        resp = await client.post(
+            "/api/auth/logout",
+            headers=auth_headers(token),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["message"] == "Logged out successfully"
+
+    async def test_logout_without_token_returns_401(self, client):
+        """POST /api/auth/logout without a token returns 401."""
+        resp = await client.post("/api/auth/logout")
+        assert resp.status_code == 401
+
+    async def test_logout_with_invalid_token_returns_401(self, client):
+        """POST /api/auth/logout with a bad token returns 401."""
+        resp = await client.post(
+            "/api/auth/logout",
+            headers={"Authorization": "Bearer notavalidtoken"},
+        )
+        assert resp.status_code == 401
+
+    async def test_guest_can_logout(self, client):
+        """Guest players can also call the logout endpoint."""
+        guest = await client.post(
+            "/api/auth/guest",
+            json={"nickname": "GuestLogout"},
+        )
+        token = guest.json()["token"]
+
+        resp = await client.post(
+            "/api/auth/logout",
+            headers=auth_headers(token),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["message"] == "Logged out successfully"

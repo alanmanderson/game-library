@@ -32,6 +32,7 @@ vi.mock("../services/api", () => ({
   listTournaments: vi.fn(),
   updateMyPreferences: vi.fn(),
   getMyChallenges: vi.fn(),
+  logout: vi.fn(),
 }));
 
 // We need to dynamically import the mocked module so we can configure return values.
@@ -57,6 +58,8 @@ const guestPlayer: Player = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Default: logout resolves immediately
+  vi.mocked(api.logout).mockResolvedValue(undefined);
   // Default: dashboard returns empty data
   vi.mocked(api.getPlayerDashboard).mockResolvedValue({
     total_games: 0,
@@ -381,5 +384,69 @@ describe("Home – tabbed content", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Leaderboard" }));
     const leaderboardTab = screen.getByRole("tab", { name: "Leaderboard" });
     expect(leaderboardTab.getAttribute("aria-selected")).toBe("true");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Sign Out
+// ---------------------------------------------------------------------------
+
+describe("Home – Sign Out (registered user)", () => {
+  it("renders the Sign Out button", () => {
+    render(<Home player={registeredPlayer} />);
+    expect(screen.getByRole("button", { name: "Sign Out" })).toBeInTheDocument();
+  });
+
+  it("calls onSignOut immediately when a registered user clicks Sign Out", async () => {
+    const onSignOut = vi.fn().mockResolvedValue(undefined);
+    render(<Home player={registeredPlayer} onSignOut={onSignOut} />);
+    fireEvent.click(screen.getByRole("button", { name: "Sign Out" }));
+    await waitFor(() => {
+      expect(onSignOut).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("does not show the guest warning dialog for registered users", () => {
+    render(<Home player={registeredPlayer} />);
+    fireEvent.click(screen.getByRole("button", { name: "Sign Out" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
+
+describe("Home – Sign Out (guest user)", () => {
+  it("shows the guest confirmation dialog when a guest clicks Sign Out", () => {
+    render(<Home player={guestPlayer} />);
+    fireEvent.click(screen.getByRole("button", { name: "Sign Out" }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText(/permanently lose this account/i)).toBeInTheDocument();
+  });
+
+  it("dismisses the dialog when Cancel is clicked", () => {
+    render(<Home player={guestPlayer} />);
+    fireEvent.click(screen.getByRole("button", { name: "Sign Out" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("calls onSignOut when guest confirms sign-out", async () => {
+    const onSignOut = vi.fn().mockResolvedValue(undefined);
+    render(<Home player={guestPlayer} onSignOut={onSignOut} />);
+    fireEvent.click(screen.getByRole("button", { name: "Sign Out" }));
+    // There are two "Sign Out" buttons now — the one in the dialog
+    const dialogSignOutBtn = screen.getAllByRole("button", { name: "Sign Out" }).find(
+      (b) => b.closest("[role='dialog']"),
+    );
+    fireEvent.click(dialogSignOutBtn!);
+    await waitFor(() => {
+      expect(onSignOut).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("does not call onSignOut when guest cancels", async () => {
+    const onSignOut = vi.fn().mockResolvedValue(undefined);
+    render(<Home player={guestPlayer} onSignOut={onSignOut} />);
+    fireEvent.click(screen.getByRole("button", { name: "Sign Out" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onSignOut).not.toHaveBeenCalled();
   });
 });

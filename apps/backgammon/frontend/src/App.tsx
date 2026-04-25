@@ -6,10 +6,10 @@
  * and guest mode. On mount, validates any existing token with /api/auth/me.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Routes, Route, useLocation } from "react-router-dom";
 import type { Player } from "./types/game";
-import { getMe, getStoredToken, clearStoredToken } from "./services/api";
+import { getMe, getStoredToken, clearStoredToken, logout } from "./services/api";
 import { STORAGE_KEY } from "./constants";
 import Home from "./components/Home";
 import Game from "./components/Game";
@@ -67,6 +67,11 @@ function App() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(newPlayer));
   };
 
+  const handleSignOut = useCallback(async () => {
+    await logout(); // clears token + localStorage + Google disableAutoSelect
+    setPlayer(null);
+  }, []);
+
   if (loading) {
     return (
       <div className="app">
@@ -88,7 +93,7 @@ function App() {
           path="/"
           element={
             player ? (
-              <Home player={player} onPlayerUpdate={handleAuthenticated} />
+              <Home player={player} onPlayerUpdate={handleAuthenticated} onSignOut={handleSignOut} />
             ) : (
               <div className="landing">
                 <h1>Backgammon Online</h1>

@@ -70,6 +70,10 @@ class AuthResponse(BaseModel):
     player: PlayerResponse
 
 
+class LogoutResponse(BaseModel):
+    message: str
+
+
 # ── Table Schemas ────────────────────────────────────────────────────────────
 
 

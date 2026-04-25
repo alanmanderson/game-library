@@ -11,6 +11,7 @@ from app.schemas import (
     GoogleAuthRequest,
     GuestRequest,
     LoginRequest,
+    LogoutResponse,
     PlayerResponse,
     RegisterRequest,
 )
@@ -190,3 +191,19 @@ async def create_guest(request: Request, data: GuestRequest, db: AsyncSession = 
 async def get_me(player: Player = Depends(get_current_player)):
     """Return the currently authenticated player from the JWT."""
     return player
+
+
+# ------------------------------------------------------------------
+# Logout
+# ------------------------------------------------------------------
+
+
+@auth_router.post("/logout", response_model=LogoutResponse)
+async def logout(current_player: Player = Depends(get_current_player)):
+    """Sign out the current player.
+
+    JWTs are stateless — no server-side invalidation is required.
+    This endpoint exists for clean API design and future extensibility
+    (e.g. token blacklist, audit log, refresh-token revocation).
+    """
+    return {"message": "Logged out successfully"}

@@ -15,6 +15,8 @@ interface HomeProps {
   player: Player;
   /** Optional callback invoked when the player's profile (e.g. cosmetics) is updated. */
   onPlayerUpdate?: (p: Player) => void;
+  /** Callback invoked when the user confirms sign-out. */
+  onSignOut?: () => Promise<void>;
 }
 
 type HomeTab = "lobby" | "dashboard" | "leaderboard" | "tournaments" | "challenges" | "analysis" | "settings";
@@ -29,13 +31,15 @@ const TAB_LABELS: Record<HomeTab, string> = {
   settings: "Settings",
 };
 
-function Home({ player, onPlayerUpdate }: HomeProps) {
+function Home({ player, onPlayerUpdate, onSignOut }: HomeProps) {
   const navigate = useNavigate();
   const [joinTableId, setJoinTableId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [creatingTable, setCreatingTable] = useState(false);
   const [joiningTable, setJoiningTable] = useState(false);
   const [creatingBotGame, setCreatingBotGame] = useState(false);
+  const [showGuestSignOutWarning, setShowGuestSignOutWarning] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const [preferredColor, setPreferredColor] = useState<string | undefined>(undefined);
   const [matchPoints, setMatchPoints] = useState(5);
   const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>("hard");
@@ -93,6 +97,19 @@ function Home({ player, onPlayerUpdate }: HomeProps) {
     },
     [joinTableId, player.id, navigate],
   );
+
+  const handleSignOutClick = useCallback(async () => {
+    if (player.is_guest) {
+      setShowGuestSignOutWarning(true);
+    } else {
+      setSigningOut(true);
+      try {
+        await onSignOut?.();
+      } finally {
+        setSigningOut(false);
+      }
+    }
+  }, [player.is_guest, onSignOut]);
 
   return (
     <div className="home">
@@ -256,6 +273,12 @@ function Home({ player, onPlayerUpdate }: HomeProps) {
               {joiningTable ? "..." : "Join"}
             </button>
           </form>
+
+          {/* Sign Out */}
+          <div className="play-divider" />
+          <button className="sign-out-btn" onClick={handleSignOutClick} disabled={signingOut}>
+            {signingOut ? "Signing out…" : "Sign Out"}
+          </button>
         </div>
 
         {/* Right: Tabbed Content */}
@@ -316,6 +339,42 @@ function Home({ player, onPlayerUpdate }: HomeProps) {
           </div>
         </div>
       </div>
+
+      {/* Guest sign-out confirmation dialog — rendered outside the grid */}
+      {showGuestSignOutWarning && (
+        <div className="sign-out-overlay" role="dialog" aria-modal="true" aria-labelledby="sign-out-dialog-title">
+          <div className="sign-out-dialog">
+            <h3 id="sign-out-dialog-title">Sign out as guest?</h3>
+            <p>
+              You&apos;re signed in as a guest. Signing out will permanently lose this
+              account &mdash; you won&apos;t be able to recover it.
+            </p>
+            <div className="sign-out-dialog-actions">
+              <button
+                className="sign-out-dialog-cancel"
+                onClick={() => setShowGuestSignOutWarning(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="sign-out-dialog-confirm"
+                disabled={signingOut}
+                onClick={async () => {
+                  setShowGuestSignOutWarning(false);
+                  setSigningOut(true);
+                  try {
+                    await onSignOut?.();
+                  } finally {
+                    setSigningOut(false);
+                  }
+                }}
+              >
+                Sign Out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
