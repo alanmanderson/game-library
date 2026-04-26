@@ -20,7 +20,7 @@ async def register_player(client, email, nickname):
     """Register a non-guest player via the auth API and return (player_dict, token)."""
     resp = await client.post(
         "/api/auth/register",
-        json={"email": email, "password": "secret123", "nickname": nickname},
+        json={"email": email, "password": "Secret123!", "nickname": nickname},
     )
     assert resp.status_code == 200, f"Failed to register player: {resp.text}"
     data = resp.json()

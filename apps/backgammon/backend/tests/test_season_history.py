@@ -11,7 +11,7 @@ from tests.conftest import auth_headers, create_test_player
 async def register_player(client, email, nickname):
     resp = await client.post(
         "/api/auth/register",
-        json={"email": email, "password": "secret123", "nickname": nickname},
+        json={"email": email, "password": "Secret123!", "nickname": nickname},
     )
     assert resp.status_code == 200, f"register failed: {resp.text}"
     data = resp.json()

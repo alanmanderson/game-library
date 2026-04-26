@@ -14,7 +14,7 @@ async def create_registered_player(client, nickname: str) -> dict:
     """Create a non-guest player via register so they can join tournaments."""
     resp = await client.post(
         "/api/auth/register",
-        json={"email": f"{nickname.lower()}@test.com", "password": "password123", "nickname": nickname},
+        json={"email": f"{nickname.lower()}@test.com", "password": "Password1!", "nickname": nickname},
     )
     assert resp.status_code == 200, resp.text
     return resp.json()

@@ -409,7 +409,7 @@ class TestPlayerStats:
         # Use auth/register to create a non-guest player (guests get 403)
         reg_resp = await client.post(
             "/api/auth/register",
-            json={"email": "newbie@example.com", "password": "secret123", "nickname": "Newbie"},
+            json={"email": "newbie@example.com", "password": "Secret123!", "nickname": "Newbie"},
         )
         token = reg_resp.json()["token"]
         player = reg_resp.json()["player"]

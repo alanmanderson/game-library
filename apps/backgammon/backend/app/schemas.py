@@ -3,7 +3,9 @@
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, computed_field
+import re
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, computed_field, field_validator
 
 
 # ── Player Schemas ───────────────────────────────────────────────────────────
@@ -47,8 +49,22 @@ class PlayerPreferencesUpdate(BaseModel):
 
 class RegisterRequest(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=6)
+    password: str = Field(min_length=8)
     nickname: str = Field(min_length=2, max_length=50)
+
+    @field_validator("password")
+    @classmethod
+    def password_complexity(cls, v: str) -> str:
+        errors = []
+        if not re.search(r"[A-Z]", v):
+            errors.append("one uppercase letter")
+        if not re.search(r"[0-9]", v):
+            errors.append("one number")
+        if not re.search(r"[^A-Za-z0-9]", v):
+            errors.append("one special character")
+        if errors:
+            raise ValueError(f"Password must contain at least {', '.join(errors)}")
+        return v
 
 
 class LoginRequest(BaseModel):

@@ -90,7 +90,7 @@ class TestTierInResponses:
         # appear in the rating leaderboard.
         resp = await client.post(
             "/api/auth/register",
-            json={"email": "diamond@test.com", "password": "password1", "nickname": "DiamondPlayer"},
+            json={"email": "diamond@test.com", "password": "Password1!", "nickname": "DiamondPlayer"},
         )
         assert resp.status_code == 200
         pid = resp.json()["player"]["id"]

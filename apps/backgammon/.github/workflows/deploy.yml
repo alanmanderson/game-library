@@ -148,6 +148,27 @@ jobs:
           $SSH "docker tag ghcr.io/alanmanderson/backgammon:${{ github.sha }} backgammon-server:latest"
           $SSH "docker logout ghcr.io"
 
+      - name: Write .env from secrets
+        env:
+          REMOTE: azureuser@${{ secrets.VM_HOST }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          DOMAIN: ${{ secrets.DOMAIN }}
+          GNUBG_URL: ${{ secrets.GNUBG_URL }}
+        run: |
+          DB_HOST="psql-shared-bg.postgres.database.azure.com"
+          DB_USER="pgadmin"
+          DB_NAME="backgammon"
+          printf 'DATABASE_URL=postgresql+asyncpg://%s:%s@%s:5432/%s?ssl=require\n' \
+            "$DB_USER" "$DB_PASSWORD" "$DB_HOST" "$DB_NAME" > /tmp/app.env
+          printf 'DATABASE_URL_SYNC=postgresql://%s:%s@%s:5432/%s?sslmode=require\n' \
+            "$DB_USER" "$DB_PASSWORD" "$DB_HOST" "$DB_NAME" >> /tmp/app.env
+          printf 'JWT_SECRET=%s\nALLOWED_ORIGINS=https://%s\nGOOGLE_CLIENT_ID=%s\nDOMAIN=%s\nGNUBG_URL=%s\n' \
+            "$JWT_SECRET" "$DOMAIN" "$GOOGLE_CLIENT_ID" "$DOMAIN" "$GNUBG_URL" >> /tmp/app.env
+          scp -i ~/.ssh/id_deploy /tmp/app.env "$REMOTE":/opt/backgammon/.env
+          rm /tmp/app.env
+
       - name: Deploy on VM
         env:
           REMOTE: azureuser@${{ secrets.VM_HOST }}

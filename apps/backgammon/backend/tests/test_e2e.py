@@ -374,7 +374,7 @@ class TestFlow2RegisteredPlayerGame:
             "/api/auth/register",
             json={
                 "email": "player1@example.com",
-                "password": "securepass",
+                "password": "Securepass1!",
                 "nickname": "RegPlayer1",
             },
         )
@@ -386,7 +386,7 @@ class TestFlow2RegisteredPlayerGame:
         # ── Step 2: Login ──────────────────────────────────────────────────
         resp = client.post(
             "/api/auth/login",
-            json={"email": "player1@example.com", "password": "securepass"},
+            json={"email": "player1@example.com", "password": "Securepass1!"},
         )
         assert resp.status_code == 200
         login = resp.json()
@@ -454,7 +454,7 @@ class TestFlow2RegisteredPlayerGame:
             "/api/auth/register",
             json={
                 "email": "solo@example.com",
-                "password": "securepass",
+                "password": "Securepass1!",
                 "nickname": "SoloPlayer",
             },
         ).json()
@@ -483,7 +483,7 @@ class TestFlow2RegisteredPlayerGame:
             "/api/auth/register",
             json={
                 "email": "stats@example.com",
-                "password": "securepass",
+                "password": "Securepass1!",
                 "nickname": "StatsPlayer",
             },
         ).json()
@@ -506,7 +506,7 @@ class TestFlow2RegisteredPlayerGame:
             "/api/auth/register",
             json={
                 "email": "p1state@example.com",
-                "password": "securepass",
+                "password": "Securepass1!",
                 "nickname": "P1State",
             },
         ).json()
@@ -642,7 +642,7 @@ class TestFlow4Authentication:
         """POST /api/auth/register returns a JWT and player object."""
         resp = e2e_client.post(
             "/api/auth/register",
-            json={"email": "reg@example.com", "password": "pass1234", "nickname": "RegUser"},
+            json={"email": "reg@example.com", "password": "Pass1234!", "nickname": "RegUser"},
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -655,7 +655,7 @@ class TestFlow4Authentication:
         """Registering with the same e-mail twice returns 409 Conflict."""
         payload = {
             "email": "dup@example.com",
-            "password": "pass1234",
+            "password": "Pass1234!",
             "nickname": "First",
         }
         e2e_client.post("/api/auth/register", json=payload)
@@ -680,11 +680,11 @@ class TestFlow4Authentication:
         """Login returns a JWT for the same player that was registered."""
         e2e_client.post(
             "/api/auth/register",
-            json={"email": "login@example.com", "password": "pass1234", "nickname": "LoginUser"},
+            json={"email": "login@example.com", "password": "Pass1234!", "nickname": "LoginUser"},
         )
         resp = e2e_client.post(
             "/api/auth/login",
-            json={"email": "login@example.com", "password": "pass1234"},
+            json={"email": "login@example.com", "password": "Pass1234!"},
         )
         assert resp.status_code == 200
         assert "token" in resp.json()
@@ -693,7 +693,7 @@ class TestFlow4Authentication:
         """Wrong password → 401."""
         e2e_client.post(
             "/api/auth/register",
-            json={"email": "badpw@example.com", "password": "correct", "nickname": "PwUser"},
+            json={"email": "badpw@example.com", "password": "Correct1!", "nickname": "PwUser"},
         )
         resp = e2e_client.post(
             "/api/auth/login",
@@ -742,7 +742,7 @@ class TestFlow4Authentication:
         """GET /api/auth/me returns the authenticated player."""
         reg = e2e_client.post(
             "/api/auth/register",
-            json={"email": "me@example.com", "password": "pass1234", "nickname": "MeUser"},
+            json={"email": "me@example.com", "password": "Pass1234!", "nickname": "MeUser"},
         ).json()
         resp = e2e_client.get(
             "/api/auth/me",

@@ -44,11 +44,9 @@ variable "google_client_id" {
   default     = ""
 }
 
-# TODO: Restrict this to your actual IP addresses for production use
 variable "allowed_ssh_ips" {
-  description = "List of CIDR blocks allowed to SSH into the VM (e.g. [\"203.0.113.10/32\"])"
+  description = "List of CIDR blocks allowed to SSH into the VM. Must be restricted to known IPs (e.g. [\"203.0.113.10/32\"]). No default — must be set explicitly in terraform.tfvars."
   type        = list(string)
-  default     = ["0.0.0.0/0"]
 }
 
 variable "enable_training_vm" {

@@ -20,7 +20,7 @@ class TestRegistration:
         """POST /api/auth/register creates an account and returns JWT + player."""
         resp = await client.post(
             "/api/auth/register",
-            json={"email": "alice@example.com", "password": "secret123", "nickname": "Alice"},
+            json={"email": "alice@example.com", "password": "Secret123!", "nickname": "Alice"},
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -33,17 +33,17 @@ class TestRegistration:
         """Registering with the same email twice returns 409."""
         await client.post(
             "/api/auth/register",
-            json={"email": "dup@example.com", "password": "secret123", "nickname": "First"},
+            json={"email": "dup@example.com", "password": "Secret123!", "nickname": "First"},
         )
         resp = await client.post(
             "/api/auth/register",
-            json={"email": "dup@example.com", "password": "other456", "nickname": "Second"},
+            json={"email": "dup@example.com", "password": "Other456!", "nickname": "Second"},
         )
         assert resp.status_code == 409
         assert "already registered" in resp.json()["detail"].lower()
 
     async def test_register_weak_password(self, client):
-        """A password shorter than 6 characters is rejected (422)."""
+        """A password that fails complexity requirements is rejected (422)."""
         resp = await client.post(
             "/api/auth/register",
             json={"email": "weak@example.com", "password": "abc", "nickname": "Weak"},
@@ -54,7 +54,7 @@ class TestRegistration:
         """A nickname shorter than 2 characters is rejected (422)."""
         resp = await client.post(
             "/api/auth/register",
-            json={"email": "short@example.com", "password": "secret123", "nickname": "X"},
+            json={"email": "short@example.com", "password": "Secret123!", "nickname": "X"},
         )
         assert resp.status_code == 422
 
@@ -75,12 +75,12 @@ class TestLogin:
         # First register
         await client.post(
             "/api/auth/register",
-            json={"email": "bob@example.com", "password": "password1", "nickname": "Bob"},
+            json={"email": "bob@example.com", "password": "Password1!", "nickname": "Bob"},
         )
         # Then login
         resp = await client.post(
             "/api/auth/login",
-            json={"email": "bob@example.com", "password": "password1"},
+            json={"email": "bob@example.com", "password": "Password1!"},
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -91,7 +91,7 @@ class TestLogin:
         """Login with wrong password returns 401."""
         await client.post(
             "/api/auth/register",
-            json={"email": "wrong@example.com", "password": "correct1", "nickname": "WrongPW"},
+            json={"email": "wrong@example.com", "password": "Correct1!", "nickname": "WrongPW"},
         )
         resp = await client.post(
             "/api/auth/login",
@@ -148,7 +148,7 @@ class TestTokenValidation:
         """GET /api/auth/me with a valid token returns the player."""
         reg = await client.post(
             "/api/auth/register",
-            json={"email": "me@example.com", "password": "secret123", "nickname": "MeUser"},
+            json={"email": "me@example.com", "password": "Secret123!", "nickname": "MeUser"},
         )
         token = reg.json()["token"]
 
@@ -268,7 +268,7 @@ class TestProtectedEndpoints:
         """A registered player can create a table via the normal API."""
         reg = await client.post(
             "/api/auth/register",
-            json={"email": "table@example.com", "password": "secret123", "nickname": "TableMaker"},
+            json={"email": "table@example.com", "password": "Secret123!", "nickname": "TableMaker"},
         )
         token = reg.json()["token"]
         player_id = reg.json()["player"]["id"]
@@ -330,7 +330,7 @@ class TestGuestStatsRestriction:
         """Registered players can access their stats."""
         reg = await client.post(
             "/api/auth/register",
-            json={"email": "stats@example.com", "password": "secret123", "nickname": "StatsUser"},
+            json={"email": "stats@example.com", "password": "Secret123!", "nickname": "StatsUser"},
         )
         token = reg.json()["token"]
         player_id = reg.json()["player"]["id"]
@@ -354,7 +354,7 @@ class TestLogout:
         """POST /api/auth/logout with a valid token returns 200."""
         reg = await client.post(
             "/api/auth/register",
-            json={"email": "logout@example.com", "password": "secret123", "nickname": "LogoutUser"},
+            json={"email": "logout@example.com", "password": "Secret123!", "nickname": "LogoutUser"},
         )
         token = reg.json()["token"]
 

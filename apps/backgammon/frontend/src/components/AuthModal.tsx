@@ -133,8 +133,20 @@ function AuthModal({ onAuthenticated }: AuthModalProps) {
         setError("Nickname must be at least 2 characters.");
         return;
       }
-      if (regPassword.length < 6) {
-        setError("Password must be at least 6 characters.");
+      if (regPassword.length < 8) {
+        setError("Password must be at least 8 characters.");
+        return;
+      }
+      if (!/[A-Z]/.test(regPassword)) {
+        setError("Password must contain at least one uppercase letter.");
+        return;
+      }
+      if (!/[0-9]/.test(regPassword)) {
+        setError("Password must contain at least one number.");
+        return;
+      }
+      if (!/[^A-Za-z0-9]/.test(regPassword)) {
+        setError("Password must contain at least one special character.");
         return;
       }
 
@@ -322,7 +334,7 @@ function AuthModal({ onAuthenticated }: AuthModalProps) {
             />
             <input
               type="password"
-              placeholder="Password (min 6 chars)"
+              placeholder="Password (min 8 chars, A-Z, 0-9, symbol)"
               aria-label="Password"
               value={regPassword}
               onChange={(e) => setRegPassword(e.target.value)}
