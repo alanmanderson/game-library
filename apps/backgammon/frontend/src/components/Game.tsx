@@ -16,6 +16,7 @@ import ConnectionBanners from "./ConnectionBanners";
 import ShortcutHelpModal from "./ShortcutHelpModal";
 import ChatPanel from "./ChatPanel";
 import "./styles/Game.css";
+import { inferDie, findPreferredMove } from "../utils/moveHelpers";
 
 function Game() {
   const { tableId } = useParams<{ tableId: string }>();
@@ -28,7 +29,7 @@ function Game() {
     playerId, gameState, myColor, table, selectedPoint, setSelectedPoint,
     error, waitingForOpponent, opponentConnected, opponentReconnected,
     isConnected, animatingMove, whiteTimeMs, blackTimeMs, timeControl, actions,
-    hintMoves, hintsRemaining, chatMessages,
+    hintMoves, hintsRemaining, chatMessages, diceOrder, swapDice,
   } = useGameState(tableId);
 
   useGameKeyboard({
@@ -63,29 +64,27 @@ function Game() {
 
   const handlePointClick = useCallback(
     (point: number) => {
-      if (!isMyTurn || !isMovingPhase || !myColor) return;
-      if (selectedPoint !== null) {
-        if (validMoves.some((m) => m.from_point === selectedPoint && m.to_point === point)) { actions.makeMove(selectedPoint, point); return; }
-        if (validMoves.some((m) => m.from_point === point)) { setSelectedPoint(point); return; }
-        setSelectedPoint(null);
-        return;
-      }
-      if (validMoves.some((m) => m.from_point === point)) setSelectedPoint(point);
+      if (!isMyTurn || !isMovingPhase || !myColor || !gameState) return;
+      const movesFromPoint = validMoves.filter((m) => m.from_point === point);
+      if (movesFromPoint.length === 0) return;
+      const move = findPreferredMove(movesFromPoint, diceOrder, gameState.remaining_dice, myColor);
+      if (move) actions.makeMove(move.from_point, move.to_point);
     },
-    [isMyTurn, isMovingPhase, myColor, selectedPoint, validMoves, actions, setSelectedPoint],
+    [isMyTurn, isMovingPhase, myColor, gameState, validMoves, diceOrder, actions],
   );
 
   const handleBarClick = useCallback(() => {
-    if (!isMyTurn || !isMovingPhase || !myColor) return;
+    if (!isMyTurn || !isMovingPhase || !myColor || !gameState) return;
     const barPoint = myColor === "white" ? 25 : 0;
-    if (validMoves.some((m) => m.from_point === barPoint)) setSelectedPoint(barPoint);
-  }, [isMyTurn, isMovingPhase, myColor, validMoves, setSelectedPoint]);
+    const movesFromBar = validMoves.filter((m) => m.from_point === barPoint);
+    if (movesFromBar.length === 0) return;
+    const move = findPreferredMove(movesFromBar, diceOrder, gameState.remaining_dice, myColor);
+    if (move) actions.makeMove(move.from_point, move.to_point);
+  }, [isMyTurn, isMovingPhase, myColor, gameState, validMoves, diceOrder, actions]);
 
   const handleBearOffClick = useCallback(() => {
-    if (!isMyTurn || !isMovingPhase || !myColor || selectedPoint === null) return;
-    const offPoint = myColor === "white" ? 0 : 25;
-    if (validMoves.some((m) => m.from_point === selectedPoint && m.to_point === offPoint)) actions.makeMove(selectedPoint, offPoint);
-  }, [isMyTurn, isMovingPhase, myColor, selectedPoint, validMoves, actions]);
+    // Bear-off is handled by clicking the checker directly in the new one-click mechanic.
+  }, []);
 
   const opponentPlayer = useMemo(() => {
     if (!table || !myColor) return null;
@@ -176,7 +175,7 @@ function Game() {
       if (gameState.valid_moves.length === 0 && gameState.turn_moves_count > 0) return "No more valid moves. Confirm your turn.";
       if (gameState.valid_moves.length === 0) return "No valid moves available.";
       if (gameState.remaining_dice.length === 0) return "All dice used. Confirm your turn.";
-      return "Click a highlighted checker, then click its destination.";
+      return "Click a highlighted checker to move it. Click the dice to swap their order.";
     }
     if (!isMyTurn) return `Waiting for ${opponentName} to move...`;
     return null;
@@ -230,7 +229,7 @@ function Game() {
           <div className={`board-area perspective-${myColor}`}>
             <Board gameState={gameState} myColor={myColor} selectedPoint={selectedPoint} validMoves={isMyTurn ? validMoves : []} onPointClick={handlePointClick} onBarClick={handleBarClick} onBearOffClick={handleBearOffClick} cubeValue={gameState.cube_value} cubeOwner={gameState.cube_owner} animatingMove={animatingMove} hintMoves={hintMoves} moveArrows={previousMoveArrows} arrowsMoverColor={gameState.last_turn_color as Color | undefined} boardTheme={myPlayer?.board_theme} checkerStyle={myPlayer?.checker_style} />
             <div className="board-overlay">
-              <Dice dice={gameState.dice} remainingDice={gameState.remaining_dice} currentTurn={diceColor} openingRoll={gameState.opening_roll} />
+              <Dice dice={gameState.dice} remainingDice={gameState.remaining_dice} currentTurn={diceColor} openingRoll={gameState.opening_roll} diceOrder={isMyTurn && isMovingPhase ? diceOrder : undefined} onSwap={isMyTurn && isMovingPhase ? swapDice : undefined} />
               <GameControls gameState={gameState} myColor={myColor} opponentName={opponentName} onRollDice={actions.rollDice} onEndTurn={actions.endTurn} onUndoTurn={actions.undoTurn} onOfferDouble={actions.offerDouble} onAcceptDouble={actions.acceptDouble} onDeclineDouble={actions.declineDouble} onRequestHint={actions.requestHint} hintsRemaining={hintsRemaining} />
             </div>
             {(gameState.status === "finished" || table.status === "game_over") && (

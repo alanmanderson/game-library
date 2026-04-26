@@ -9,6 +9,10 @@ interface DiceProps {
   openingRoll?: { white: number; black: number } | null;
   /** When true, skip the tumble animation and render the dice statically. */
   animate?: boolean;
+  /** Preferred display order [firstDie, secondDie]. When provided, overrides the default die1/die2 order. */
+  diceOrder?: number[];
+  /** Called when the user clicks the dice to swap their priority order. */
+  onSwap?: () => void;
 }
 
 /**
@@ -41,7 +45,7 @@ function DieFace({ value, used, color, rolling }: { value: number; used: boolean
   );
 }
 
-function Dice({ dice, remainingDice, currentTurn, openingRoll, animate = true }: DiceProps) {
+function Dice({ dice, remainingDice, currentTurn, openingRoll, animate = true, diceOrder, onSwap }: DiceProps) {
   const [isRolling, setIsRolling] = useState(false);
   const [rollingFaces, setRollingFaces] = useState<[number, number]>([1, 1]);
   const prevDiceRef = useRef<{ die1: number; die2: number } | null>(null);
@@ -95,9 +99,8 @@ function Dice({ dice, remainingDice, currentTurn, openingRoll, animate = true }:
     const isDoubles = dice.die1 === dice.die2;
 
     if (isDoubles) {
-      // Doubles: 4 dice shown
+      // Doubles: 4 dice shown — order doesn't matter, all same value
       const allDice = [dice.die1, dice.die1, dice.die1, dice.die1];
-      // Count how many of each value remain
       const remainingCount = remainingDice.filter((d) => d === dice.die1).length;
       return allDice.map((val, idx) => ({
         value: val,
@@ -106,22 +109,12 @@ function Dice({ dice, remainingDice, currentTurn, openingRoll, animate = true }:
       }));
     }
 
-    // Normal roll: 2 dice
-    const remaining1 = remainingDice.includes(dice.die1);
-    const remaining2 = remainingDice.includes(dice.die2);
+    // Determine display order: use diceOrder prop if provided, otherwise original roll order
+    const first = diceOrder && diceOrder.length >= 2 ? diceOrder[0] : dice.die1;
+    const second = diceOrder && diceOrder.length >= 2 ? diceOrder[1] : dice.die2;
 
-    // If both values are remaining, both are not used.
-    // If only one copy of a value remains but both dice have different values,
-    // figure out which die was used.
-    const die1Used = !remaining1;
-    // For die2, check if after accounting for die1, die2 is still remaining
-    let die2Used: boolean;
-    if (remaining2) {
-      // If die1 and die2 are different, straightforward
-      die2Used = false;
-    } else {
-      die2Used = true;
-    }
+    const firstUsed = !remainingDice.includes(first);
+    const secondUsed = !remainingDice.includes(second);
 
     // When showing the opening roll, color each die by the player who rolled it
     if (openingRoll) {
@@ -131,20 +124,18 @@ function Dice({ dice, remainingDice, currentTurn, openingRoll, animate = true }:
         (dice.die1 === whiteVal && dice.die2 === blackVal) ||
         (dice.die1 === blackVal && dice.die2 === whiteVal)
       ) {
-        const die1Color: Color = dice.die1 === whiteVal ? "white" : "black";
-        const die2Color: Color = dice.die1 === whiteVal ? "black" : "white";
         return [
-          { value: dice.die1, used: die1Used, color: die1Color },
-          { value: dice.die2, used: die2Used, color: die2Color },
+          { value: first, used: firstUsed, color: (first === whiteVal ? "white" : "black") as Color },
+          { value: second, used: secondUsed, color: (second === whiteVal ? "white" : "black") as Color },
         ];
       }
     }
 
     return [
-      { value: dice.die1, used: die1Used, color: currentTurn as Color },
-      { value: dice.die2, used: die2Used, color: currentTurn as Color },
+      { value: first, used: firstUsed, color: currentTurn as Color },
+      { value: second, used: secondUsed, color: currentTurn as Color },
     ];
-  }, [dice, remainingDice, currentTurn, openingRoll]);
+  }, [dice, remainingDice, currentTurn, openingRoll, diceOrder]);
 
   if (!dice) {
     return null;
@@ -160,8 +151,16 @@ function Dice({ dice, remainingDice, currentTurn, openingRoll, animate = true }:
     );
   }
 
+  const isSwappable = !!onSwap && dice && dice.die1 !== dice.die2;
+
   return (
-    <div className="dice-container">
+    <div
+      className={`dice-container${isSwappable ? " dice-swappable" : ""}`}
+      onClick={isSwappable ? onSwap : undefined}
+      title={isSwappable ? "Click to swap dice order" : undefined}
+      role={isSwappable ? "button" : undefined}
+      aria-label={isSwappable ? "Swap dice order" : undefined}
+    >
       {normalDiceDisplay.map((d, idx) => (
         <DieFace key={idx} value={d.value} used={d.used} color={d.color} />
       ))}

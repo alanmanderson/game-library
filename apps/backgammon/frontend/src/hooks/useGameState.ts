@@ -74,6 +74,10 @@ export interface GameStateHook {
   hintMoves: HintMove[];
   hintsRemaining: number;
   chatMessages: ChatMessage[];
+  /** Current display/priority order for the two dice: [firstDie, secondDie]. Larger die is first by default. */
+  diceOrder: number[];
+  /** Swap the dice order so the other die is tried first on checker click. */
+  swapDice: () => void;
 }
 
 export function useGameState(tableId: string | undefined): GameStateHook {
@@ -88,6 +92,7 @@ export function useGameState(tableId: string | undefined): GameStateHook {
   const [animatingMove, setAnimatingMove] = useState<AnimatingMove | null>(null);
   const [hintMoves, setHintMoves] = useState<HintMove[]>([]);
   const [hintsRemaining, setHintsRemaining] = useState(MAX_HINTS_PER_GAME);
+  const [diceOrder, setDiceOrder] = useState<number[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const prevGameStateRef = useRef<GameState | null>(null);
   const myColorRef = useRef<Color | null>(null);
@@ -131,6 +136,16 @@ export function useGameState(tableId: string | undefined): GameStateHook {
               if (animTimerRef.current) clearTimeout(animTimerRef.current);
               animTimerRef.current = setTimeout(() => setAnimatingMove(null), 400);
             }
+          }
+          // Reset dice order on a fresh roll (all dice still remaining).
+          if (newGS.dice) {
+            const expectedCount = newGS.dice.die1 === newGS.dice.die2 ? 4 : 2;
+            if (newGS.remaining_dice.length === expectedCount) {
+              const d1 = newGS.dice.die1, d2 = newGS.dice.die2;
+              setDiceOrder([Math.max(d1, d2), Math.min(d1, d2)]);
+            }
+          } else {
+            setDiceOrder([]);
           }
           prevGameStateRef.current = newGS;
           setGameState(message.data.game_state);
@@ -240,6 +255,10 @@ export function useGameState(tableId: string | undefined): GameStateHook {
   const requestHint = useCallback(() => { sendMessage({ action: "request_hint" }); }, [sendMessage]);
   const sendChat = useCallback((text: string) => { sendMessage({ action: "chat", message: text }); }, [sendMessage]);
 
+  const swapDice = useCallback(() => {
+    setDiceOrder((prev) => (prev.length === 2 ? [prev[1], prev[0]] : prev));
+  }, []);
+
   const makeMove = useCallback(
     (fromPoint: number, toPoint: number) => {
       if (myColor) {
@@ -262,6 +281,6 @@ export function useGameState(tableId: string | undefined): GameStateHook {
     playerId, gameState, myColor, table, selectedPoint, setSelectedPoint,
     error, waitingForOpponent, opponentConnected, opponentReconnected,
     isConnected, animatingMove, whiteTimeMs, blackTimeMs, timeControl, actions,
-    hintMoves, hintsRemaining, chatMessages,
+    hintMoves, hintsRemaining, chatMessages, diceOrder, swapDice,
   };
 }

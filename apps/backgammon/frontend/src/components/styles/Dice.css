@@ -78,6 +78,21 @@
   font-size: 0.9rem;
 }
 
+/* Swappable dice: clicking swaps the priority order */
+.dice-container.dice-swappable {
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 0.15s ease;
+}
+
+.dice-container.dice-swappable:hover {
+  background: rgba(212, 168, 67, 0.12);
+}
+
+.dice-container.dice-swappable:hover .die:not(.used) {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
 /* Compact dice when inside board overlay */
 .board-overlay .dice-container {
   padding: 0.15rem;
