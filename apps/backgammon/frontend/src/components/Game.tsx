@@ -29,7 +29,7 @@ function Game() {
     playerId, gameState, myColor, table, selectedPoint, setSelectedPoint,
     error, waitingForOpponent, opponentConnected, opponentReconnected,
     isConnected, animatingMove, whiteTimeMs, blackTimeMs, timeControl, actions,
-    hintMoves, hintsRemaining, chatMessages, diceOrder, swapDice,
+    hintMoves, hintsRemaining, chatMessages, diceOrder, swapDice, moveInFlight,
   } = useGameState(tableId);
 
   useGameKeyboard({
@@ -64,23 +64,23 @@ function Game() {
 
   const handlePointClick = useCallback(
     (point: number) => {
-      if (!isMyTurn || !isMovingPhase || !myColor || !gameState) return;
+      if (!isMyTurn || !isMovingPhase || !myColor || !gameState || moveInFlight) return;
       const movesFromPoint = validMoves.filter((m) => m.from_point === point);
       if (movesFromPoint.length === 0) return;
       const move = findPreferredMove(movesFromPoint, diceOrder, gameState.remaining_dice, myColor);
       if (move) actions.makeMove(move.from_point, move.to_point);
     },
-    [isMyTurn, isMovingPhase, myColor, gameState, validMoves, diceOrder, actions],
+    [isMyTurn, isMovingPhase, myColor, gameState, validMoves, diceOrder, actions, moveInFlight],
   );
 
   const handleBarClick = useCallback(() => {
-    if (!isMyTurn || !isMovingPhase || !myColor || !gameState) return;
+    if (!isMyTurn || !isMovingPhase || !myColor || !gameState || moveInFlight) return;
     const barPoint = myColor === "white" ? 25 : 0;
     const movesFromBar = validMoves.filter((m) => m.from_point === barPoint);
     if (movesFromBar.length === 0) return;
     const move = findPreferredMove(movesFromBar, diceOrder, gameState.remaining_dice, myColor);
     if (move) actions.makeMove(move.from_point, move.to_point);
-  }, [isMyTurn, isMovingPhase, myColor, gameState, validMoves, diceOrder, actions]);
+  }, [isMyTurn, isMovingPhase, myColor, gameState, validMoves, diceOrder, actions, moveInFlight]);
 
   const handleBearOffClick = useCallback(() => {
     // Bear-off is handled by clicking the checker directly in the new one-click mechanic.

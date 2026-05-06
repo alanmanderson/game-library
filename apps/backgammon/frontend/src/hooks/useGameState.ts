@@ -78,6 +78,8 @@ export interface GameStateHook {
   diceOrder: number[];
   /** Swap the dice order so the other die is tried first on checker click. */
   swapDice: () => void;
+  /** True while a move has been sent to the server but not yet confirmed. Blocks rapid double-clicks. */
+  moveInFlight: boolean;
 }
 
 export function useGameState(tableId: string | undefined): GameStateHook {
@@ -93,6 +95,7 @@ export function useGameState(tableId: string | undefined): GameStateHook {
   const [hintMoves, setHintMoves] = useState<HintMove[]>([]);
   const [hintsRemaining, setHintsRemaining] = useState(MAX_HINTS_PER_GAME);
   const [diceOrder, setDiceOrder] = useState<number[]>([]);
+  const [moveInFlight, setMoveInFlight] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const prevGameStateRef = useRef<GameState | null>(null);
   const myColorRef = useRef<Color | null>(null);
@@ -147,6 +150,7 @@ export function useGameState(tableId: string | undefined): GameStateHook {
           } else {
             setDiceOrder([]);
           }
+          setMoveInFlight(false);
           prevGameStateRef.current = newGS;
           setGameState(message.data.game_state);
           const gs = message.data.game_state;
@@ -188,6 +192,7 @@ export function useGameState(tableId: string | undefined): GameStateHook {
       case "game_over": setSelectedPoint(null); break;
       case "waiting": setWaitingForOpponent(true); break;
       case "error":
+        setMoveInFlight(false);
         setError(message.data.message);
         if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current);
         errorTimeoutRef.current = setTimeout(() => setError(null), 5000);
@@ -266,6 +271,7 @@ export function useGameState(tableId: string | undefined): GameStateHook {
         if (animTimerRef.current) clearTimeout(animTimerRef.current);
         animTimerRef.current = setTimeout(() => setAnimatingMove(null), 400);
       }
+      setMoveInFlight(true);
       sendMessage({ action: "make_move", from_point: fromPoint, to_point: toPoint });
       setSelectedPoint(null);
     },
@@ -281,6 +287,6 @@ export function useGameState(tableId: string | undefined): GameStateHook {
     playerId, gameState, myColor, table, selectedPoint, setSelectedPoint,
     error, waitingForOpponent, opponentConnected, opponentReconnected,
     isConnected, animatingMove, whiteTimeMs, blackTimeMs, timeControl, actions,
-    hintMoves, hintsRemaining, chatMessages, diceOrder, swapDice,
+    hintMoves, hintsRemaining, chatMessages, diceOrder, swapDice, moveInFlight,
   };
 }
