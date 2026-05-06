@@ -58,7 +58,7 @@ jobs:
           docker save backgammon-gnubg:latest | zstd -T0 -3 > /tmp/backgammon-gnubg.tar.zst
 
       - name: Upload Docker image
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: gnubg-image
           path: /tmp/backgammon-gnubg.tar.zst
