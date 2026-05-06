@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { GameState, Color } from "../types/game";
 import "./styles/GameControls.css";
 
@@ -12,6 +12,7 @@ interface GameControlsProps {
   onAcceptDouble: () => void;
   onDeclineDouble: () => void;
   onRequestHint: () => void;
+  onResign: () => void;
   opponentName: string;
   hintsRemaining: number;
 }
@@ -26,9 +27,11 @@ function GameControls({
   onAcceptDouble,
   onDeclineDouble,
   onRequestHint,
+  onResign,
   opponentName,
   hintsRemaining,
 }: GameControlsProps) {
+  const [confirmResign, setConfirmResign] = useState(false);
   const isMyTurn = gameState.current_turn === myColor;
 
   const statusInfo = useMemo(() => {
@@ -84,6 +87,9 @@ function GameControls({
     gameState.status === "moving" &&
     gameState.valid_moves.length > 0;
 
+  const showResignButton =
+    gameState.status === "rolling" || gameState.status === "moving";
+
   return (
     <div className="game-controls">
       <div className="controls-row">
@@ -133,6 +139,21 @@ function GameControls({
           </button>
         )}
       </div>
+      {showResignButton && (
+        <div className="controls-row resign-row">
+          {confirmResign ? (
+            <>
+              <span className="resign-confirm-text">Resign?</span>
+              <button className="resign-confirm-btn" onClick={() => { onResign(); setConfirmResign(false); }}>Yes</button>
+              <button className="resign-cancel-btn" onClick={() => setConfirmResign(false)}>No</button>
+            </>
+          ) : (
+            <button className="resign-btn" onClick={() => setConfirmResign(true)} title="Resign the current game">
+              Resign
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

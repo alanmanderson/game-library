@@ -230,10 +230,10 @@ function Game() {
             <Board gameState={gameState} myColor={myColor} selectedPoint={selectedPoint} validMoves={isMyTurn ? validMoves : []} onPointClick={handlePointClick} onBarClick={handleBarClick} onBearOffClick={handleBearOffClick} cubeValue={gameState.cube_value} cubeOwner={gameState.cube_owner} animatingMove={animatingMove} hintMoves={hintMoves} moveArrows={previousMoveArrows} arrowsMoverColor={gameState.last_turn_color as Color | undefined} boardTheme={myPlayer?.board_theme} checkerStyle={myPlayer?.checker_style} />
             <div className="board-overlay">
               <Dice dice={gameState.dice} remainingDice={gameState.remaining_dice} currentTurn={diceColor} openingRoll={gameState.opening_roll} diceOrder={isMyTurn && isMovingPhase ? diceOrder : undefined} onSwap={isMyTurn && isMovingPhase ? swapDice : undefined} />
-              <GameControls gameState={gameState} myColor={myColor} opponentName={opponentName} onRollDice={actions.rollDice} onEndTurn={actions.endTurn} onUndoTurn={actions.undoTurn} onOfferDouble={actions.offerDouble} onAcceptDouble={actions.acceptDouble} onDeclineDouble={actions.declineDouble} onRequestHint={actions.requestHint} hintsRemaining={hintsRemaining} />
+              <GameControls gameState={gameState} myColor={myColor} opponentName={opponentName} onRollDice={actions.rollDice} onEndTurn={actions.endTurn} onUndoTurn={actions.undoTurn} onOfferDouble={actions.offerDouble} onAcceptDouble={actions.acceptDouble} onDeclineDouble={actions.declineDouble} onRequestHint={actions.requestHint} onResign={actions.resign} hintsRemaining={hintsRemaining} />
             </div>
             {(gameState.status === "finished" || table.status === "game_over") && (
-              <GameOverBanner gameState={gameState} table={table} myColor={myColor} myName={myName} opponentName={opponentName} myScore={myScore} opponentScore={opponentScore} onNextGame={actions.nextGame} />
+              <GameOverBanner gameState={gameState} table={table} tableId={tableId!} myColor={myColor} myName={myName} opponentName={opponentName} myScore={myScore} opponentScore={opponentScore} onNextGame={actions.nextGame} />
             )}
           </div>
 

@@ -77,6 +77,43 @@
   opacity: 0.6;
 }
 
+.resign-row {
+  margin-top: 0.1rem;
+}
+
+.controls-row .resign-btn {
+  padding: 0.25rem 0.9rem;
+  font-size: 0.8rem;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--text-secondary);
+  opacity: 0.7;
+}
+
+.controls-row .resign-btn:hover:not(:disabled) {
+  background: var(--danger);
+  color: var(--text-primary);
+  border-color: var(--danger);
+  opacity: 1;
+}
+
+.resign-confirm-text {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.controls-row .resign-confirm-btn {
+  padding: 0.25rem 0.7rem;
+  font-size: 0.8rem;
+  background: var(--danger);
+}
+
+.controls-row .resign-cancel-btn {
+  padding: 0.25rem 0.7rem;
+  font-size: 0.8rem;
+  background: var(--text-secondary);
+}
+
 /* Compact controls when inside board overlay */
 .board-overlay .game-controls {
   padding: 0.15rem;
@@ -101,6 +138,13 @@
 .board-overlay .controls-row .hint-btn {
   padding: 0.3rem 0.8rem;
   font-size: 0.8rem;
+}
+
+.board-overlay .controls-row .resign-btn,
+.board-overlay .controls-row .resign-confirm-btn,
+.board-overlay .controls-row .resign-cancel-btn {
+  padding: 0.2rem 0.6rem;
+  font-size: 0.75rem;
 }
 
 /* ---- Responsive: Tablet ---- */

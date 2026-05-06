@@ -576,6 +576,9 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, player_id: str
                             elif action == "decline_double":
                                 await _handle_decline_double(db, websocket, table_id, player_id)
 
+                            elif action == "resign":
+                                await _handle_resign(db, websocket, table_id, player_id)
+
                             elif action == "next_game":
                                 await _handle_next_game(db, websocket, table_id, player_id)
 
@@ -727,6 +730,33 @@ async def _handle_decline_double(
             game_over_data = {
                 "winner_id": table.winner_id,
                 "win_type": table.win_type,
+                "final_score": table.final_score,
+                "match_over": match_over,
+                "white_match_score": table.white_match_score,
+                "black_match_score": table.black_match_score,
+            }
+            await _broadcast_game_over(table_id, game_over_data)
+        if table and table.status == "finished":
+            game_manager.cleanup_finished_game(table_id)
+            _hint_usage.pop(table_id, None)
+
+
+async def _handle_resign(
+    db, websocket: WebSocket, table_id: str, player_id: str
+) -> None:
+    """Handle a resign action: the resigning player loses the current game."""
+    await game_manager.resign(db, table_id, player_id)
+
+    await _send_game_state_to_all(table_id, db=db)
+
+    engine = game_manager.get_engine(table_id)
+    if engine and engine.state.status == GameStatus.FINISHED:
+        table = await db.get(Table, table_id)
+        if table:
+            match_over = table.status == "finished"
+            game_over_data = {
+                "winner_id": table.winner_id,
+                "win_type": "resignation",
                 "final_score": table.final_score,
                 "match_over": match_over,
                 "white_match_score": table.white_match_score,

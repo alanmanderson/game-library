@@ -797,6 +797,30 @@ class GameManager:
             )
         return {"winner": winner.value if winner else None}
 
+    async def resign(self, db: AsyncSession, table_id: str, player_id: str) -> None:
+        """Resign from the current game. The resigning player loses (1 point × cube)."""
+        engine = self._engines.get(table_id)
+        if not engine:
+            raise ValueError("Game not found")
+        if engine.state.status == GameStatus.FINISHED:
+            raise ValueError("Game is already finished")
+
+        color = self.get_player_color(table_id, player_id)
+        if not color:
+            raise ValueError("Not a player at this table")
+
+        winner_color = Color.BLACK if color == Color.WHITE else Color.WHITE
+        engine.state.winner = winner_color
+        engine.state.win_type = WinType.NORMAL
+        engine.state.status = GameStatus.FINISHED
+
+        await self._finish_game(db, table_id, engine)
+
+        # Override win_type to "resignation" (scoring uses NORMAL = 1 × cube)
+        table = await db.get(Table, table_id)
+        if table:
+            table.win_type = "resignation"
+
     async def undo_turn(self, db: AsyncSession, table_id: str, player_id: str) -> bool:
         """Undo all moves made this turn, restoring the board to post-roll state."""
         engine = self._engines.get(table_id)
