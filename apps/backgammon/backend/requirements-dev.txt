@@ -2,7 +2,7 @@
 pytest==8.3.4
 pytest-asyncio==1.3.0
 pytest-cov==6.1.1
-aiosqlite==0.20.0
+aiosqlite==0.22.1
 
 # Needed by tests that exercise the ML bot's full-turn planner
 # (`tests/test_bot.py::TestHardDifficulty`) — the planner imports torch+numpy
