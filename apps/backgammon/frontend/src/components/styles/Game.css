@@ -397,6 +397,26 @@
   opacity: 0.85;
 }
 
+.analyze-game-btn {
+  display: inline-block;
+  margin-top: 0.25rem;
+  padding: 0.5rem 1.5rem;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.analyze-game-btn:hover {
+  background: var(--accent);
+  color: var(--bg-primary);
+}
+
 /* Bot difficulty badge */
 
 .bot-difficulty-badge {

@@ -1,8 +1,10 @@
+import { Link } from "react-router-dom";
 import type { GameState, Color, Table } from "../types/game";
 
 interface GameOverBannerProps {
   gameState: GameState;
   table: Table;
+  tableId: string;
   myColor: Color;
   myName: string;
   opponentName: string;
@@ -14,6 +16,7 @@ interface GameOverBannerProps {
 function GameOverBanner({
   gameState,
   table,
+  tableId,
   myColor,
   myName,
   opponentName,
@@ -36,6 +39,9 @@ function GameOverBanner({
           <button className="next-game-btn" onClick={onNextGame}>
             Next Game
           </button>
+          <Link className="analyze-game-btn" to={`/replay/${tableId}`}>
+            Analyze Game
+          </Link>
         </div>
       </div>
     );
@@ -56,6 +62,9 @@ function GameOverBanner({
               ? "You won the match!"
               : `${opponentName} wins the match!`}
           </div>
+          <Link className="analyze-game-btn" to={`/replay/${tableId}`}>
+            Analyze Game
+          </Link>
         </div>
       </div>
     );
@@ -65,6 +74,9 @@ function GameOverBanner({
     <div className="board-overlay-right">
       <div className="win-banner">
         {gameState.winner === myColor ? "You won!" : `${opponentName} wins!`}
+        <Link className="analyze-game-btn" to={`/replay/${tableId}`}>
+          Analyze Game
+        </Link>
       </div>
     </div>
   );
