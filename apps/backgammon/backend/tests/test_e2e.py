@@ -120,8 +120,10 @@ def e2e_client(tmp_path):
     with (
         patch("app.api.websocket.async_session", _mock_async_session),
         patch("app.database.async_session", _mock_async_session),
-        patch("app.services.bot_service.schedule_bot_turn_if_needed"),
-        patch("app.services.bot_service.schedule_bot_double_response_if_needed"),
+        patch("app.api.websocket.schedule_bot_turn_if_needed"),
+        patch("app.api.websocket.schedule_bot_double_response_if_needed"),
+        patch("app.api.websocket.is_bot_game", return_value=False),
+        patch("app.api.websocket.restore_bot_difficulty"),
         patch.object(app.router, "lifespan_context", _noop_lifespan),
     ):
         with TestClient(app) as client:
