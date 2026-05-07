@@ -95,10 +95,15 @@ jobs:
           # Disable strict host checking for the internal target; the VNet
           # is the trust boundary.
           cat >> ~/.ssh/config <<EOF
+          Host jump
+            HostName $VM_HOST
+            User azureuser
+            IdentityFile ~/.ssh/id_deploy
+
           Host gnubg
             HostName $GNUBG_VM_HOST
             User azureuser
-            ProxyJump azureuser@$VM_HOST
+            ProxyJump jump
             IdentityFile ~/.ssh/id_deploy
             StrictHostKeyChecking no
             UserKnownHostsFile /dev/null
