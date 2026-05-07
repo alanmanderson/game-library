@@ -121,8 +121,19 @@ async def _create_schema(engine):
 
 
 def _run_async(coro):
-    """Run an async coroutine in a fresh, isolated event loop."""
-    return asyncio.run(coro)
+    """Run a coroutine synchronously using a private event loop.
+
+    Uses ``new_event_loop`` + ``run_until_complete`` instead of ``asyncio.run``
+    because ``asyncio.run`` calls ``set_event_loop(None)`` on exit, which
+    destroys any loop that pytest-asyncio 1.x installed on the main thread.
+    That corrupted state makes ``anyio.from_thread.start_blocking_portal``
+    (used by Starlette's TestClient) deadlock intermittently.
+    """
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
 
 
 def _token(player_id: str) -> str:

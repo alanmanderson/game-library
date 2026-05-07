@@ -31,6 +31,7 @@ async def _make_players(db_session, nick_a: str = "Alice", nick_b: str = "Bob"):
 
 
 class TestUpdateStats:
+    @pytest.mark.asyncio
     async def test_normal_win(self, db_session):
         """A normal win credits 1 point to the winner."""
         p1, p2 = await _make_players(db_session)
@@ -48,6 +49,7 @@ class TestUpdateStats:
         assert loser_stats["total_wins"] == 0
         assert loser_stats["total_losses"] == 1
 
+    @pytest.mark.asyncio
     async def test_gammon_win(self, db_session):
         """A gammon win credits 2 points and increments gammons_won."""
         p1, p2 = await _make_players(db_session)
@@ -65,6 +67,7 @@ class TestUpdateStats:
         assert loser_per["gammons_lost"] == 1
         assert loser_per["total_points_lost"] == 2
 
+    @pytest.mark.asyncio
     async def test_backgammon_win(self, db_session):
         """A backgammon win credits 3 points and increments backgammons_won."""
         p1, p2 = await _make_players(db_session)
@@ -81,6 +84,7 @@ class TestUpdateStats:
         assert loser_per["backgammons_lost"] == 1
         assert loser_per["total_points_lost"] == 3
 
+    @pytest.mark.asyncio
     async def test_multiple_games_accumulate(self, db_session):
         """Playing several games correctly accumulates all counters."""
         p1, p2 = await _make_players(db_session)
@@ -100,6 +104,7 @@ class TestUpdateStats:
         # Points lost: 2 (gammon)
         assert per["total_points_lost"] == 2
 
+    @pytest.mark.asyncio
     async def test_loser_stats_mirror_winner(self, db_session):
         """The loser's record is the mirror image of the winner's."""
         p1, p2 = await _make_players(db_session)
@@ -119,6 +124,7 @@ class TestUpdateStats:
 
 
 class TestGetPlayerStats:
+    @pytest.mark.asyncio
     async def test_empty_stats(self, db_session):
         """A player with no games has all-zero stats."""
         p = Player(nickname="Lonely")
@@ -132,6 +138,7 @@ class TestGetPlayerStats:
         assert stats["win_rate"] == 0.0
         assert stats["per_opponent"] == []
 
+    @pytest.mark.asyncio
     async def test_per_opponent_breakdown(self, db_session):
         """Stats are tracked per-opponent; two opponents produce two entries."""
         p1 = Player(nickname="Alice")
@@ -153,6 +160,7 @@ class TestGetPlayerStats:
         nicknames = {entry["opponent_nickname"] for entry in stats["per_opponent"]}
         assert nicknames == {"Bob", "Charlie"}
 
+    @pytest.mark.asyncio
     async def test_win_rate_calculation(self, db_session):
         """Win rate is a percentage (wins / total * 100)."""
         p1, p2 = await _make_players(db_session)

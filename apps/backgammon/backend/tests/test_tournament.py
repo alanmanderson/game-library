@@ -36,12 +36,14 @@ async def create_tournament(client, token: str, name: str = "Test Tournament", m
 
 
 class TestTournamentList:
+    @pytest.mark.asyncio
     async def test_list_tournaments_empty(self, client):
         """GET /api/tournaments returns empty list when no tournaments exist."""
         resp = await client.get("/api/tournaments")
         assert resp.status_code == 200
         assert resp.json() == []
 
+    @pytest.mark.asyncio
     async def test_create_tournament_requires_auth(self, client):
         """POST /api/tournaments without auth returns 401."""
         resp = await client.post(
@@ -50,6 +52,7 @@ class TestTournamentList:
         )
         assert resp.status_code == 401
 
+    @pytest.mark.asyncio
     async def test_guest_cannot_create_tournament(self, client):
         """Guest players cannot create tournaments."""
         guest = await create_test_player(client, "Guest1")
@@ -60,6 +63,7 @@ class TestTournamentList:
         )
         assert resp.status_code == 403
 
+    @pytest.mark.asyncio
     async def test_create_tournament_success(self, client):
         """Registered player can create a tournament."""
         player = await create_registered_player(client, "Organizer")
@@ -71,6 +75,7 @@ class TestTournamentList:
         assert data["player_count"] == 0
         assert "id" in data
 
+    @pytest.mark.asyncio
     async def test_list_tournaments_after_create(self, client):
         """Tournaments appear in the listing after creation."""
         player = await create_registered_player(client, "OrganizerB")
@@ -81,6 +86,7 @@ class TestTournamentList:
         assert len(tournaments) == 1
         assert tournaments[0]["name"] == "Listed Tournament"
 
+    @pytest.mark.asyncio
     async def test_create_tournament_invalid_max_players(self, client):
         """max_players below 2 is rejected."""
         player = await create_registered_player(client, "OrganizerC")
@@ -98,6 +104,7 @@ class TestTournamentList:
 
 
 class TestTournamentRegistration:
+    @pytest.mark.asyncio
     async def test_register_for_tournament(self, client):
         """A registered player can sign up for a tournament."""
         organizer = await create_registered_player(client, "OrgD")
@@ -112,6 +119,7 @@ class TestTournamentRegistration:
         bracket = resp.json()
         assert bracket["tournament"]["player_count"] == 1
 
+    @pytest.mark.asyncio
     async def test_register_duplicate_raises_error(self, client):
         """Registering twice returns 400."""
         organizer = await create_registered_player(client, "OrgE")
@@ -129,6 +137,7 @@ class TestTournamentRegistration:
         assert resp.status_code == 400
         assert "already registered" in resp.json()["detail"].lower()
 
+    @pytest.mark.asyncio
     async def test_guest_cannot_register(self, client):
         """Guest players cannot register for tournaments."""
         organizer = await create_registered_player(client, "OrgF")
@@ -141,6 +150,7 @@ class TestTournamentRegistration:
         )
         assert resp.status_code == 403
 
+    @pytest.mark.asyncio
     async def test_tournament_full(self, client):
         """Registering beyond max_players returns 400."""
         organizer = await create_registered_player(client, "OrgG")
@@ -170,6 +180,7 @@ class TestTournamentRegistration:
 
 
 class TestTournamentStart:
+    @pytest.mark.asyncio
     async def test_only_creator_can_start(self, client):
         """Non-creator cannot start the tournament."""
         organizer = await create_registered_player(client, "OrgH")
@@ -190,6 +201,7 @@ class TestTournamentStart:
         )
         assert resp.status_code == 403
 
+    @pytest.mark.asyncio
     async def test_start_tournament_needs_players(self, client):
         """Starting a tournament with < 2 players returns 400."""
         organizer = await create_registered_player(client, "OrgI")
@@ -201,6 +213,7 @@ class TestTournamentStart:
         )
         assert resp.status_code == 400
 
+    @pytest.mark.asyncio
     async def test_start_tournament_4_players(self, client):
         """Starting with 4 players creates 3 matches (2 in round 1, 1 in round 2)."""
         organizer = await create_registered_player(client, "OrgJ")
@@ -223,6 +236,7 @@ class TestTournamentStart:
         assert bracket["total_rounds"] == 2
         assert len(bracket["matches"]) == 3  # 2 + 1
 
+    @pytest.mark.asyncio
     async def test_start_tournament_2_players(self, client):
         """Starting with 2 players creates 1 match in 1 round."""
         organizer = await create_registered_player(client, "OrgK")
@@ -245,6 +259,7 @@ class TestTournamentStart:
         assert bracket["total_rounds"] == 1
         assert len(bracket["matches"]) == 1
 
+    @pytest.mark.asyncio
     async def test_start_tournament_3_players_has_bye(self, client):
         """3 players: bracket size=4, one BYE match auto-completes."""
         organizer = await create_registered_player(client, "OrgL")
@@ -267,6 +282,7 @@ class TestTournamentStart:
         statuses = [m["status"] for m in bracket["matches"]]
         assert "bye" in statuses
 
+    @pytest.mark.asyncio
     async def test_cannot_start_twice(self, client):
         """Starting an already-started tournament returns 400."""
         organizer = await create_registered_player(client, "OrgM")
@@ -296,11 +312,13 @@ class TestTournamentStart:
 
 
 class TestTournamentBracket:
+    @pytest.mark.asyncio
     async def test_get_bracket_not_found(self, client):
         """GET /api/tournaments/NOTEXIST returns 404."""
         resp = await client.get("/api/tournaments/NOTEXIST")
         assert resp.status_code == 404
 
+    @pytest.mark.asyncio
     async def test_get_bracket_registering(self, client):
         """Can fetch bracket of a tournament still in registration phase."""
         organizer = await create_registered_player(client, "OrgN")
@@ -314,6 +332,7 @@ class TestTournamentBracket:
         assert bracket["matches"] == []
         assert bracket["total_rounds"] == 0
 
+    @pytest.mark.asyncio
     async def test_get_bracket_with_entries(self, client):
         """Bracket includes registered players."""
         organizer = await create_registered_player(client, "OrgO")

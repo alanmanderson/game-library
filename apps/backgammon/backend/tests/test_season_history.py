@@ -2,6 +2,8 @@
 
 from datetime import datetime, timezone
 
+import pytest
+
 from app.game_engine import WinType
 from app.models import Player, PlayerSeasonStats, Season
 from app.services.season_stats_service import record_match_result
@@ -31,6 +33,7 @@ async def _seed_active_season(db_session) -> Season:
 
 
 class TestRecordMatchResult:
+    @pytest.mark.asyncio
     async def test_creates_rows_on_first_game(self, client, db_session):
         """First rated game creates one PlayerSeasonStats row per player."""
         await _seed_active_season(db_session)
@@ -68,6 +71,7 @@ class TestRecordMatchResult:
         assert loser_row.losses == 1
         assert loser_row.end_rating == 1460
 
+    @pytest.mark.asyncio
     async def test_increments_on_subsequent_games(self, client, db_session):
         """Second game upserts the same rows, bumping counters and peak rating."""
         await _seed_active_season(db_session)
@@ -110,6 +114,7 @@ class TestRecordMatchResult:
         assert loser_row.gammons_lost == 1
         assert loser_row.end_rating == 1400
 
+    @pytest.mark.asyncio
     async def test_peak_rating_preserved_after_drop(self, client, db_session):
         """peak_rating is a max, not a last-seen value."""
         await _seed_active_season(db_session)
@@ -139,6 +144,7 @@ class TestRecordMatchResult:
         assert w_row.end_rating == 1620
         assert w_row.peak_rating == 1700  # peak preserved
 
+    @pytest.mark.asyncio
     async def test_no_active_season_is_noop(self, client, db_session):
         """Missing active season leaves the table empty without raising."""
         winner, _ = await register_player(client, "w@test.com", "Winner")
@@ -152,6 +158,7 @@ class TestRecordMatchResult:
         ).fetchall()
         assert rows == []
 
+    @pytest.mark.asyncio
     async def test_guest_games_skipped(self, client, db_session):
         """Guest players don't get PlayerSeasonStats rows."""
         await _seed_active_season(db_session)
@@ -173,10 +180,12 @@ class TestRecordMatchResult:
 
 
 class TestSeasonHistoryEndpoint:
+    @pytest.mark.asyncio
     async def test_requires_auth(self, client):
         resp = await client.get("/api/players/abc/season-history")
         assert resp.status_code == 401
 
+    @pytest.mark.asyncio
     async def test_forbidden_for_guest(self, client):
         guest = await create_test_player(client, "GuestSH")
         resp = await client.get(
@@ -185,6 +194,7 @@ class TestSeasonHistoryEndpoint:
         )
         assert resp.status_code == 403
 
+    @pytest.mark.asyncio
     async def test_forbidden_for_other_player(self, client):
         me, token = await register_player(client, "me@test.com", "Me")
         other, _ = await register_player(client, "other@test.com", "Other")
@@ -194,6 +204,7 @@ class TestSeasonHistoryEndpoint:
         )
         assert resp.status_code == 403
 
+    @pytest.mark.asyncio
     async def test_returns_empty_for_new_player(self, client):
         me, token = await register_player(client, "me@test.com", "Me")
         resp = await client.get(
@@ -203,6 +214,7 @@ class TestSeasonHistoryEndpoint:
         assert resp.status_code == 200
         assert resp.json() == []
 
+    @pytest.mark.asyncio
     async def test_returns_history_with_season_metadata(self, client, db_session):
         await _seed_active_season(db_session)
         me, token = await register_player(client, "me@test.com", "Me")
@@ -235,6 +247,7 @@ class TestSeasonHistoryEndpoint:
         assert entry["tier_final"] == "Gold"
         assert entry["games_played"] == 1
 
+    @pytest.mark.asyncio
     async def test_active_season_first_in_ordering(self, client, db_session):
         """Active season is returned before older finished seasons."""
         old = Season(

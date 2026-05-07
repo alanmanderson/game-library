@@ -85,6 +85,7 @@ class TestClassifyCubeAction:
 
 
 class TestCubeAccuracyRollup:
+    @pytest.mark.asyncio
     async def test_aggregates_accuracy_and_verdicts(self, client, db_session):
         """get_advanced_stats sums CubeActionRecord rows into accuracy + by_verdict."""
         player = await create_test_player(client, "CubeAggRollup")
@@ -127,6 +128,7 @@ class TestCubeAccuracyRollup:
         }
         assert cube["accuracy"] == pytest.approx(40.0)
 
+    @pytest.mark.asyncio
     async def test_accuracy_is_none_when_no_scored_rows(self, client, db_session):
         """Rows with NULL correct (e.g. ML unavailable) are excluded from accuracy."""
         player = await create_test_player(client, "CubeAggUnscored")
@@ -147,6 +149,7 @@ class TestCubeAccuracyRollup:
 
 
 class TestCubeActionRecordPersistence:
+    @pytest.mark.asyncio
     async def test_offer_double_writes_record_with_stubbed_ml(
         self, client, db_session
     ):
@@ -203,6 +206,7 @@ class TestCubeActionRecordPersistence:
         assert row.verdict == "best"
         assert row.correct is True
 
+    @pytest.mark.asyncio
     async def test_offer_double_writes_null_row_when_ml_unavailable(
         self, client, db_session
     ):

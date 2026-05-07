@@ -139,6 +139,7 @@ async def _play_all_valid_moves(
 
 
 class TestAnalysisSessionCRUD:
+    @pytest.mark.asyncio
     async def test_create_session_returns_valid_structure(self, client):
         auth = await create_test_player(client, "Alice")
         data = await _create_session(client, auth["token"])
@@ -156,6 +157,7 @@ class TestAnalysisSessionCRUD:
         assert session["auto_analysis"] == "off"
         assert "id" in session
 
+    @pytest.mark.asyncio
     async def test_create_session_game_state_has_board(self, client):
         auth = await create_test_player(client, "Alice")
         data = await _create_session(client, auth["token"])
@@ -166,6 +168,7 @@ class TestAnalysisSessionCRUD:
         assert len(gs["points"]) == 26
         assert gs["status"] in ("rolling", "moving")
 
+    @pytest.mark.asyncio
     async def test_create_session_persists_to_db(self, client, db_session):
         auth = await create_test_player(client, "Alice")
         data = await _create_session(client, auth["token"])
@@ -176,6 +179,7 @@ class TestAnalysisSessionCRUD:
         assert db_row.status == "active"
         assert db_row.player_color == "white"
 
+    @pytest.mark.asyncio
     async def test_create_session_player_color_black_gnubg_goes_first(
         self, client
     ):
@@ -190,6 +194,7 @@ class TestAnalysisSessionCRUD:
         # is still waiting — either way the session is returned without error.
         assert data["session"]["status"] == "active"
 
+    @pytest.mark.asyncio
     async def test_create_session_player_color_random_accepted(self, client):
         auth = await create_test_player(client, "Alice")
         data = await _create_session(
@@ -197,6 +202,7 @@ class TestAnalysisSessionCRUD:
         )
         assert data["session"]["player_color"] in ("white", "black")
 
+    @pytest.mark.asyncio
     async def test_list_sessions_returns_own_sessions(self, client):
         auth = await create_test_player(client, "Alice")
         await _create_session(client, auth["token"])
@@ -213,6 +219,7 @@ class TestAnalysisSessionCRUD:
         for s in sessions:
             assert s["player_id"] == player_id
 
+    @pytest.mark.asyncio
     async def test_list_sessions_does_not_include_other_players(self, client):
         alice = await create_test_player(client, "Alice")
         bob = await create_test_player(client, "Bob")
@@ -229,6 +236,7 @@ class TestAnalysisSessionCRUD:
         for s in alice_sessions:
             assert s["player_id"] != bob_id
 
+    @pytest.mark.asyncio
     async def test_get_session_returns_current_state(self, client):
         auth = await create_test_player(client, "Alice")
         created = await _create_session(client, auth["token"])
@@ -243,6 +251,7 @@ class TestAnalysisSessionCRUD:
         assert data["session"]["id"] == session_id
         assert "game_state" in data
 
+    @pytest.mark.asyncio
     async def test_get_session_404_for_unknown_id(self, client):
         auth = await create_test_player(client, "Alice")
         resp = await client.get(
@@ -251,6 +260,7 @@ class TestAnalysisSessionCRUD:
         )
         assert resp.status_code == 404
 
+    @pytest.mark.asyncio
     async def test_close_session_marks_abandoned_in_db(
         self, client, db_session
     ):
@@ -270,6 +280,7 @@ class TestAnalysisSessionCRUD:
         assert db_row.status == "abandoned"
         assert db_row.completed_at is not None
 
+    @pytest.mark.asyncio
     async def test_close_session_removes_from_memory(self, client):
         auth = await create_test_player(client, "Alice")
         data = await _create_session(client, auth["token"])
@@ -281,6 +292,7 @@ class TestAnalysisSessionCRUD:
         )
         assert analysis_session_manager.get_session(session_id) is None
 
+    @pytest.mark.asyncio
     async def test_get_session_404_after_close(self, client):
         auth = await create_test_player(client, "Alice")
         data = await _create_session(client, auth["token"])
@@ -297,6 +309,7 @@ class TestAnalysisSessionCRUD:
         )
         assert resp.status_code == 404
 
+    @pytest.mark.asyncio
     async def test_close_nonexistent_session_returns_404(self, client):
         auth = await create_test_player(client, "Alice")
         resp = await client.post(
@@ -312,6 +325,7 @@ class TestAnalysisSessionCRUD:
 
 
 class TestAnalysisGameplay:
+    @pytest.mark.asyncio
     async def test_roll_dice_changes_status_to_moving(self, client):
         auth = await create_test_player(client, "Alice")
         data = await _create_session(client, auth["token"])
@@ -328,6 +342,7 @@ class TestAnalysisGameplay:
             assert new_gs["status"] == "moving"
             assert new_gs["dice"] is not None
 
+    @pytest.mark.asyncio
     async def test_make_move_updates_board(self, client):
         auth = await create_test_player(client, "Alice")
         data = await _create_session(client, auth["token"])
@@ -368,6 +383,7 @@ class TestAnalysisGameplay:
             f"remaining before={remaining_before}, after={remaining_after}"
         )
 
+    @pytest.mark.asyncio
     async def test_end_turn_triggers_gnubg_fallback(self, client):
         """gnubg is not available in tests so the random fallback executes.
 
@@ -404,6 +420,7 @@ class TestAnalysisGameplay:
         # successfully ended white's turn and switched to black's turn.
         assert data_after["move_count"] > move_count_before
 
+    @pytest.mark.asyncio
     async def test_end_turn_persists_session_move_rows(
         self, client, db_session
     ):
@@ -437,6 +454,7 @@ class TestAnalysisGameplay:
         rows = result.scalars().all()
         assert len(rows) >= 1
 
+    @pytest.mark.asyncio
     async def test_undo_move_reverts_board(self, client):
         auth = await create_test_player(client, "Alice")
         data = await _create_session(client, auth["token"])
@@ -469,6 +487,7 @@ class TestAnalysisGameplay:
         board_after_undo = resp.json()["game_state"]["points"]
         assert board_after_undo == board_before_move
 
+    @pytest.mark.asyncio
     async def test_undo_with_no_moves_is_safe(self, client):
         """Undo when no moves have been played this turn must not crash."""
         auth = await create_test_player(client, "Alice")
@@ -481,6 +500,7 @@ class TestAnalysisGameplay:
         )
         assert resp.status_code == 200
 
+    @pytest.mark.asyncio
     async def test_offer_double_updates_cube(self, client):
         """Doubling is only valid in ROLLING state on white's turn.
 
@@ -508,6 +528,7 @@ class TestAnalysisGameplay:
         # After an accepted double, cube_value should be doubled.
         assert gs.get("cube_value", 1) == initial_cube * 2
 
+    @pytest.mark.asyncio
     async def test_respond_double_accept(self, client):
         """Player accepts a double offered by gnubg (respond-double endpoint)."""
         auth = await create_test_player(client, "Alice")
@@ -527,6 +548,7 @@ class TestAnalysisGameplay:
         )
         assert resp.status_code == 200
 
+    @pytest.mark.asyncio
     async def test_respond_double_reject(self, client):
         auth = await create_test_player(client, "Alice")
         data = await _create_session(client, auth["token"])
@@ -573,6 +595,7 @@ class TestAnalysisNavigation:
         assert resp.status_code == 200
         return session_id, resp.json()
 
+    @pytest.mark.asyncio
     async def test_navigate_last_returns_to_live(self, client):
         auth = await create_test_player(client, "NavAlice")
         session_id, _ = await self._session_with_history(
@@ -587,6 +610,7 @@ class TestAnalysisNavigation:
         assert resp.status_code == 200
         assert resp.json()["current_view_index"] == -1
 
+    @pytest.mark.asyncio
     async def test_navigate_first_goes_to_index_zero(self, client):
         auth = await create_test_player(client, "NavBob")
         session_id, _ = await self._session_with_history(
@@ -601,6 +625,7 @@ class TestAnalysisNavigation:
         assert resp.status_code == 200
         assert resp.json()["current_view_index"] == 0
 
+    @pytest.mark.asyncio
     async def test_navigate_prev_from_live_goes_to_last_move(self, client):
         auth = await create_test_player(client, "NavCarol")
         session_id, data = await self._session_with_history(
@@ -616,6 +641,7 @@ class TestAnalysisNavigation:
         assert resp.status_code == 200
         assert resp.json()["current_view_index"] == move_count - 1
 
+    @pytest.mark.asyncio
     async def test_navigate_next_from_last_move_returns_live(self, client):
         auth = await create_test_player(client, "NavDave")
         session_id, data = await self._session_with_history(
@@ -647,6 +673,7 @@ class TestAnalysisNavigation:
         assert resp.status_code == 200
         assert resp.json()["current_view_index"] == -1
 
+    @pytest.mark.asyncio
     async def test_navigate_with_empty_history_is_safe(self, client):
         """Navigate calls on a fresh session (no recorded moves) must not crash.
 
@@ -685,6 +712,7 @@ class TestAnalysisNavigation:
         assert resp.status_code == 200
         assert resp.json()["current_view_index"] == -1
 
+    @pytest.mark.asyncio
     async def test_jump_to_valid_move_number(self, client):
         auth = await create_test_player(client, "JumpAlice")
         session_id, data = await self._session_with_history(
@@ -700,6 +728,7 @@ class TestAnalysisNavigation:
         assert resp.status_code == 200
         assert resp.json()["current_view_index"] == 0
 
+    @pytest.mark.asyncio
     async def test_jump_out_of_range_returns_live(self, client):
         auth = await create_test_player(client, "JumpBob")
         session_id, data = await self._session_with_history(
@@ -724,6 +753,7 @@ class TestAnalysisNavigation:
 
 
 class TestAnalysisHistory:
+    @pytest.mark.asyncio
     async def test_get_history_empty_before_any_moves(self, client):
         auth = await create_test_player(client, "HistAlice")
         data = await _create_session(client, auth["token"])
@@ -737,6 +767,7 @@ class TestAnalysisHistory:
         # May be empty or contain opening gnubg move if black went first
         assert isinstance(resp.json(), list)
 
+    @pytest.mark.asyncio
     async def test_get_history_after_full_turn(self, client):
         auth = await create_test_player(client, "HistBob")
         data = await _create_session(client, auth["token"])
@@ -771,6 +802,7 @@ class TestAnalysisHistory:
         assert "dice_roll" in entry
         assert "move_notation" in entry
 
+    @pytest.mark.asyncio
     async def test_annotate_move_adds_note(self, client):
         """Annotate a recorded move and verify it appears in history."""
         auth = await create_test_player(client, "AnnotAlice")
@@ -810,6 +842,7 @@ class TestAnalysisHistory:
         assert annotated is not None
         assert annotated["annotation"] == "Great move!"
 
+    @pytest.mark.asyncio
     async def test_annotate_nonexistent_move_returns_404(self, client):
         auth = await create_test_player(client, "AnnotBob")
         data = await _create_session(client, auth["token"])
@@ -829,6 +862,7 @@ class TestAnalysisHistory:
 
 
 class TestAnalysisAuthGuards:
+    @pytest.mark.asyncio
     async def test_create_session_requires_auth(self, client):
         resp = await client.post(
             "/api/analysis/sessions",
@@ -841,22 +875,27 @@ class TestAnalysisAuthGuards:
         )
         assert resp.status_code == 401
 
+    @pytest.mark.asyncio
     async def test_list_sessions_requires_auth(self, client):
         resp = await client.get("/api/analysis/sessions")
         assert resp.status_code == 401
 
+    @pytest.mark.asyncio
     async def test_get_session_requires_auth(self, client):
         resp = await client.get("/api/analysis/sessions/ABCDEFGH")
         assert resp.status_code == 401
 
+    @pytest.mark.asyncio
     async def test_roll_requires_auth(self, client):
         resp = await client.post("/api/analysis/sessions/ABCDEFGH/roll")
         assert resp.status_code == 401
 
+    @pytest.mark.asyncio
     async def test_close_session_requires_auth(self, client):
         resp = await client.post("/api/analysis/sessions/ABCDEFGH/close")
         assert resp.status_code == 401
 
+    @pytest.mark.asyncio
     async def test_get_session_returns_403_for_other_player(self, client):
         alice = await create_test_player(client, "Alice")
         bob = await create_test_player(client, "Bob")
@@ -870,6 +909,7 @@ class TestAnalysisAuthGuards:
         )
         assert resp.status_code == 403
 
+    @pytest.mark.asyncio
     async def test_roll_returns_403_for_other_player(self, client):
         alice = await create_test_player(client, "Alice")
         bob = await create_test_player(client, "Bob")
@@ -883,6 +923,7 @@ class TestAnalysisAuthGuards:
         )
         assert resp.status_code == 403
 
+    @pytest.mark.asyncio
     async def test_move_returns_403_for_other_player(self, client):
         alice = await create_test_player(client, "Alice")
         bob = await create_test_player(client, "Bob")
@@ -897,6 +938,7 @@ class TestAnalysisAuthGuards:
         )
         assert resp.status_code == 403
 
+    @pytest.mark.asyncio
     async def test_close_returns_403_for_other_player(self, client):
         alice = await create_test_player(client, "Alice")
         bob = await create_test_player(client, "Bob")
@@ -910,6 +952,7 @@ class TestAnalysisAuthGuards:
         )
         assert resp.status_code == 403
 
+    @pytest.mark.asyncio
     async def test_annotate_returns_403_for_other_player(self, client):
         alice = await create_test_player(client, "Alice")
         bob = await create_test_player(client, "Bob")
@@ -931,6 +974,7 @@ class TestAnalysisAuthGuards:
 
 
 class TestAnalysisSettings:
+    @pytest.mark.asyncio
     async def test_update_settings_changes_gnubg_ply(self, client):
         auth = await create_test_player(client, "SettingsAlice")
         data = await _create_session(client, auth["token"], gnubg_ply=0)
@@ -947,6 +991,7 @@ class TestAnalysisSettings:
         assert session is not None
         assert session.gnubg_ply == 2
 
+    @pytest.mark.asyncio
     async def test_update_settings_changes_auto_analysis(self, client):
         auth = await create_test_player(client, "SettingsBob")
         data = await _create_session(client, auth["token"], auto_analysis="off")
@@ -963,6 +1008,7 @@ class TestAnalysisSettings:
         assert session is not None
         assert session.auto_analysis == "per_move"
 
+    @pytest.mark.asyncio
     async def test_update_settings_returns_403_for_other_player(self, client):
         alice = await create_test_player(client, "SettingsAlice2")
         bob = await create_test_player(client, "SettingsBob2")
@@ -984,6 +1030,7 @@ class TestAnalysisSettings:
 
 
 class TestGnubgUnavailableEndpoints:
+    @pytest.mark.asyncio
     async def test_hint_returns_503_when_gnubg_unavailable(self, client):
         """When GNUBG_URL is empty, hint endpoint returns 503."""
         auth = await create_test_player(client, "HintAlice")
@@ -996,6 +1043,7 @@ class TestGnubgUnavailableEndpoints:
         )
         assert resp.status_code == 503
 
+    @pytest.mark.asyncio
     async def test_eval_returns_503_when_gnubg_unavailable(self, client):
         """When GNUBG_URL is empty, eval endpoint returns 503."""
         auth = await create_test_player(client, "EvalAlice")
@@ -1015,6 +1063,7 @@ class TestGnubgUnavailableEndpoints:
 
 
 class TestMultiSessionIsolation:
+    @pytest.mark.asyncio
     async def test_two_sessions_do_not_share_state(self, client):
         """Moves in session A must not affect session B's board."""
         auth = await create_test_player(client, "IsoAlice")
@@ -1048,6 +1097,7 @@ class TestMultiSessionIsolation:
         board_b_now = resp_b.json()["game_state"]["points"]
         assert board_b_now == gs_b["points"]
 
+    @pytest.mark.asyncio
     async def test_session_ids_are_unique(self, client):
         auth = await create_test_player(client, "UniqueAlice")
         ids = set()
@@ -1063,6 +1113,7 @@ class TestMultiSessionIsolation:
 
 
 class TestLoadGame:
+    @pytest.mark.asyncio
     async def test_load_game_nonexistent_table_returns_404(self, client):
         auth = await create_test_player(client, "LoadAlice")
         data = await _create_session(client, auth["token"])
@@ -1075,6 +1126,7 @@ class TestLoadGame:
         )
         assert resp.status_code == 404
 
+    @pytest.mark.asyncio
     async def test_load_game_returns_403_for_other_player(self, client):
         alice = await create_test_player(client, "LoadAlice2")
         bob = await create_test_player(client, "LoadBob2")

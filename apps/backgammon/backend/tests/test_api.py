@@ -24,6 +24,7 @@ from tests.conftest import (
 
 
 class TestPlayerEndpoints:
+    @pytest.mark.asyncio
     async def test_create_guest_player(self, client):
         """POST /api/auth/guest creates a guest player and returns JWT + player data."""
         resp = await client.post("/api/auth/guest", json={"nickname": "Alice"})
@@ -35,6 +36,7 @@ class TestPlayerEndpoints:
         assert "created_at" in data["player"]
         assert data["player"]["is_guest"] is True
 
+    @pytest.mark.asyncio
     async def test_create_two_different_players(self, client):
         """Two players with different nicknames get different IDs."""
         p1 = await create_test_player(client, "Alice")
@@ -43,16 +45,19 @@ class TestPlayerEndpoints:
         assert p1["player"]["nickname"] == "Alice"
         assert p2["player"]["nickname"] == "Bob"
 
+    @pytest.mark.asyncio
     async def test_create_guest_empty_nickname(self, client):
         """An empty-string nickname is rejected by the guest endpoint (min_length=1)."""
         resp = await client.post("/api/auth/guest", json={"nickname": ""})
         assert resp.status_code == 422
 
+    @pytest.mark.asyncio
     async def test_create_guest_missing_nickname(self, client):
         """Omitting the nickname field should return a 422 validation error."""
         resp = await client.post("/api/auth/guest", json={})
         assert resp.status_code == 422
 
+    @pytest.mark.asyncio
     async def test_get_player(self, client):
         """GET /api/players/{id} retrieves a previously created player."""
         created = await create_test_player(client, "Charlie")
@@ -66,6 +71,7 @@ class TestPlayerEndpoints:
         assert data["id"] == player["id"]
         assert data["nickname"] == "Charlie"
 
+    @pytest.mark.asyncio
     async def test_get_player_not_found(self, client):
         """GET /api/players/{id} with a nonexistent ID returns 404."""
         # Need an authenticated user to hit this endpoint
@@ -76,6 +82,7 @@ class TestPlayerEndpoints:
         assert resp.status_code == 404
         assert "not found" in resp.json()["detail"].lower()
 
+    @pytest.mark.asyncio
     async def test_get_player_unauthenticated(self, client):
         """GET /api/players/{id} without auth returns 401."""
         resp = await client.get("/api/players/some-id")
@@ -88,6 +95,7 @@ class TestPlayerEndpoints:
 
 
 class TestTableEndpoints:
+    @pytest.mark.asyncio
     async def test_create_table(self, client):
         """POST /api/tables creates a table in 'waiting' status."""
         auth = await create_test_player(client, "Alice")
@@ -104,11 +112,13 @@ class TestTableEndpoints:
         assert data["white_player"]["id"] == player["id"]
         assert data["black_player"] is None
 
+    @pytest.mark.asyncio
     async def test_create_table_unauthenticated(self, client):
         """Creating a table without auth returns 401."""
         resp = await client.post("/api/tables", json={"player_id": "some-id"})
         assert resp.status_code == 401
 
+    @pytest.mark.asyncio
     async def test_get_table(self, client):
         """GET /api/tables/{id} retrieves an existing table."""
         auth = await create_test_player(client)
@@ -119,11 +129,13 @@ class TestTableEndpoints:
         assert data["id"] == table["id"]
         assert data["status"] == "waiting"
 
+    @pytest.mark.asyncio
     async def test_get_table_not_found(self, client):
         """GET /api/tables/{id} with a nonexistent ID returns 404."""
         resp = await client.get("/api/tables/ZZZZZZ")
         assert resp.status_code == 404
 
+    @pytest.mark.asyncio
     async def test_join_table(self, client):
         """POST /api/tables/{id}/join adds a second player and starts the game."""
         table, creator_auth, joiner_auth = await create_and_join_table(client)
@@ -135,6 +147,7 @@ class TestTableEndpoints:
         assert creator_auth["player"]["id"] in player_ids
         assert joiner_auth["player"]["id"] in player_ids
 
+    @pytest.mark.asyncio
     async def test_join_table_own_table(self, client):
         """A player cannot join a table they created."""
         auth = await create_test_player(client, "SoloPlayer")
@@ -147,6 +160,7 @@ class TestTableEndpoints:
         assert resp.status_code == 400
         assert "own table" in resp.json()["detail"].lower()
 
+    @pytest.mark.asyncio
     async def test_join_table_already_playing(self, client):
         """A third player cannot join a table that is already playing."""
         table, _creator_auth, _joiner_auth = await create_and_join_table(client)
@@ -159,6 +173,7 @@ class TestTableEndpoints:
         assert resp.status_code == 400
         assert "not waiting" in resp.json()["detail"].lower()
 
+    @pytest.mark.asyncio
     async def test_create_table_with_match_points(self, client):
         """POST /api/tables with match_points sets the value on the table."""
         auth = await create_test_player(client, "MatchPlayer")
@@ -172,6 +187,7 @@ class TestTableEndpoints:
         assert resp.status_code == 200
         assert resp.json()["match_points"] == 7
 
+    @pytest.mark.asyncio
     async def test_create_table_default_match_points(self, client):
         """POST /api/tables without match_points defaults to 5."""
         auth = await create_test_player(client, "DefaultMP")
@@ -185,6 +201,7 @@ class TestTableEndpoints:
         assert resp.status_code == 200
         assert resp.json()["match_points"] == 5
 
+    @pytest.mark.asyncio
     async def test_create_table_invalid_match_points(self, client):
         """POST /api/tables with out-of-range match_points returns 422."""
         auth = await create_test_player(client, "BadMP")
@@ -205,6 +222,7 @@ class TestTableEndpoints:
         )
         assert resp.status_code == 422
 
+    @pytest.mark.asyncio
     async def test_join_table_not_found(self, client):
         """Joining a nonexistent table returns 400 (ValueError from game_service)."""
         auth = await create_test_player(client)
@@ -215,6 +233,7 @@ class TestTableEndpoints:
         )
         assert resp.status_code == 400
 
+    @pytest.mark.asyncio
     async def test_join_table_unauthenticated(self, client):
         """Joining a table without auth returns 401."""
         resp = await client.post(
@@ -229,6 +248,7 @@ class TestTableEndpoints:
 
 
 class TestGameHistory:
+    @pytest.mark.asyncio
     async def test_empty_history(self, client):
         """A freshly-created table has no move history."""
         auth = await create_test_player(client)
@@ -241,6 +261,7 @@ class TestGameHistory:
         assert data["offset"] == 0
         assert data["records"] == []
 
+    @pytest.mark.asyncio
     async def test_history_after_join(self, client):
         """After join (no moves played yet) the history is still empty."""
         table, _, _ = await create_and_join_table(client)
@@ -250,6 +271,7 @@ class TestGameHistory:
         assert data["total"] == 0
         assert data["records"] == []
 
+    @pytest.mark.asyncio
     async def test_history_pagination_params(self, client):
         """Custom limit and offset are reflected in the response."""
         auth = await create_test_player(client)
@@ -271,11 +293,13 @@ class TestGameHistory:
 
 
 class TestGameExport:
+    @pytest.mark.asyncio
     async def test_export_not_found(self, client):
         """GET /api/tables/{id}/export returns 404 for a nonexistent table."""
         resp = await client.get("/api/tables/XXXXXXXX/export")
         assert resp.status_code == 404
 
+    @pytest.mark.asyncio
     async def test_export_empty_game(self, client):
         """Export of a newly-created table returns valid gnubg-compatible MAT format."""
         table, creator_auth, joiner_auth = await create_and_join_table(client, "Alice", "Bob")
@@ -292,6 +316,7 @@ class TestGameExport:
         assert "point match" in content
         assert " Game 1" in content
 
+    @pytest.mark.asyncio
     async def test_export_with_move_records(self, client, db_session):
         """Export output includes dice and move notation in gnubg MAT format."""
         from app.models import MoveRecord
@@ -330,6 +355,7 @@ class TestGameExport:
         # gnubg format: right-justified 3-char move number
         assert "  1)" in content
 
+    @pytest.mark.asyncio
     async def test_export_content_disposition_header(self, client):
         """The response carries a Content-Disposition attachment header."""
         table, _, _ = await create_and_join_table(client)
@@ -340,6 +366,7 @@ class TestGameExport:
         assert "attachment" in cd
         assert f"game_{table_id}.mat" in cd
 
+    @pytest.mark.asyncio
     async def test_export_gnubg_format_structure(self, client, db_session):
         """Verify the full structure matches gnubg MAT import expectations."""
         from app.models import MoveRecord, Table
@@ -404,6 +431,7 @@ class TestGameExport:
 
 
 class TestPlayerStats:
+    @pytest.mark.asyncio
     async def test_stats_for_new_player(self, client):
         """A brand-new registered player has zeroed-out stats."""
         # Use auth/register to create a non-guest player (guests get 403)
@@ -425,6 +453,7 @@ class TestPlayerStats:
         assert data["win_rate"] == 0.0
         assert data["per_opponent"] == []
 
+    @pytest.mark.asyncio
     async def test_stats_for_guest_player_forbidden(self, client):
         """Guest players get 403 when requesting stats."""
         auth = await create_test_player(client, "GuestNewbie")
@@ -434,11 +463,13 @@ class TestPlayerStats:
         )
         assert resp.status_code == 403
 
+    @pytest.mark.asyncio
     async def test_stats_unauthenticated(self, client):
         """Stats without auth returns 401."""
         resp = await client.get("/api/players/nonexistent-id/stats")
         assert resp.status_code == 401
 
+    @pytest.mark.asyncio
     async def test_stats_wrong_player(self, client):
         """Requesting stats for a different player returns 403."""
         auth1 = await create_test_player(client, "Player1")
@@ -457,11 +488,13 @@ class TestPlayerStats:
 
 
 class TestGameReplay:
+    @pytest.mark.asyncio
     async def test_replay_not_found(self, client):
         """Replay for a nonexistent table returns 404."""
         resp = await client.get("/api/tables/XXXXXX/replay")
         assert resp.status_code == 404
 
+    @pytest.mark.asyncio
     async def test_replay_empty_moves(self, client):
         """Replay for a table with no moves has an empty moves list."""
         auth = await create_test_player(client)
@@ -480,6 +513,7 @@ class TestGameReplay:
         assert state["off_white"] == 0
         assert state["off_black"] == 0
 
+    @pytest.mark.asyncio
     async def test_replay_includes_player_nicknames(self, client, db_session):
         """Replay response includes white and black player nicknames."""
         from app.models import Table
@@ -499,6 +533,7 @@ class TestGameReplay:
         assert "ReplayAlice" in nicknames
         assert "ReplayBob" in nicknames
 
+    @pytest.mark.asyncio
     async def test_replay_response_structure(self, client, db_session):
         """Replay response has the expected top-level fields."""
         from app.models import Table
@@ -521,6 +556,7 @@ class TestGameReplay:
         assert "win_type" in data
         assert isinstance(data["moves"], list)
 
+    @pytest.mark.asyncio
     async def test_replay_blocks_in_progress_game(self, client):
         """Replay endpoint refuses to serve games still being played."""
         table, _, _ = await create_and_join_table(client)
@@ -529,6 +565,7 @@ class TestGameReplay:
         assert resp.status_code == 403
         assert "completed" in resp.json()["detail"].lower()
 
+    @pytest.mark.asyncio
     async def test_replay_is_public_for_finished_games(self, client, db_session):
         """Completed games can be fetched without any auth header."""
         from app.models import Table, Player
@@ -561,6 +598,7 @@ class TestGameReplay:
 
 
 class TestGameAnalysis:
+    @pytest.mark.asyncio
     async def test_analysis_not_found(self, client):
         """Analysis for a nonexistent table returns 404."""
         auth = await create_test_player(client, "Alice")
@@ -570,12 +608,14 @@ class TestGameAnalysis:
         )
         assert resp.status_code == 404
 
+    @pytest.mark.asyncio
     async def test_analysis_requires_auth(self, client):
         """Unauthenticated requests to the analysis endpoint are rejected with 401."""
         table, _, _ = await create_and_join_table(client)
         resp = await client.get(f"/api/tables/{table['id']}/analysis")
         assert resp.status_code == 401
 
+    @pytest.mark.asyncio
     async def test_analysis_rejects_bad_token(self, client):
         """Malformed/expired tokens are rejected with 401."""
         table, _, _ = await create_and_join_table(client)
@@ -585,6 +625,7 @@ class TestGameAnalysis:
         )
         assert resp.status_code == 401
 
+    @pytest.mark.asyncio
     async def test_analysis_rejects_non_participant(self, client, db_session):
         """An authenticated non-participant gets 403."""
         from app.models import Table
@@ -603,6 +644,7 @@ class TestGameAnalysis:
         assert resp.status_code == 403
         assert "participat" in resp.json()["detail"].lower()
 
+    @pytest.mark.asyncio
     async def test_analysis_blocks_in_progress_game(self, client):
         """Analysis endpoint refuses to serve in-progress games (for participants)."""
         table, creator_auth, _ = await create_and_join_table(client)
@@ -613,6 +655,7 @@ class TestGameAnalysis:
         assert resp.status_code == 403
         assert "completed" in resp.json()["detail"].lower()
 
+    @pytest.mark.asyncio
     async def test_analysis_empty_game_returns_empty_list(self, client, db_session):
         """A finished table with no moves returns an empty analyses list."""
         from app.models import Table
@@ -633,6 +676,7 @@ class TestGameAnalysis:
         assert data["total_moves"] == 0
         assert data["moves_analysed"] == 0
 
+    @pytest.mark.asyncio
     async def test_analysis_scores_recorded_moves(self, client, db_session):
         """Analysis produces one entry per recorded move with a quality label."""
         from app.models import MoveRecord, Table
@@ -677,6 +721,7 @@ class TestGameAnalysis:
         assert "equity_before" in a and "equity_after" in a
         assert "best_equity" in a
 
+    @pytest.mark.asyncio
     async def test_analysis_is_cached(self, client, db_session):
         """Second request is served from the game_analyses cache table."""
         from app.models import GameAnalysis, MoveRecord, Table
@@ -730,12 +775,14 @@ class TestGameAnalysis:
 
 
 class TestActiveGamesEndpoint:
+    @pytest.mark.asyncio
     async def test_active_games_empty(self, client):
         """GET /api/active-games returns empty list when no games are active."""
         resp = await client.get("/api/active-games")
         assert resp.status_code == 200
         assert resp.json() == []
 
+    @pytest.mark.asyncio
     async def test_active_games_shows_playing_tables(self, client):
         """GET /api/active-games returns tables with status 'playing'."""
         auth1 = await create_test_player(client, "Alice")
@@ -767,6 +814,7 @@ class TestActiveGamesEndpoint:
         assert "spectator_count" in game
         assert game["spectator_count"] == 0
 
+    @pytest.mark.asyncio
     async def test_active_games_excludes_waiting_tables(self, client):
         """GET /api/active-games does not include tables still waiting."""
         auth = await create_test_player(client, "Alice")
@@ -776,6 +824,7 @@ class TestActiveGamesEndpoint:
         assert resp.status_code == 200
         assert resp.json() == []
 
+    @pytest.mark.asyncio
     async def test_active_games_excludes_private_tables(self, client):
         """GET /api/active-games does not include private tables."""
         auth1 = await create_test_player(client, "Alice")
@@ -803,6 +852,7 @@ class TestActiveGamesEndpoint:
 
 
 class TestLeaderboardEndpoints:
+    @pytest.mark.asyncio
     async def test_leaderboard_empty(self, client):
         """GET /api/leaderboard returns an empty list when no games have been played."""
         resp = await client.get("/api/leaderboard")
@@ -811,6 +861,7 @@ class TestLeaderboardEndpoints:
         assert data["entries"] == []
         assert data["total"] == 0
 
+    @pytest.mark.asyncio
     async def test_leaderboard_default_metric_is_wins(self, client, db_session):
         """Default metric is wins; players with wins appear in the list."""
         p = Player(nickname="Winner", is_guest=False)
@@ -837,6 +888,7 @@ class TestLeaderboardEndpoints:
         assert entry["total_games"] == 5
         assert entry["rank"] == 1
 
+    @pytest.mark.asyncio
     async def test_leaderboard_excludes_guests(self, client, db_session):
         """Guest accounts are not included in the leaderboard."""
         guest = Player(nickname="GuestUser", is_guest=True)
@@ -858,6 +910,7 @@ class TestLeaderboardEndpoints:
         data = resp.json()
         assert all(e["nickname"] != "GuestUser" for e in data["entries"])
 
+    @pytest.mark.asyncio
     async def test_leaderboard_excludes_bot(self, client, db_session):
         """The BOT player is excluded from the leaderboard."""
         bot = Player(id="BOT", nickname="Bot", is_guest=False)
@@ -879,6 +932,7 @@ class TestLeaderboardEndpoints:
         data = resp.json()
         assert all(e["nickname"] != "Bot" for e in data["entries"])
 
+    @pytest.mark.asyncio
     async def test_leaderboard_wins_ordering(self, client, db_session):
         """Players with more wins appear earlier in the wins leaderboard."""
         p1 = Player(nickname="Alice", is_guest=False)
@@ -898,6 +952,7 @@ class TestLeaderboardEndpoints:
         assert entries[0]["nickname"] == "Bob"
         assert entries[1]["nickname"] == "Alice"
 
+    @pytest.mark.asyncio
     async def test_leaderboard_win_rate_min_10_games(self, client, db_session):
         """win_rate metric excludes players with fewer than 10 games."""
         low = Player(nickname="FewGames", is_guest=False)
@@ -918,6 +973,7 @@ class TestLeaderboardEndpoints:
         assert "FewGames" not in nicknames
         assert "ManyGames" in nicknames
 
+    @pytest.mark.asyncio
     async def test_leaderboard_rating_min_5_games(self, client, db_session):
         """rating metric excludes players with fewer than 5 rated games."""
         few = Player(nickname="FewRated", is_guest=False, rating=2000, rating_games=3)
@@ -932,6 +988,7 @@ class TestLeaderboardEndpoints:
         assert "FewRated" not in nicknames
         assert "ManyRated" in nicknames
 
+    @pytest.mark.asyncio
     async def test_leaderboard_pagination(self, client, db_session):
         """offset parameter correctly paginates results."""
         players = [Player(nickname=f"Player{i}", is_guest=False) for i in range(5)]
@@ -961,16 +1018,19 @@ class TestLeaderboardEndpoints:
         assert len(data2["entries"]) == 2
         assert data2["entries"][0]["rank"] == 4
 
+    @pytest.mark.asyncio
     async def test_leaderboard_invalid_metric(self, client):
         """An invalid metric value returns a 422 validation error."""
         resp = await client.get("/api/leaderboard?metric=invalid")
         assert resp.status_code == 422
 
+    @pytest.mark.asyncio
     async def test_leaderboard_invalid_period(self, client):
         """An invalid period value returns a 422 validation error."""
         resp = await client.get("/api/leaderboard?period=yesterday")
         assert resp.status_code == 422
 
+    @pytest.mark.asyncio
     async def test_leaderboard_period_week_only_recent_games(
         self, client, db_session
     ):
@@ -1014,6 +1074,7 @@ class TestLeaderboardEndpoints:
         assert alice_entry["total_games"] == 1
         assert bob_entry["total_games"] == 1
 
+    @pytest.mark.asyncio
     async def test_leaderboard_period_month_window(self, client, db_session):
         """period=month counts games finished in the last 30 days only."""
         p = Player(nickname="Carol", is_guest=False)
@@ -1048,6 +1109,7 @@ class TestLeaderboardEndpoints:
         assert carol["total_wins"] == 1
         assert carol["total_games"] == 1
 
+    @pytest.mark.asyncio
     async def test_leaderboard_period_all_time_uses_playerstats(
         self, client, db_session
     ):
@@ -1073,6 +1135,7 @@ class TestLeaderboardEndpoints:
         assert eve["total_wins"] == 4
         assert eve["total_games"] == 7
 
+    @pytest.mark.asyncio
     async def test_leaderboard_viewer_entry_out_of_window(self, client, db_session):
         """viewer_entry is returned when the viewer is ranked below the page."""
         players = []
@@ -1108,6 +1171,7 @@ class TestLeaderboardEndpoints:
         assert data["viewer_entry"]["player_id"] == last_id
         assert data["viewer_entry"]["rank"] == 5
 
+    @pytest.mark.asyncio
     async def test_leaderboard_viewer_entry_absent_when_on_page(
         self, client, db_session
     ):

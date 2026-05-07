@@ -36,10 +36,12 @@ from tests.conftest import (
 class TestBotService:
     """Unit tests for bot_service functions."""
 
+    @pytest.mark.asyncio
     async def test_is_bot_player(self):
         assert is_bot_player(BOT_PLAYER_ID) is True
         assert is_bot_player("some-other-id") is False
 
+    @pytest.mark.asyncio
     async def test_ensure_bot_player_creates(self, db_session):
         bot = await ensure_bot_player(db_session)
         assert bot.id == BOT_PLAYER_ID
@@ -47,6 +49,7 @@ class TestBotService:
         assert bot.is_guest is True
         assert bot.auth_provider == "bot"
 
+    @pytest.mark.asyncio
     async def test_ensure_bot_player_idempotent(self, db_session):
         bot1 = await ensure_bot_player(db_session)
         await db_session.flush()
@@ -57,6 +60,7 @@ class TestBotService:
 class TestInviteBotEndpoint:
     """Tests for the POST /api/tables/{table_id}/invite-bot endpoint."""
 
+    @pytest.mark.asyncio
     async def test_invite_bot_success(self, client):
         """Inviting bot to a waiting table starts the game."""
         auth = await create_test_player(client, "Alice")
@@ -81,6 +85,7 @@ class TestInviteBotEndpoint:
         assert BOT_PLAYER_ID in player_ids
         assert player_id in player_ids
 
+    @pytest.mark.asyncio
     async def test_invite_bot_nonexistent_table(self, client):
         """Inviting bot to a nonexistent table returns 400."""
         auth = await create_test_player(client, "Alice")
@@ -91,6 +96,7 @@ class TestInviteBotEndpoint:
         )
         assert resp.status_code == 400
 
+    @pytest.mark.asyncio
     async def test_invite_bot_already_playing(self, client):
         """Inviting bot to a table that's already playing returns 400."""
         auth = await create_test_player(client, "Alice")
@@ -115,11 +121,13 @@ class TestInviteBotEndpoint:
         )
         assert resp.status_code == 400
 
+    @pytest.mark.asyncio
     async def test_invite_bot_unauthenticated(self, client):
         """Inviting bot without auth returns 401."""
         resp = await client.post("/api/tables/XXXXXX/invite-bot", json={})
         assert resp.status_code == 401
 
+    @pytest.mark.asyncio
     async def test_invite_bot_creates_engine(self, client):
         """Inviting bot creates a game engine with correct player colors."""
         auth = await create_test_player(client, "Alice")
@@ -150,6 +158,7 @@ class TestInviteBotEndpoint:
 class TestBotGameplay:
     """Test that the bot logic correctly makes moves."""
 
+    @pytest.mark.asyncio
     async def test_bot_makes_random_moves(self, client, db_session):
         """The bot should roll, make random moves, and end its turn."""
         from app.services.bot_service import get_bot_color, ensure_bot_player
@@ -225,6 +234,7 @@ class TestBotGameplay:
 class TestStatsSkipBot:
     """Verify that stats are not tracked for bot games."""
 
+    @pytest.mark.asyncio
     async def test_stats_not_updated_for_bot_game(self, db_session):
         """update_stats should be a no-op when one player is the bot."""
         from app.services.stats_service import update_stats
@@ -341,6 +351,7 @@ class TestDifficultySelection:
         set_bot_difficulty("TABLE01", "impossible")
         assert get_bot_difficulty("TABLE01") == "impossible"
 
+    @pytest.mark.asyncio
     async def test_restore_difficulty_from_database(self, db_session):
         """restore_bot_difficulty should load difficulty from the Table model."""
         from app.models import Table, Player
@@ -357,6 +368,7 @@ class TestDifficultySelection:
         await restore_bot_difficulty("RESTORE1", db_session)
         assert get_bot_difficulty("RESTORE1") == "medium"
 
+    @pytest.mark.asyncio
     async def test_restore_difficulty_skips_if_already_cached(self, db_session):
         """If difficulty is already in memory, restore should be a no-op."""
         set_bot_difficulty("CACHED1", "easy")
@@ -364,11 +376,13 @@ class TestDifficultySelection:
         await restore_bot_difficulty("CACHED1", db_session)
         assert get_bot_difficulty("CACHED1") == "easy"
 
+    @pytest.mark.asyncio
     async def test_restore_difficulty_nonexistent_table(self, db_session):
         """Restoring for a nonexistent table should leave default."""
         await restore_bot_difficulty("NOEXIST1", db_session)
         assert get_bot_difficulty("NOEXIST1") == "hard"
 
+    @pytest.mark.asyncio
     async def test_restore_difficulty_table_without_bot_difficulty(self, db_session):
         """When bot_difficulty is NULL in DB, should not set anything."""
         from app.models import Table, Player

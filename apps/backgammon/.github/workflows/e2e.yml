@@ -31,4 +31,4 @@ jobs:
         timeout-minutes: 5
         env:
           JWT_SECRET: test-secret-for-ci
-        run: pytest tests/test_e2e.py -v --no-cov
+        run: pytest tests/test_e2e.py -v --no-cov -p no:anyio

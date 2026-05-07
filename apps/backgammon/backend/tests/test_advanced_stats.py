@@ -6,6 +6,8 @@ per-time-control win rates, cube action counters, and ELO rating history.
 
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from app.models import Player, PlayerStats, Table, RatingHistory
 from tests.conftest import auth_headers, create_test_player
 
@@ -21,10 +23,12 @@ async def register_player(client, email, nickname):
 
 
 class TestAdvancedStatsAuth:
+    @pytest.mark.asyncio
     async def test_requires_auth(self, client):
         resp = await client.get("/api/players/abc/advanced-stats")
         assert resp.status_code == 401
 
+    @pytest.mark.asyncio
     async def test_forbidden_for_guest(self, client):
         guest = await create_test_player(client, "GuestAdv")
         resp = await client.get(
@@ -33,6 +37,7 @@ class TestAdvancedStatsAuth:
         )
         assert resp.status_code == 403
 
+    @pytest.mark.asyncio
     async def test_cannot_view_other_players(self, client):
         me, token = await register_player(client, "me@example.com", "Me")
         other, _ = await register_player(client, "other@example.com", "Other")
@@ -44,6 +49,7 @@ class TestAdvancedStatsAuth:
 
 
 class TestAdvancedStatsContent:
+    @pytest.mark.asyncio
     async def test_empty_stats(self, client):
         me, token = await register_player(client, "empty@example.com", "Empty")
         resp = await client.get(
@@ -70,6 +76,7 @@ class TestAdvancedStatsContent:
         }
         assert data["rating_history"] == []
 
+    @pytest.mark.asyncio
     async def test_aggregates_gammon_backgammon_from_player_stats(
         self, client, db_session
     ):
@@ -103,6 +110,7 @@ class TestAdvancedStatsContent:
         # gammon_rate = 1 won / 3 total wins = 33.3%
         assert abs(data["gammon_rate"] - (1 / 3 * 100)) < 0.01
 
+    @pytest.mark.asyncio
     async def test_per_color_and_time_control_rates(
         self, client, db_session
     ):
@@ -171,6 +179,7 @@ class TestAdvancedStatsContent:
         assert data["win_rate_by_time_control"]["blitz"]["wins"] == 1
         assert data["win_rate_by_time_control"]["unlimited"]["games"] == 1
 
+    @pytest.mark.asyncio
     async def test_cube_stats_reflect_player_counters(
         self, client, db_session
     ):
@@ -195,6 +204,7 @@ class TestAdvancedStatsContent:
         # 6 / (6+2) = 75%
         assert cube["accept_rate"] == 75.0
 
+    @pytest.mark.asyncio
     async def test_rating_history_is_chronological(self, client, db_session):
         me, token = await register_player(client, "r@example.com", "RatedOne")
         opp, _ = await register_player(client, "r2@example.com", "RatedTwo")
@@ -234,6 +244,7 @@ class TestAdvancedStatsContent:
 
 
 class TestRatingHistoryPersistence:
+    @pytest.mark.asyncio
     async def test_update_ratings_writes_history_rows(self, db_session):
         """Calling update_ratings should persist RatingHistory entries for both players."""
         from sqlalchemy import select

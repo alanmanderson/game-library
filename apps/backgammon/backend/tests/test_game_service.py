@@ -59,6 +59,7 @@ class TestEngineAccess:
 
 
 class TestCreateTable:
+    @pytest.mark.asyncio
     async def test_create_table_returns_table(self, db_session):
         gm = GameManager()
         player = Player(nickname="Alice")
@@ -71,6 +72,7 @@ class TestCreateTable:
         assert table.white_player_id == player.id
         assert table.black_player_id is None
 
+    @pytest.mark.asyncio
     async def test_create_table_id_is_6_chars(self, db_session):
         gm = GameManager()
         player = Player(nickname="Bob")
@@ -81,6 +83,7 @@ class TestCreateTable:
         assert len(table.id) == 6
 
 
+    @pytest.mark.asyncio
     async def test_create_table_custom_match_points(self, db_session):
         gm = GameManager()
         player = Player(nickname="Carol")
@@ -90,6 +93,7 @@ class TestCreateTable:
         table = await gm.create_table(db_session, player.id, match_points=7)
         assert table.match_points == 7
 
+    @pytest.mark.asyncio
     async def test_create_table_default_match_points(self, db_session):
         gm = GameManager()
         player = Player(nickname="Dave")
@@ -101,6 +105,7 @@ class TestCreateTable:
 
 
 class TestJoinTable:
+    @pytest.mark.asyncio
     async def test_join_table_starts_game(self, db_session):
         gm = GameManager()
         p1 = Player(nickname="Alice")
@@ -114,6 +119,7 @@ class TestJoinTable:
         assert table.white_player_id is not None
         assert table.black_player_id is not None
 
+    @pytest.mark.asyncio
     async def test_join_table_creates_engine(self, db_session):
         gm = GameManager()
         p1 = Player(nickname="Alice")
@@ -127,6 +133,7 @@ class TestJoinTable:
         assert engine is not None
         assert engine.state.status in (GameStatus.ROLLING, GameStatus.MOVING)
 
+    @pytest.mark.asyncio
     async def test_join_table_assigns_colors(self, db_session):
         gm = GameManager()
         p1 = Player(nickname="Alice")
@@ -142,6 +149,7 @@ class TestJoinTable:
         assert white_color == Color.WHITE
         assert black_color == Color.BLACK
 
+    @pytest.mark.asyncio
     async def test_join_nonexistent_table_raises(self, db_session):
         gm = GameManager()
         p = Player(nickname="Lonely")
@@ -151,6 +159,7 @@ class TestJoinTable:
         with pytest.raises(ValueError, match="Table not found"):
             await gm.join_table(db_session, "NOPE00", p.id)
 
+    @pytest.mark.asyncio
     async def test_join_own_table_raises(self, db_session):
         gm = GameManager()
         p = Player(nickname="SoloPlayer")
@@ -161,6 +170,7 @@ class TestJoinTable:
         with pytest.raises(ValueError, match="Cannot join your own table"):
             await gm.join_table(db_session, table.id, p.id)
 
+    @pytest.mark.asyncio
     async def test_join_already_playing_raises(self, db_session):
         gm = GameManager()
         p1 = Player(nickname="Alice")
@@ -177,6 +187,7 @@ class TestJoinTable:
 
 
 class TestBuildGameStateResponse:
+    @pytest.mark.asyncio
     async def test_response_contains_valid_moves(self, db_session):
         gm = GameManager()
         p1 = Player(nickname="Alice")
@@ -198,6 +209,7 @@ class TestBuildGameStateResponse:
         assert "valid_moves" in response
         assert len(response["valid_moves"]) > 0
 
+    @pytest.mark.asyncio
     async def test_opponent_sees_empty_valid_moves(self, db_session):
         gm = GameManager()
         p1 = Player(nickname="Alice")
@@ -220,6 +232,7 @@ class TestBuildGameStateResponse:
 
 
 class TestRollDice:
+    @pytest.mark.asyncio
     async def test_roll_dice_not_your_turn(self, db_session):
         gm = GameManager()
         p1 = Player(nickname="Alice")
@@ -240,6 +253,7 @@ class TestRollDice:
         with pytest.raises(ValueError, match="Not your turn"):
             await gm.roll_dice(db_session, table.id, wrong_player_id)
 
+    @pytest.mark.asyncio
     async def test_roll_dice_game_not_found(self, db_session):
         gm = GameManager()
         with pytest.raises(ValueError, match="Game not found"):
@@ -247,6 +261,7 @@ class TestRollDice:
 
 
 class TestUndoTurn:
+    @pytest.mark.asyncio
     async def test_undo_after_move(self, db_session):
         gm = GameManager()
         p1 = Player(nickname="Alice")
@@ -310,6 +325,7 @@ class TestUndoTurn:
         assert engine.state.off_black == off_black_before
         assert engine.state.turn_moves == []
 
+    @pytest.mark.asyncio
     async def test_undo_with_no_moves(self, db_session):
         gm = GameManager()
         p1 = Player(nickname="Alice")
@@ -341,6 +357,7 @@ class TestUndoTurn:
 
 
 class TestDoubling:
+    @pytest.mark.asyncio
     async def test_offer_double(self, db_session):
         gm = GameManager()
         p1 = Player(nickname="Alice")
@@ -369,6 +386,7 @@ class TestDoubling:
         assert engine.state.double_offered is True
         assert engine.state.double_offered_by == engine.state.current_turn
 
+    @pytest.mark.asyncio
     async def test_accept_double(self, db_session):
         gm = GameManager()
         p1 = Player(nickname="Alice")
@@ -409,6 +427,7 @@ class TestDoubling:
         opponent_color = gm.get_player_color(table.id, opponent_id)
         assert engine.state.cube_owner == opponent_color
 
+    @pytest.mark.asyncio
     async def test_decline_double(self, db_session):
         gm = GameManager()
         p1 = Player(nickname="Alice")
@@ -454,6 +473,7 @@ class TestCrawfordRule:
     per match.
     """
 
+    @pytest.mark.asyncio
     async def test_crawford_triggers_at_match_point(self, db_session):
         """Crawford game triggers when a player reaches match_points - 1."""
         gm = GameManager()
@@ -478,6 +498,7 @@ class TestCrawfordRule:
         new_engine = gm.get_engine(table.id)
         assert new_engine.state.is_crawford_game is True
 
+    @pytest.mark.asyncio
     async def test_crawford_only_triggers_once(self, db_session):
         """Crawford game only happens once, even if still at match point."""
         gm = GameManager()
@@ -512,6 +533,7 @@ class TestCrawfordRule:
         engine = gm.get_engine(table.id)
         assert engine.state.is_crawford_game is False
 
+    @pytest.mark.asyncio
     async def test_no_crawford_for_1_point_match(self, db_session):
         """Crawford rule doesn't apply to 1-point matches."""
         gm = GameManager()
@@ -534,6 +556,7 @@ class TestCrawfordRule:
         engine = gm.get_engine(table.id)
         assert engine.state.is_crawford_game is False
 
+    @pytest.mark.asyncio
     async def test_crawford_blocks_doubling_in_game_service(self, db_session):
         """During a Crawford game, offering a double raises an error."""
         gm = GameManager()
@@ -572,6 +595,7 @@ class TestCrawfordRule:
         with pytest.raises(ValueError, match="Cannot double now"):
             await gm.offer_double(db_session, table.id, current_player_id)
 
+    @pytest.mark.asyncio
     async def test_crawford_game_used_persists_in_snapshot(self, db_session):
         """crawford_game_used flag is persisted in the game_state JSON."""
         gm = GameManager()
@@ -630,6 +654,7 @@ class TestTimeoutHandling:
         # guarantees remaining <= 0 regardless of which colour is active.
         ts["turn_started_at"] = datetime.now(timezone.utc) - timedelta(hours=1)
 
+    @pytest.mark.asyncio
     async def test_check_timeout_is_idempotent(self, db_session):
         """check_timeout() must return the same colour on repeated calls."""
         gm, table, _p1, _p2 = await self._setup_timed_game(db_session)
@@ -641,6 +666,7 @@ class TestTimeoutHandling:
         assert first is not None
         assert first == second
 
+    @pytest.mark.asyncio
     async def test_handle_timeout_finishes_game_after_check_timeout(self, db_session):
         """handle_timeout() must finish the game even when check_timeout() was
         already called beforehand (regression for the double-call bug)."""
@@ -660,6 +686,7 @@ class TestTimeoutHandling:
         engine = gm.get_engine(table.id)
         assert engine is None or engine.state.status == GameStatus.FINISHED
 
+    @pytest.mark.asyncio
     async def test_handle_timeout_resets_timer_state(self, db_session):
         """After handle_timeout(), timer fields must be explicitly cleared."""
         gm, table, _p1, _p2 = await self._setup_timed_game(db_session)
@@ -678,6 +705,7 @@ class TestTimeoutHandling:
             assert ts[time_key] == 0
             assert ts["turn_started_at"] is None
 
+    @pytest.mark.asyncio
     async def test_check_timeout_returns_none_without_time_control(self, db_session):
         """Games without time control must never trigger a timeout."""
         gm = GameManager()

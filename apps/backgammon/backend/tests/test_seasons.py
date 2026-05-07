@@ -12,12 +12,14 @@ from tests.conftest import (
 
 
 class TestSeasonsEndpoint:
+    @pytest.mark.asyncio
     async def test_active_season_empty(self, client):
         """With no seasons seeded, the endpoint returns null."""
         resp = await client.get("/api/seasons/active")
         assert resp.status_code == 200
         assert resp.json() is None
 
+    @pytest.mark.asyncio
     async def test_active_season_returns_active_row(self, client, db_session):
         """The active season is returned when seeded in the DB."""
         db_session.add(
@@ -39,6 +41,7 @@ class TestSeasonsEndpoint:
 
 
 class TestIsRankedFlag:
+    @pytest.mark.asyncio
     async def test_create_table_default_is_ranked(self, client):
         """New tables default to is_ranked = True."""
         auth = await create_test_player(client, "Alice")
@@ -50,6 +53,7 @@ class TestIsRankedFlag:
         assert resp.status_code == 200
         assert resp.json()["is_ranked"] is True
 
+    @pytest.mark.asyncio
     async def test_create_casual_table(self, client):
         """is_ranked=false is respected when creating a table."""
         auth = await create_test_player(client, "Alice")
@@ -61,6 +65,7 @@ class TestIsRankedFlag:
         assert resp.status_code == 200
         assert resp.json()["is_ranked"] is False
 
+    @pytest.mark.asyncio
     async def test_lobby_exposes_is_ranked(self, client):
         """Public lobby rows include the is_ranked flag."""
         auth = await create_test_player(client, "Alice")
@@ -78,12 +83,14 @@ class TestIsRankedFlag:
 
 
 class TestTierInResponses:
+    @pytest.mark.asyncio
     async def test_player_response_has_tier(self, client):
         """PlayerResponse exposes a derived tier field."""
         auth = await create_test_player(client, "Alice")
         # Guests start at rating 1500 -> Silver
         assert auth["player"]["tier"] == "Silver"
 
+    @pytest.mark.asyncio
     async def test_leaderboard_entries_have_tier(self, client, db_session):
         """Leaderboard entries include a derived tier field."""
         # Register a real (non-guest) player and bump their rating so they

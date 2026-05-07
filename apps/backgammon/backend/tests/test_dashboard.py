@@ -43,11 +43,13 @@ async def insert_table(db_session, **kwargs):
 class TestDashboardEndpoint:
     """Tests for GET /api/players/{player_id}/dashboard."""
 
+    @pytest.mark.asyncio
     async def test_not_found_for_nonexistent_player(self, client):
         """Dashboard returns 401 when no auth is provided."""
         resp = await client.get("/api/players/nonexistent-id/dashboard")
         assert resp.status_code == 401
 
+    @pytest.mark.asyncio
     async def test_forbidden_for_guest_player(self, client):
         """Dashboard returns 403 for guest players."""
         guest_auth = await create_test_player(client, "GuestDash")
@@ -58,6 +60,7 @@ class TestDashboardEndpoint:
         assert resp.status_code == 403
         assert "guest" in resp.json()["detail"].lower()
 
+    @pytest.mark.asyncio
     async def test_empty_dashboard(self, client):
         """A registered player with no games gets an empty dashboard."""
         player, token = await register_player(client, "empty@example.com", "EmptyPlayer")
@@ -74,6 +77,7 @@ class TestDashboardEndpoint:
         assert data["abandoned_games"] == 0
         assert data["games"] == []
 
+    @pytest.mark.asyncio
     async def test_finished_game_win(self, client, db_session):
         """A finished game where the player won shows as a win."""
         player, token = await register_player(client, "winner@example.com", "Winner")
@@ -116,6 +120,7 @@ class TestDashboardEndpoint:
         assert game["score"] == 1
         assert game["table_status"] == "finished"
 
+    @pytest.mark.asyncio
     async def test_finished_game_loss(self, client, db_session):
         """A finished game where the player lost shows as a loss."""
         player, token = await register_player(client, "plose@example.com", "PlayerLose")
@@ -156,6 +161,7 @@ class TestDashboardEndpoint:
         assert game["score"] == 2
         assert game["table_status"] == "finished"
 
+    @pytest.mark.asyncio
     async def test_abandoned_game(self, client, db_session):
         """A game with status 'playing' shows as abandoned."""
         player, token = await register_player(client, "abandon@example.com", "Abandoner")
@@ -193,6 +199,7 @@ class TestDashboardEndpoint:
         assert game["score"] is None
         assert game["table_status"] == "playing"
 
+    @pytest.mark.asyncio
     async def test_game_over_status_shows_as_abandoned(self, client, db_session):
         """A table with status 'game_over' (mid-match) shows as abandoned and resumable."""
         player, token = await register_player(client, "gameover@example.com", "GameOverPlayer")
@@ -223,6 +230,7 @@ class TestDashboardEndpoint:
         assert game["result"] == "abandoned"
         assert game["table_status"] == "game_over"
 
+    @pytest.mark.asyncio
     async def test_summary_calculations(self, client, db_session):
         """Summary stats are calculated correctly across multiple games."""
         player, token = await register_player(client, "summary@example.com", "SummaryPlayer")
@@ -301,6 +309,7 @@ class TestDashboardEndpoint:
         # All 4 games (finished + abandoned) appear in the list
         assert len(data["games"]) == 4
 
+    @pytest.mark.asyncio
     async def test_games_ordered_newest_first(self, client, db_session):
         """Games are returned with the newest first (descending created_at)."""
         player, token = await register_player(client, "order@example.com", "OrderPlayer")
@@ -350,6 +359,7 @@ class TestDashboardEndpoint:
         assert data["games"][0]["table_id"] == "TBLORD02"
         assert data["games"][1]["table_id"] == "TBLORD01"
 
+    @pytest.mark.asyncio
     async def test_waiting_tables_excluded(self, client, db_session):
         """Tables with status 'waiting' are not included in the dashboard."""
         player, token = await register_player(client, "waiting@example.com", "WaitPlayer")
