@@ -998,11 +998,37 @@ async def export_game(
     white_id = table.white_player_id
     black_id = table.black_player_id
 
+    match_points = table.match_points or 0
+
+    # Calculate scores at the START of this game (before this game's
+    # points were added to the match totals).
+    white_score = table.white_match_score or 0
+    black_score = table.black_match_score or 0
+    if table.final_score and table.winner_id:
+        if table.winner_id == table.white_player_id:
+            white_score -= table.final_score
+        elif table.winner_id == table.black_player_id:
+            black_score -= table.final_score
+
+    # In gnubg MAT format, the left column is the player who moved first.
+    # Determine who moved first from the chronological move records.
+    black_moved_first = bool(records) and records[0].player_id == black_id
+
     # Separate records by player colour while preserving chronological order.
     white_records = [r for r in records if r.player_id == white_id]
     black_records = [r for r in records if r.player_id == black_id]
 
-    match_points = table.match_points or 0
+    if black_moved_first:
+        left_name, left_score = black_name, black_score
+        right_name, right_score = white_name, white_score
+        left_records, right_records = black_records, white_records
+        left_is_black, right_is_black = True, False
+    else:
+        left_name, left_score = white_name, white_score
+        right_name, right_score = black_name, black_score
+        left_records, right_records = white_records, black_records
+        left_is_black, right_is_black = False, True
+
     lines: list[str] = [
         f" {match_points} point match",
         "",
@@ -1010,35 +1036,35 @@ async def export_game(
     ]
 
     # Score line: " Name : Score                      Name : Score"
-    left_score = f"{white_name} : 0"
-    lines.append(f" {left_score:<31}{black_name} : 0")
+    left_header = f"{left_name} : {left_score}"
+    lines.append(f" {left_header:<31}{right_name} : {right_score}")
 
-    max_turns = max(len(white_records), len(black_records)) if records else 0
+    max_turns = max(len(left_records), len(right_records)) if records else 0
     for i in range(max_turns):
         turn_num = i + 1
-        white_rec = white_records[i] if i < len(white_records) else None
-        black_rec = black_records[i] if i < len(black_records) else None
+        left_rec = left_records[i] if i < len(left_records) else None
+        right_rec = right_records[i] if i < len(right_records) else None
 
-        white_part = ""
-        if white_rec:
-            notation = _notation_to_mat(white_rec.moves_notation, is_black=False)
-            if white_rec.dice_roll:
-                dice = white_rec.dice_roll.replace("-", "")
-                white_part = f"{dice}: {notation}"
+        left_part = ""
+        if left_rec:
+            notation = _notation_to_mat(left_rec.moves_notation, is_black=left_is_black)
+            if left_rec.dice_roll:
+                dice = left_rec.dice_roll.replace("-", "")
+                left_part = f"{dice}: {notation}" if notation else f"{dice}:"
             else:
-                white_part = notation
+                left_part = notation
 
-        black_part = ""
-        if black_rec:
-            notation = _notation_to_mat(black_rec.moves_notation, is_black=True)
-            if black_rec.dice_roll:
-                dice = black_rec.dice_roll.replace("-", "")
-                black_part = f"{dice}: {notation}"
+        right_part = ""
+        if right_rec:
+            notation = _notation_to_mat(right_rec.moves_notation, is_black=right_is_black)
+            if right_rec.dice_roll:
+                dice = right_rec.dice_roll.replace("-", "")
+                right_part = f"{dice}: {notation}" if notation else f"{dice}:"
             else:
-                black_part = notation
+                right_part = notation
 
         # gnubg format: "%3d) %-27s %s"
-        line = f"{turn_num:3d}) {white_part:<28}{black_part}"
+        line = f"{turn_num:3d}) {left_part:<28}{right_part}"
         lines.append(line.rstrip())
 
     if table.status == "finished" and table.winner_id:

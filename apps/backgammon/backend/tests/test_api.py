@@ -429,6 +429,54 @@ class TestGameExport:
         # Result line
         assert "Wins 2 points" in content
 
+    async def test_export_black_moves_first(self, client, db_session):
+        """When black wins the opening roll and moves first, black is in the left column."""
+        from app.models import MoveRecord
+
+        table, _, _ = await create_and_join_table(client, "Alice", "Bob")
+        table_id = table["id"]
+        white_id = table["white_player"]["id"]
+        black_id = table["black_player"]["id"]
+        black_name = table["black_player"]["nickname"]
+        white_name = table["white_player"]["nickname"]
+
+        # Black moved first (lower move_number)
+        db_session.add(MoveRecord(
+            table_id=table_id, player_id=black_id, move_number=1,
+            dice_roll="6-3", moves_notation="12/18 12/15",
+        ))
+        db_session.add(MoveRecord(
+            table_id=table_id, player_id=white_id, move_number=2,
+            dice_roll="3-1", moves_notation="8/5 6/5",
+        ))
+        db_session.add(MoveRecord(
+            table_id=table_id, player_id=black_id, move_number=3,
+            dice_roll="4-2", moves_notation="24/20 13/11",
+        ))
+        await db_session.commit()
+
+        resp = await client.get(f"/api/tables/{table_id}/export")
+        assert resp.status_code == 200
+        lines = resp.text.split("\n")
+
+        # Black (first mover) should be in the left column
+        score_line = lines[3]
+        black_pos = score_line.index(black_name)
+        white_pos = score_line.index(white_name)
+        assert black_pos < white_pos, "Black (first mover) should be in the left column"
+
+        # Row 1: Black's first move on the left, White's first move on the right
+        row1 = lines[4]
+        # Black's "12/18 12/15" mirrored → "13/7 13/10"
+        assert "63: 13/7 13/10" in row1
+        # White's move on the right in the same row
+        assert "31: 8/5 6/5" in row1
+
+        # Row 2: Black's second move on the left, no white move on right
+        row2 = lines[5]
+        # Black's "24/20 13/11" mirrored → "1/5 12/14"
+        assert "42: 1/5 12/14" in row2
+
 
 class TestPlayerStats:
     @pytest.mark.asyncio
