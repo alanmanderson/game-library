@@ -23,7 +23,7 @@ function Game() {
   const [copied, setCopied] = useState(false);
   const [moveHistoryOpen, setMoveHistoryOpen] = useState(false);
   const [showShortcutHelp, setShowShortcutHelp] = useState(false);
-  const copiedTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const copiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const {
     playerId, gameState, myColor, table, selectedPoint, setSelectedPoint,

@@ -52,6 +52,7 @@ export interface GameActions {
   makeMove: (fromPoint: number, toPoint: number) => void;
   requestHint: () => void;
   sendChat: (message: string) => void;
+  resign: () => void;
 }
 
 export interface GameStateHook {
@@ -99,17 +100,17 @@ export function useGameState(tableId: string | undefined): GameStateHook {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const prevGameStateRef = useRef<GameState | null>(null);
   const myColorRef = useRef<Color | null>(null);
-  const animTimerRef = useRef<ReturnType<typeof setTimeout>>();
-  const hintTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const animTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const hintTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const [whiteTimeMs, setWhiteTimeMs] = useState<number | null>(null);
   const [blackTimeMs, setBlackTimeMs] = useState<number | null>(null);
   const [timeControl, setTimeControl] = useState<string>("unlimited");
   const lastSyncRef = useRef<number>(Date.now());
 
-  const errorTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
-  const reconnectedTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
-  const clockIntervalRef = useRef<ReturnType<typeof setInterval>>();
+  const errorTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const reconnectedTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const clockIntervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   const player = useMemo(() => {
     try {

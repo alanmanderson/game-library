@@ -49,8 +49,8 @@ function Dice({ dice, remainingDice, currentTurn, openingRoll, animate = true, d
   const [isRolling, setIsRolling] = useState(false);
   const [rollingFaces, setRollingFaces] = useState<[number, number]>([1, 1]);
   const prevDiceRef = useRef<{ die1: number; die2: number } | null>(null);
-  const rollTimerRef = useRef<ReturnType<typeof setTimeout>>();
-  const rollIntervalRef = useRef<ReturnType<typeof setInterval>>();
+  const rollTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const rollIntervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   useEffect(() => {
     const prev = prevDiceRef.current;

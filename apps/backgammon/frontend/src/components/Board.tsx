@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useState, useEffect, useRef } from "react";
+import { useMemo, useCallback, useState, useEffect, useRef, type JSX } from "react";
 import type { GameState, Color, Move, HintMove } from "../types/game";
 import { pointToDisplayNumber, type ParsedMove } from "../utils/notation";
 import { resolveBoardTheme, resolveCheckerStyle } from "../constants/themes";

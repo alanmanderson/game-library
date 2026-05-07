@@ -21,8 +21,8 @@ function Spectator() {
   const [timeControl, setTimeControl] = useState<string>("unlimited");
   const lastSyncRef = useRef<number>(Date.now());
 
-  const errorTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
-  const clockIntervalRef = useRef<ReturnType<typeof setInterval>>();
+  const errorTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const clockIntervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   // Build WebSocket URL for spectator endpoint
   const wsUrl = useMemo(() => {

@@ -51,6 +51,7 @@ function makeHandlers() {
     onOfferDouble: vi.fn(),
     onAcceptDouble: vi.fn(),
     onDeclineDouble: vi.fn(),
+    onResign: vi.fn(),
   };
 }
 

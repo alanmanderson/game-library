@@ -12,7 +12,7 @@ function WaitingState({ tableId, isConnected, waitingForOpponent }: WaitingState
   const [copied, setCopied] = useState(false);
   const [invitingBot, setInvitingBot] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
-  const copiedTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const copiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const handleCopy = useCallback(async () => {
     try {
