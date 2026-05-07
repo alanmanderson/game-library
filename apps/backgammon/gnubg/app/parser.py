@@ -311,15 +311,16 @@ def parse_cube(text: str) -> ParsedCube:
 
 # ── Move notation parsing ──────────────────────────────────────────────────
 
-# "13/7" → (13, 7). "bar/22" → (bar, 22). "6/off" → (6, off).
-_MOVE_STEP = re.compile(
-    r"(bar|off|\d+)\s*/\s*(bar|off|\d+)(?:\*+)?(?:\s*\((\d+)\))?",
-    re.IGNORECASE,
-)
+# Repeat suffix: "13/7(2)" means do the move twice (doubles).
+_REPEAT_SUFFIX = re.compile(r"\((\d+)\)\s*$")
 
 
 def parse_notation_steps(notation: str, turn: str) -> list[tuple[int, int]]:
-    """Parse ``"13/7 8/5"`` into ``[(13, 7), (8, 5)]`` in backend indexing.
+    """Parse move notation into ``[(from, to), ...]`` in backend indexing.
+
+    Handles both space-separated moves (``"13/7 8/5"``) and chain notation
+    where the same checker uses multiple dice (``"13/7/4"`` or
+    ``"bar/22/18"``).  Also handles repeat suffixes (``"13/7(2)"``).
 
     Backend convention:
       - bar_white entry point = 25, bar_black entry point = 0
@@ -333,20 +334,40 @@ def parse_notation_steps(notation: str, turn: str) -> list[tuple[int, int]]:
     bar_for_turn = 25 if turn == "white" else 0
     off_for_turn = 0 if turn == "white" else 25
 
-    def _resolve(tok: str, is_from: bool) -> int:
-        t = tok.lower()
+    def _resolve(tok: str) -> int:
+        t = tok.lower().rstrip("*")
         if t == "bar":
             return bar_for_turn
         if t == "off":
             return off_for_turn
         return int(t)
 
-    for m in _MOVE_STEP.finditer(notation):
-        src = _resolve(m.group(1), is_from=True)
-        dst = _resolve(m.group(2), is_from=False)
-        repeat = int(m.group(3)) if m.group(3) else 1
+    for segment in (notation or "").strip().split():
+        # Check for repeat suffix: "13/7(2)" → repeat=2
+        repeat = 1
+        repeat_match = _REPEAT_SUFFIX.search(segment)
+        if repeat_match:
+            repeat = int(repeat_match.group(1))
+            segment = segment[: repeat_match.start()]
+
+        # Strip hit markers for parsing (they don't affect from/to)
+        clean = segment.replace("*", "")
+        parts = clean.split("/")
+        if len(parts) < 2:
+            continue
+
+        # Build chain steps: "13/7/4" → [(13,7), (7,4)]
+        chain: list[tuple[int, int]] = []
+        try:
+            for i in range(len(parts) - 1):
+                src = _resolve(parts[i])
+                dst = _resolve(parts[i + 1])
+                chain.append((src, dst))
+        except (ValueError, IndexError):
+            continue
+
         for _ in range(repeat):
-            steps.append((src, dst))
+            steps.extend(chain)
 
     return steps
 

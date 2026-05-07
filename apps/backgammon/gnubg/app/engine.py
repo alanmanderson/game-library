@@ -112,6 +112,8 @@ class GnubgEngine:
         await self._raw_command("set output cubeful on")
         await self._raw_command("set output matchpc off")
         await self._raw_command("set output winpc off")
+        # Use full chain notation (e.g. "13/7/4") instead of shorthand ("13/4")
+        await self._raw_command("set output shortmoves off")
 
         # Set 2-ply evaluation for both chequer play and cube decisions
         await self._raw_command("set evaluation chequer ply 2")

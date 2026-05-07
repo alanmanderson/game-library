@@ -16,6 +16,7 @@ from app.game_engine import (
     _home_range,
     _off_point,
     _opponent,
+    moves_to_notation,
 )
 
 
@@ -531,6 +532,54 @@ class TestNotation:
         log = engine.get_notation_log()
         assert log[0] == "White 31: 8/5 6/5"
         assert log[1] == "Black 53: 12/15 1/4*"
+
+
+class TestMovesToNotation:
+    def test_independent_moves(self):
+        moves = [Move(8, 5), Move(6, 5)]
+        assert moves_to_notation(moves, Color.WHITE) == "8/5 6/5"
+
+    def test_chain_notation(self):
+        # Same checker uses both dice: 13→7→4
+        moves = [Move(13, 7), Move(7, 4)]
+        assert moves_to_notation(moves, Color.WHITE) == "13/7/4"
+
+    def test_chain_with_hit(self):
+        moves = [Move(13, 7, is_hit=True), Move(7, 4)]
+        assert moves_to_notation(moves, Color.WHITE) == "13/7*/4"
+
+    def test_chain_hit_on_last(self):
+        moves = [Move(13, 7), Move(7, 4, is_hit=True)]
+        assert moves_to_notation(moves, Color.WHITE) == "13/7/4*"
+
+    def test_chain_plus_independent(self):
+        moves = [Move(13, 7), Move(7, 4), Move(8, 5)]
+        assert moves_to_notation(moves, Color.WHITE) == "13/7/4 8/5"
+
+    def test_bar_chain(self):
+        moves = [Move(25, 22), Move(22, 18)]
+        assert moves_to_notation(moves, Color.WHITE) == "bar/22/18"
+
+    def test_chain_bearoff(self):
+        moves = [Move(6, 3), Move(3, 0)]
+        assert moves_to_notation(moves, Color.WHITE) == "6/3/off"
+
+    def test_no_moves(self):
+        assert moves_to_notation([], Color.WHITE) == "(no moves)"
+
+    def test_doubles_four_moves(self):
+        # Doubles: 6-6, moving 4 checkers from 13 to 7
+        moves = [Move(13, 7), Move(13, 7), Move(13, 7), Move(13, 7)]
+        assert moves_to_notation(moves, Color.WHITE) == "13/7 13/7 13/7 13/7"
+
+    def test_doubles_two_chains(self):
+        # Doubles: same checker moves 13→7→1, another 13→7→1
+        moves = [Move(13, 7), Move(7, 1), Move(13, 7), Move(7, 1)]
+        assert moves_to_notation(moves, Color.WHITE) == "13/7/1 13/7/1"
+
+    def test_black_bar_and_off(self):
+        moves = [Move(0, 3), Move(22, 25)]
+        assert moves_to_notation(moves, Color.BLACK) == "bar/3 22/off"
 
 
 # -----------------------------------------------------------------------

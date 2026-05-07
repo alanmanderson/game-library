@@ -347,6 +347,15 @@ class ReplayResponse(BaseModel):
 # ── Analysis Schemas ─────────────────────────────────────────────────────
 
 
+class MoveCandidate(BaseModel):
+    """A ranked candidate move from the analysis engine."""
+    rank: int
+    notation: str
+    equity: float
+    equity_diff: float  # relative to rank #1 (always <= 0)
+    probs: Optional[dict[str, float]] = None
+
+
 class MoveAnalysis(BaseModel):
     """Per-move analysis of a completed game."""
 
@@ -369,6 +378,7 @@ class MoveAnalysis(BaseModel):
     best_win_prob: Optional[float] = None
     chosen_win_prob: Optional[float] = None
     source: Optional[str] = None  # "gnubg" | "ml" | "heuristic"
+    top_moves: Optional[list[MoveCandidate]] = None
 
 
 class AnalysisResponse(BaseModel):

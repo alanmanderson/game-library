@@ -14,6 +14,7 @@ from sqlalchemy import select, func
 from app.models import Table, MoveRecord, Player, CubeActionRecord
 from app.game_engine import (
     BackgammonEngine, Color, DiceRoll, Move, GameStatus, WinType,
+    moves_to_notation,
 )
 
 logger = logging.getLogger(__name__)
@@ -926,9 +927,7 @@ class GameManager:
         )
         existing_count = result.scalar()
 
-        notation = (
-            " ".join(m.to_notation(color) for m in moves) if moves else "(no moves)"
-        )
+        notation = moves_to_notation(moves, color)
 
         record = MoveRecord(
             table_id=table_id,

@@ -381,6 +381,7 @@ class TestGameExport:
         db_table.status = "finished"
         db_table.winner_id = white_id
         db_table.final_score = 2
+        db_table.white_match_score = 2  # game_service would have added this
 
         # Add moves including bar entry and bear-off
         db_session.add(MoveRecord(
@@ -433,7 +434,7 @@ class TestGameExport:
         """When black wins the opening roll and moves first, black is in the left column."""
         from app.models import MoveRecord
 
-        table, _, _ = await create_and_join_table(client, "Alice", "Bob")
+        table, _, _ = await create_and_join_table(client, "WhitePlayer", "BlackPlayer")
         table_id = table["id"]
         white_id = table["white_player"]["id"]
         black_id = table["black_player"]["id"]
@@ -459,7 +460,7 @@ class TestGameExport:
         assert resp.status_code == 200
         lines = resp.text.split("\n")
 
-        # Black (first mover) should be in the left column
+        # Black should be in the left column (first mover)
         score_line = lines[3]
         black_pos = score_line.index(black_name)
         white_pos = score_line.index(white_name)

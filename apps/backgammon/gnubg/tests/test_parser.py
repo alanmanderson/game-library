@@ -190,6 +190,36 @@ def test_parse_notation_repeat_suffix():
     assert steps == [(13, 7), (13, 7), (8, 5)]
 
 
+def test_parse_notation_chain():
+    # Chain notation: "13/7/4" = same checker uses two dice.
+    steps = parse_notation_steps("13/7/4", "white")
+    assert steps == [(13, 7), (7, 4)]
+
+
+def test_parse_notation_chain_with_hit():
+    # Chain with hit markers: "13/7*/4" = hit on point 7.
+    steps = parse_notation_steps("13/7*/4", "white")
+    assert steps == [(13, 7), (7, 4)]
+
+
+def test_parse_notation_chain_mixed():
+    # Chain plus separate move: "13/7/4 8/5"
+    steps = parse_notation_steps("13/7/4 8/5", "white")
+    assert steps == [(13, 7), (7, 4), (8, 5)]
+
+
+def test_parse_notation_chain_bar():
+    # Chain starting from bar: "bar/22/18"
+    steps = parse_notation_steps("bar/22/18", "white")
+    assert steps == [(25, 22), (22, 18)]
+
+
+def test_parse_notation_chain_bearoff():
+    # Chain ending with bear-off: "6/3/off"
+    steps = parse_notation_steps("6/3/off", "white")
+    assert steps == [(6, 3), (3, 0)]
+
+
 # ── Quality classification ──────────────────────────────────────────────
 
 

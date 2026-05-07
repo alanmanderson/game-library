@@ -125,6 +125,58 @@ class Move:
         return hash((self.from_point, self.to_point, self.is_hit))
 
 
+def moves_to_notation(moves: list[Move], color: Color) -> str:
+    """Format a turn's moves using chain notation.
+
+    Consecutive moves of the same checker (where ``to_point`` of one equals
+    ``from_point`` of the next) are chained with slashes::
+
+        13/7/4      instead of  13/7 7/4
+        bar/22/18   instead of  bar/22 22/18
+
+    Hit markers (``*``) appear after the specific point where a hit occurs::
+
+        13/7*/4   — checker hit on point 7
+        13/7/4*   — checker hit on point 4
+    """
+    if not moves:
+        return "(no moves)"
+
+    def _point_label(point: int, is_from: bool) -> str:
+        if is_from:
+            if (color == Color.WHITE and point == 25) or \
+               (color == Color.BLACK and point == 0):
+                return "bar"
+        else:
+            if (color == Color.WHITE and point == 0) or \
+               (color == Color.BLACK and point == 25):
+                return "off"
+        return str(point)
+
+    # Group consecutive moves into chains where to_point == next from_point
+    chains: list[list[Move]] = []
+    current: list[Move] = [moves[0]]
+
+    for move in moves[1:]:
+        if move.from_point == current[-1].to_point:
+            current.append(move)
+        else:
+            chains.append(current)
+            current = [move]
+    chains.append(current)
+
+    # Format each chain
+    parts: list[str] = []
+    for chain in chains:
+        segments = [_point_label(chain[0].from_point, True)]
+        for m in chain:
+            dst = _point_label(m.to_point, False)
+            segments.append(dst + ("*" if m.is_hit else ""))
+        parts.append("/".join(segments))
+
+    return " ".join(parts)
+
+
 @dataclass
 class DiceRoll:
     """A pair of dice values.
@@ -1347,10 +1399,7 @@ class BackgammonEngine:
                 s.moves_history[-1][0].value if s.moves_history else None
             ),
             "last_turn_notation": (
-                " ".join(
-                    m.to_notation(s.moves_history[-1][0])
-                    for m in s.moves_history[-1][2]
-                )
+                moves_to_notation(s.moves_history[-1][2], s.moves_history[-1][0])
                 if s.moves_history and s.moves_history[-1][2]
                 else None
             ),
@@ -1364,11 +1413,7 @@ class BackgammonEngine:
         log: list[str] = []
         for color, dice, moves in self.state.moves_history:
             die_str = f"{dice.die1}{dice.die2}"
-            if moves:
-                move_strs = " ".join(m.to_notation(color) for m in moves)
-            else:
-                move_strs = "(no moves)"
-            log.append(f"{color.value.capitalize()} {die_str}: {move_strs}")
+            log.append(f"{color.value.capitalize()} {die_str}: {moves_to_notation(moves, color)}")
         return log
 
     # ------------------------------------------------------------------

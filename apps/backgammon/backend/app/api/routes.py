@@ -903,6 +903,9 @@ async def get_game_analysis(
 def _notation_to_mat(notation: str, is_black: bool) -> str:
     """Convert internal move notation to gnubg-compatible MAT format.
 
+    Handles both space-separated moves (``"13/7 8/5"``) and chain notation
+    (``"13/7/4"``).
+
     Transformations applied:
     - For Black: mirror point numbers (``25 - point``) so moves are from
       Black's own perspective.
@@ -910,7 +913,7 @@ def _notation_to_mat(notation: str, is_black: bool) -> str:
       uses numeric-only notation).
 
     Examples (Black):
-        ``"12/15 1/4*"`` → ``"13/10 24/21*"``
+        ``"12/15/19"``   → ``"13/10/6"``
         ``"bar/3"``      → ``"25/22"``
         ``"22/off"``     → ``"3/0"``
 
@@ -920,33 +923,29 @@ def _notation_to_mat(notation: str, is_black: bool) -> str:
         ``"3/off"``      → ``"3/0"``
     """
 
+    def _convert_part(part: str) -> str:
+        """Convert a single point label (possibly with hit marker)."""
+        hit_suffix = ""
+        if part.endswith("*"):
+            hit_suffix = "*"
+            part = part[:-1]
+
+        if part == "bar":
+            return "25" + hit_suffix
+        if part == "off":
+            return "0" + hit_suffix
+        if is_black:
+            try:
+                return str(25 - int(part)) + hit_suffix
+            except ValueError:
+                pass
+        return part + hit_suffix
+
     def _convert_segment(segment: str) -> str:
-        hit_suffix = "*" if segment.endswith("*") else ""
-        clean = segment.rstrip("*")
-        parts = clean.split("/")
-        if len(parts) != 2:
+        parts = segment.split("/")
+        if len(parts) < 2:
             return segment
-        src, dst = parts
-
-        # Bar (25) and off (0) are absolute in MAT format — never mirrored.
-        # Only regular board points (1-24) get mirrored for Black.
-        if src == "bar":
-            src = "25"
-        elif is_black:
-            try:
-                src = str(25 - int(src))
-            except ValueError:
-                pass
-
-        if dst == "off":
-            dst = "0"
-        elif is_black:
-            try:
-                dst = str(25 - int(dst))
-            except ValueError:
-                pass
-
-        return f"{src}/{dst}{hit_suffix}"
+        return "/".join(_convert_part(p) for p in parts)
 
     # Handle special non-move notations (cube actions, no-move markers, etc.)
     if not notation:

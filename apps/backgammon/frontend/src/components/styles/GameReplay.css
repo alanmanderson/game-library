@@ -706,3 +706,119 @@
     margin-left: 0.5rem;
   }
 }
+
+/* ── Top Moves Panel ──────────────────────────────────────────────────── */
+
+.replay-top-moves {
+  width: 100%;
+  max-width: 600px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.replay-top-moves-header {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary, #9a9ab0);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.replay-top-moves-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.replay-top-moves-th {
+  padding: 0.4rem 0.75rem;
+  text-align: left;
+  font-weight: 500;
+  font-size: 0.75rem;
+  color: var(--text-secondary, #9a9ab0);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.replay-top-moves-th--rank { width: 2rem; text-align: center; }
+.replay-top-moves-th--equity,
+.replay-top-moves-th--delta { text-align: right; width: 5.5rem; }
+
+.replay-top-moves-row {
+  transition: background 0.12s ease;
+}
+
+.replay-top-moves-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.replay-top-moves-row--selected {
+  background: rgba(212, 168, 67, 0.15);
+}
+
+.replay-top-moves-row--selected:hover {
+  background: rgba(212, 168, 67, 0.2);
+}
+
+.replay-top-moves-row--best .replay-top-moves-td--rank {
+  color: var(--success, #2ecc71);
+  font-weight: 700;
+}
+
+.replay-top-moves-row--chosen {
+  border-left: 3px solid var(--accent, #d4a843);
+}
+
+.replay-top-moves-td {
+  padding: 0.45rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: var(--text-primary, #e8e8e8);
+}
+
+.replay-top-moves-td--rank {
+  text-align: center;
+  font-weight: 600;
+  color: var(--text-secondary, #9a9ab0);
+}
+
+.replay-top-moves-td--notation {
+  font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+}
+
+.replay-top-moves-td--equity,
+.replay-top-moves-td--delta {
+  text-align: right;
+  font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+  font-size: 0.8rem;
+}
+
+.replay-top-moves-td--warn {
+  color: #e6a23c;
+}
+
+.replay-top-moves-td--bad {
+  color: var(--danger, #e74c3c);
+}
+
+.replay-top-moves-played {
+  display: inline-block;
+  margin-left: 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--accent, #d4a843);
+  font-family: inherit;
+}
+
+/* Mobile: collapse by default */
+@media (max-width: 768px) {
+  .replay-top-moves {
+    max-width: 100%;
+  }
+  .replay-top-moves-th--equity,
+  .replay-top-moves-td--equity {
+    display: none;
+  }
+}

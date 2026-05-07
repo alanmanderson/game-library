@@ -30,6 +30,7 @@ from app.game_engine import (
     DiceRoll,
     GameStatus,
     Move,
+    moves_to_notation,
 )
 
 logger = logging.getLogger(__name__)
@@ -87,15 +88,15 @@ def _restore_engine_to(
     engine._cached_valid_moves = None
 
 
-# Notation parser: "13/7*", "bar/22", "6/off", "13/7(2)" → (from, to) pairs.
-_NOTATION_STEP = re.compile(
-    r"(bar|off|\d+)\s*/\s*(bar|off|\d+)(?:\*+)?(?:\((\d+)\))?",
-    re.IGNORECASE,
-)
+# Repeat suffix: "13/7(2)" means do the move twice (doubles).
+_REPEAT_SUFFIX = re.compile(r"\((\d+)\)\s*$")
 
 
 def _parse_notation_to_steps(notation: str, color: Color) -> list[dict]:
     """Convert a moves_notation string into a list of {from_point, to_point} dicts.
+
+    Handles both space-separated moves (``"13/7 8/5"``) and chain notation
+    (``"13/7/4"``).
 
     Uses the backend's indexing convention (bar_white=25, bar_black=0,
     off_white=0, off_black=25).
@@ -103,21 +104,39 @@ def _parse_notation_to_steps(notation: str, color: Color) -> list[dict]:
     bar = 25 if color == Color.WHITE else 0
     off = 0 if color == Color.WHITE else 25
     steps: list[dict] = []
-    for m in _NOTATION_STEP.finditer(notation or ""):
 
-        def _resolve(tok: str, is_from: bool) -> int:
-            t = tok.lower()
-            if t == "bar":
-                return bar
-            if t == "off":
-                return off
-            return int(t)
+    def _resolve(tok: str) -> int:
+        t = tok.lower().rstrip("*")
+        if t == "bar":
+            return bar
+        if t == "off":
+            return off
+        return int(t)
 
-        src = _resolve(m.group(1), True)
-        dst = _resolve(m.group(2), False)
-        repeat = int(m.group(3)) if m.group(3) else 1
+    for segment in (notation or "").strip().split():
+        repeat = 1
+        repeat_match = _REPEAT_SUFFIX.search(segment)
+        if repeat_match:
+            repeat = int(repeat_match.group(1))
+            segment = segment[: repeat_match.start()]
+
+        clean = segment.replace("*", "")
+        parts = clean.split("/")
+        if len(parts) < 2:
+            continue
+
+        chain: list[dict] = []
+        try:
+            for i in range(len(parts) - 1):
+                src = _resolve(parts[i])
+                dst = _resolve(parts[i + 1])
+                chain.append({"from_point": src, "to_point": dst})
+        except (ValueError, IndexError):
+            continue
+
         for _ in range(repeat):
-            steps.append({"from_point": src, "to_point": dst})
+            steps.extend(chain)
+
     return steps
 
 
@@ -210,10 +229,8 @@ def _parse_dice(dice_roll: str) -> Optional[DiceRoll]:
 
 
 def _turn_notation(color: Color, turn: list[Move]) -> str:
-    """Format a complete turn (list of Moves) as standard notation."""
-    if not turn:
-        return "(no moves)"
-    return " ".join(m.to_notation(color) for m in turn)
+    """Format a complete turn (list of Moves) as chain notation."""
+    return moves_to_notation(turn, color)
 
 
 def compute_analysis(
@@ -292,8 +309,7 @@ def compute_analysis(
             equity_before = 0.0
 
         # --- enumerate turns and find the best ---
-        best_equity = float("-inf")
-        best_turn: list[Move] = []
+        scored_turns: list[tuple[float, list[Move]]] = []
         try:
             _restore_engine_to(engine, prev_state, color, dice)
             turns = engine.enumerate_complete_turns()
@@ -312,9 +328,11 @@ def compute_analysis(
                     engine._restore_internals(saved)
                     continue
                 engine._restore_internals(saved)
-                if eq > best_equity:
-                    best_equity = eq
-                    best_turn = turn
+                scored_turns.append((eq, turn))
+
+            scored_turns.sort(key=lambda x: x[0], reverse=True)
+            best_equity = scored_turns[0][0]
+            best_turn = scored_turns[0][1]
         else:
             best_equity = equity_before
             best_turn = []
@@ -342,6 +360,18 @@ def compute_analysis(
 
         best_notation = _turn_notation(color, best_turn) if best_turn else None
 
+        # Build top-5 candidate moves
+        top_moves_list: list[dict] | None = None
+        if scored_turns:
+            top_moves_list = []
+            for i, (eq, turn) in enumerate(scored_turns[:5]):
+                top_moves_list.append({
+                    "rank": i + 1,
+                    "notation": _turn_notation(color, turn),
+                    "equity": round(eq, 4),
+                    "equity_diff": round(eq - best_equity, 4),
+                })
+
         analyses.append(
             {
                 "move_number": int(record.get("move_number") or 0),
@@ -356,6 +386,7 @@ def compute_analysis(
                 "quality": classify_quality(equity_loss),
                 "best_move_notation": best_notation,
                 "source": "ml" if ml_available else "heuristic",
+                "top_moves": top_moves_list,
             }
         )
 
@@ -379,15 +410,41 @@ _GNUBG_QUALITY_MAP = {
 
 
 def _moves_to_backend_notation(moves: list[dict], color: Color) -> str:
-    """Build notation string from gnubg response moves (backend coordinates)."""
+    """Build chain notation string from gnubg response moves (backend coords).
+
+    Consecutive moves of the same checker are chained: ``"13/7/4"`` instead
+    of ``"13/7 7/4"``.
+    """
     bar = 25 if color == Color.WHITE else 0
     off = 0 if color == Color.WHITE else 25
+
+    def _label(point: int, is_from: bool) -> str:
+        if is_from and point == bar:
+            return "bar"
+        if (not is_from) and point == off:
+            return "off"
+        return str(point)
+
+    if not moves:
+        return "(no moves)"
+
+    # Group into chains
+    chains: list[list[dict]] = []
+    current: list[dict] = [moves[0]]
+    for m in moves[1:]:
+        if m.get("from_point") == current[-1].get("to_point"):
+            current.append(m)
+        else:
+            chains.append(current)
+            current = [m]
+    chains.append(current)
+
     parts: list[str] = []
-    for m in moves:
-        fp, tp = m.get("from_point", 0), m.get("to_point", 0)
-        src = "bar" if fp == bar else str(fp)
-        dst = "off" if tp == off else str(tp)
-        parts.append(f"{src}/{dst}")
+    for chain in chains:
+        segments = [_label(chain[0].get("from_point", 0), True)]
+        for m in chain:
+            segments.append(_label(m.get("to_point", 0), False))
+        parts.append("/".join(segments))
     return " ".join(parts)
 
 
@@ -479,6 +536,32 @@ def _compute_analysis_gnubg(
         else:
             best_notation = best.get("notation")
 
+        # Try to get top-5 candidate moves from gnubg's best-move endpoint
+        top_moves_list = None
+        try:
+            bm_resp = gnubg_client.best_move_sync(
+                board_payload, [dice.die1, dice.die2]
+            )
+            if bm_resp and bm_resp.get("candidates"):
+                all_cands = bm_resp["candidates"]
+                top_eq = all_cands[0].get("equity", 0.0) if all_cands else 0.0
+                top_moves_list = []
+                for i, c in enumerate(all_cands[:5]):
+                    cand_notation = c.get("notation", "")
+                    # Convert gnubg moves to backend notation if available
+                    cand_moves = c.get("moves", [])
+                    if cand_moves:
+                        cand_notation = _moves_to_backend_notation(cand_moves, color)
+                    top_moves_list.append({
+                        "rank": i + 1,
+                        "notation": cand_notation,
+                        "equity": round(c.get("equity", 0.0), 4),
+                        "equity_diff": round(c.get("equity", 0.0) - top_eq, 4),
+                        "probs": c.get("probs"),
+                    })
+        except Exception as exc:
+            logger.debug("gnubg candidates unavailable: %s", exc)
+
         analyses.append(
             {
                 "move_number": int(record.get("move_number") or 0),
@@ -507,6 +590,7 @@ def _compute_analysis_gnubg(
                     else None
                 ),
                 "source": "gnubg",
+                "top_moves": top_moves_list,
             }
         )
         prev_state = game_state_after

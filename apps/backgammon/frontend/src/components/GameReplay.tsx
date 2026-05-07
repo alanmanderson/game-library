@@ -221,6 +221,8 @@ function GameReplay() {
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   /** Move numbers whose details panel (gammon/bg breakdown) is expanded. */
   const [expandedMoves, setExpandedMoves] = useState<Set<number>>(new Set());
+  /** Index into currentAnalysis.top_moves of the candidate being previewed. */
+  const [selectedCandidate, setSelectedCandidate] = useState<number | null>(null);
 
   // Speed slider constants: the slider is inverted so right = faster.
   // Slider range is [SPEED_SLIDER_MIN, SPEED_SLIDER_MAX]; actual delay = SPEED_OFFSET - sliderValue.
@@ -342,6 +344,9 @@ function GameReplay() {
       stopAutoPlay();
     }
   }, [autoPlaying, moveIndex, totalMoves, stopAutoPlay]);
+
+  // Reset selected candidate when the viewed move changes.
+  useEffect(() => setSelectedCandidate(null), [moveIndex]);
 
   // Arrow-key navigation: left = previous move, right = next move.
   useEffect(() => {
@@ -576,6 +581,20 @@ function GameReplay() {
 
   const bestMoveArrows = bestMoveArrowsComputed;
 
+  // When a candidate row is selected in the top-moves panel, show that
+  // candidate's arrows instead of the chosen/best move arrows.
+  const displayMoveArrows = (() => {
+    if (selectedCandidate !== null && currentAnalysis?.top_moves) {
+      const candidate = currentAnalysis.top_moves[selectedCandidate];
+      if (candidate) {
+        return parseMovesNotationRaw(candidate.notation);
+      }
+    }
+    return moveArrows;
+  })();
+
+  const displayBestMoveArrows = selectedCandidate !== null ? undefined : bestMoveArrows;
+
   // Dice to show on the board: parsed from the current move record. For moves
   // other than the very first, both dice belong to the same player; for move
   // 1 we reconstruct the opening roll so each die is coloured by who rolled
@@ -648,8 +667,8 @@ function GameReplay() {
           onBearOffClick={() => {}}
           cubeValue={cubeValue}
           cubeOwner={cubeOwner}
-          moveArrows={moveArrows}
-          bestMoveArrows={bestMoveArrows}
+          moveArrows={displayMoveArrows}
+          bestMoveArrows={displayBestMoveArrows}
           arrowsMoverColor={movedByColor as "white" | "black"}
         />
         {replayDice && (
@@ -763,6 +782,53 @@ function GameReplay() {
           ⏭
         </button>
       </div>
+
+      {/* Top candidate moves panel */}
+      {currentAnalysis?.top_moves && currentAnalysis.top_moves.length > 0 && moveIndex > 0 && (
+        <div className="replay-top-moves">
+          <div className="replay-top-moves-header">
+            Top moves for move {moveIndex} ({movedByColor === "white" ? "\u26AA" : "\u26AB"} {currentMove?.dice_roll})
+          </div>
+          <table className="replay-top-moves-table">
+            <thead>
+              <tr>
+                <th className="replay-top-moves-th replay-top-moves-th--rank">#</th>
+                <th className="replay-top-moves-th replay-top-moves-th--notation">Move</th>
+                <th className="replay-top-moves-th replay-top-moves-th--equity">Equity</th>
+                <th className="replay-top-moves-th replay-top-moves-th--delta">{"\u0394"} Equity</th>
+              </tr>
+            </thead>
+            <tbody>
+              {currentAnalysis.top_moves.map((candidate, idx) => {
+                const isBest = candidate.rank === 1;
+                const isChosen = candidate.notation === (currentMove?.moves_notation ?? "")
+                  || (isBest && (currentAnalysis.quality === "best" || currentAnalysis.quality === "very_good"));
+                const isSelected = selectedCandidate === idx;
+                return (
+                  <tr
+                    key={candidate.rank}
+                    className={`replay-top-moves-row${isSelected ? " replay-top-moves-row--selected" : ""}${isChosen ? " replay-top-moves-row--chosen" : ""}${isBest ? " replay-top-moves-row--best" : ""}`}
+                    onClick={() => setSelectedCandidate(isSelected ? null : idx)}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <td className="replay-top-moves-td replay-top-moves-td--rank">{candidate.rank}</td>
+                    <td className="replay-top-moves-td replay-top-moves-td--notation">
+                      {notationToPlayerPerspective(candidate.notation, movedByColor as "white" | "black")}
+                      {isChosen && <span className="replay-top-moves-played">{"\u2713"} Played</span>}
+                    </td>
+                    <td className="replay-top-moves-td replay-top-moves-td--equity">
+                      {candidate.equity >= 0 ? "+" : ""}{candidate.equity.toFixed(3)}
+                    </td>
+                    <td className={`replay-top-moves-td replay-top-moves-td--delta${candidate.equity_diff < -0.06 ? " replay-top-moves-td--bad" : candidate.equity_diff < -0.02 ? " replay-top-moves-td--warn" : ""}`}>
+                      {candidate.rank === 1 ? "\u2014" : candidate.equity_diff.toFixed(3)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Analysis toggle */}
       {!embed && (

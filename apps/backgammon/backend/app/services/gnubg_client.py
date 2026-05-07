@@ -230,6 +230,12 @@ def analyze_move_sync(
     return _post_sync("/analyze-move", payload, _TIMEOUT_SLOW)
 
 
+def best_move_sync(board: dict, dice: list[int]) -> Optional[dict]:
+    """Synchronous version of best_move for thread-pool contexts."""
+    payload = {**board, "dice": list(dice)}
+    return _post_sync("/best-move", payload, _TIMEOUT_FAST)
+
+
 def is_available_sync() -> bool:
     """Blocking health check for the thread-pool analysis path."""
     client = _get_sync_client()

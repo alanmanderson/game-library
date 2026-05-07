@@ -1,8 +1,10 @@
 /**
  * Tests for the backgammon notation utility functions.
  *
- * Covers moveToNotation, formatDiceRoll, and pointToDisplayNumber with
- * every meaningful combination of color, bar, bearing-off, and hit moves.
+ * Covers moveToNotation, formatDiceRoll, parseMovesNotation,
+ * parseMovesNotationRaw, pointToDisplayNumber, and
+ * notationToPlayerPerspective with every meaningful combination of
+ * color, bar, bearing-off, hit moves, and chain notation.
  */
 
 import { describe, it, expect } from "vitest";
@@ -115,8 +117,14 @@ describe("parseMovesNotation", () => {
     ]);
   });
 
-  it("consolidates a chained single-checker hop", () => {
+  it("consolidates a chained single-checker hop (space-separated)", () => {
     expect(parseMovesNotation("24/22 22/18")).toEqual([
+      { from: 24, to: 18, is_hit: false },
+    ]);
+  });
+
+  it("consolidates a chain notation segment", () => {
+    expect(parseMovesNotation("24/22/18")).toEqual([
       { from: 24, to: 18, is_hit: false },
     ]);
   });
@@ -124,6 +132,18 @@ describe("parseMovesNotation", () => {
   it("preserves the hit flag on a consolidated chain", () => {
     expect(parseMovesNotation("24/22 22/18*")).toEqual([
       { from: 24, to: 18, is_hit: true },
+    ]);
+  });
+
+  it("preserves the hit flag on a chain notation segment", () => {
+    expect(parseMovesNotation("24/22/18*")).toEqual([
+      { from: 24, to: 18, is_hit: true },
+    ]);
+  });
+
+  it("preserves intermediate hit in chain notation", () => {
+    expect(parseMovesNotation("13/7*/4")).toEqual([
+      { from: 13, to: 4, is_hit: true },
     ]);
   });
 
@@ -145,6 +165,13 @@ describe("parseMovesNotation", () => {
       { from: 6, to: 5, is_hit: false },
     ]);
   });
+
+  it("handles chain with independent move", () => {
+    expect(parseMovesNotation("13/7/4 8/5")).toEqual([
+      { from: 13, to: 4, is_hit: false },
+      { from: 8, to: 5, is_hit: false },
+    ]);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -152,10 +179,24 @@ describe("parseMovesNotation", () => {
 // ---------------------------------------------------------------------------
 
 describe("parseMovesNotationRaw", () => {
-  it("does NOT consolidate chained hops", () => {
+  it("does NOT consolidate chained hops (space-separated)", () => {
     expect(parseMovesNotationRaw("24/22 22/18")).toEqual([
       { from: 24, to: 22, is_hit: false },
       { from: 22, to: 18, is_hit: false },
+    ]);
+  });
+
+  it("expands chain notation into individual steps", () => {
+    expect(parseMovesNotationRaw("13/7/4")).toEqual([
+      { from: 13, to: 7, is_hit: false },
+      { from: 7, to: 4, is_hit: false },
+    ]);
+  });
+
+  it("expands chain with hit markers per step", () => {
+    expect(parseMovesNotationRaw("13/7*/4")).toEqual([
+      { from: 13, to: 7, is_hit: true },
+      { from: 7, to: 4, is_hit: false },
     ]);
   });
 
@@ -170,6 +211,28 @@ describe("parseMovesNotationRaw", () => {
     expect(parseMovesNotationRaw("bar/22 5/off")).toEqual([
       { from: "bar", to: 22, is_hit: false },
       { from: 5, to: "off", is_hit: false },
+    ]);
+  });
+
+  it("handles chain with bar and off", () => {
+    expect(parseMovesNotationRaw("bar/22/18")).toEqual([
+      { from: "bar", to: 22, is_hit: false },
+      { from: 22, to: 18, is_hit: false },
+    ]);
+  });
+
+  it("handles chain ending with bear-off", () => {
+    expect(parseMovesNotationRaw("6/3/off")).toEqual([
+      { from: 6, to: 3, is_hit: false },
+      { from: 3, to: "off", is_hit: false },
+    ]);
+  });
+
+  it("handles chain plus independent move", () => {
+    expect(parseMovesNotationRaw("13/7/4 8/5")).toEqual([
+      { from: 13, to: 7, is_hit: false },
+      { from: 7, to: 4, is_hit: false },
+      { from: 8, to: 5, is_hit: false },
     ]);
   });
 });
@@ -209,7 +272,7 @@ describe("notationToPlayerPerspective", () => {
   });
 
   it("mirrors regular black moves", () => {
-    // Internal 12→15 = Black's 13→10, Internal 1→4 = Black's 24→21
+    // Internal 12->15 = Black's 13->10, Internal 1->4 = Black's 24->21
     expect(notationToPlayerPerspective("12/15 1/4*", "black")).toBe(
       "13/10 24/21*",
     );
@@ -240,5 +303,25 @@ describe("notationToPlayerPerspective", () => {
 
   it("handles empty string", () => {
     expect(notationToPlayerPerspective("", "black")).toBe("");
+  });
+
+  it("mirrors chain notation for black", () => {
+    // Internal 12/15/19 = Black's 13/10/6
+    expect(notationToPlayerPerspective("12/15/19", "black")).toBe("13/10/6");
+  });
+
+  it("mirrors chain with hit for black", () => {
+    expect(notationToPlayerPerspective("12/15*/19", "black")).toBe(
+      "13/10*/6",
+    );
+  });
+
+  it("returns chain notation unchanged for white", () => {
+    expect(notationToPlayerPerspective("13/7/4", "white")).toBe("13/7/4");
+  });
+
+  it("handles chain with bar and off for black", () => {
+    expect(notationToPlayerPerspective("bar/3/7", "black")).toBe("bar/22/18");
+    expect(notationToPlayerPerspective("4/2/off", "black")).toBe("21/23/off");
   });
 });

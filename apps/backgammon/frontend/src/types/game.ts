@@ -284,6 +284,15 @@ export interface MoveProbs {
   lose_bg: number;
 }
 
+/** A ranked candidate move from the analysis engine. */
+export interface MoveCandidate {
+  rank: number;
+  notation: string;
+  equity: number;
+  equity_diff: number;  // relative to rank #1, always <= 0
+  probs?: MoveProbs | null;
+}
+
 /** Per-move analysis entry produced by the backend analysis service. */
 export interface MoveAnalysis {
   move_number: number;
@@ -307,6 +316,8 @@ export interface MoveAnalysis {
   chosen_win_prob?: number | null;
   /** Which evaluator produced this row — drives the "Analyzed by…" banner. */
   source?: "gnubg" | "ml" | "heuristic" | null;
+  /** Top candidate moves ranked by equity (up to 5). */
+  top_moves?: MoveCandidate[] | null;
 }
 
 /** Full analysis payload for a completed game. */
