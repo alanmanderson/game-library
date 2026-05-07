@@ -36,6 +36,12 @@ from app.game_engine import Color, GameStatus
 from app.limiter import limiter
 
 
+@asynccontextmanager
+async def _noop_lifespan(app):
+    """No-op lifespan for tests — avoids background tasks and shutdown deadlocks."""
+    yield
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -86,7 +92,8 @@ def ws_test_env(tmp_path):
     with patch("app.api.websocket.async_session", mock_async_session), \
          patch("app.database.async_session", mock_async_session), \
          patch("app.services.bot_service.schedule_bot_turn_if_needed"), \
-         patch("app.services.bot_service.schedule_bot_double_response_if_needed"):
+         patch("app.services.bot_service.schedule_bot_double_response_if_needed"), \
+         patch.object(app.router, "lifespan_context", _noop_lifespan):
         with TestClient(app) as client:
             yield {
                 "client": client,

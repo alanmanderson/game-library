@@ -604,6 +604,7 @@ class TestFullGameSimulation:
 
     NUM_RANDOM_GAMES = 50
 
+    @pytest.mark.slow
     def test_random_games(self):
         """Play NUM_RANDOM_GAMES complete games with random moves, verifying
         all invariants after every single move."""
@@ -962,6 +963,7 @@ class TestFullGameSimulation:
                 f"Opening roll should not be doubles: {roll}"
             )
 
+    @pytest.mark.slow
     def test_many_games_additional_seeds(self):
         """Play 20 more games with different seeds for extra coverage."""
         violations = []
@@ -1218,6 +1220,7 @@ class TestFullGameSimulation:
     # Stress test: many games with both players
     # ------------------------------------------------------------------
 
+    @pytest.mark.slow
     def test_stress_100_games_mixed_first_player(self):
         """Run 100 games alternating first player to stress test engine."""
         violations = []

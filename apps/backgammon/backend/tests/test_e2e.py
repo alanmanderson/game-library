@@ -44,6 +44,12 @@ from app.main import app
 from app.services.game_service import game_manager
 
 
+@asynccontextmanager
+async def _noop_lifespan(app):
+    """No-op lifespan for tests — avoids background tasks and shutdown deadlocks."""
+    yield
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -116,9 +122,10 @@ def e2e_client(tmp_path):
         patch("app.database.async_session", _mock_async_session),
         patch("app.services.bot_service.schedule_bot_turn_if_needed"),
         patch("app.services.bot_service.schedule_bot_double_response_if_needed"),
+        patch.object(app.router, "lifespan_context", _noop_lifespan),
     ):
-        client = TestClient(app)
-        yield client
+        with TestClient(app) as client:
+            yield client
 
     app.dependency_overrides.clear()
     game_manager._engines.clear()
