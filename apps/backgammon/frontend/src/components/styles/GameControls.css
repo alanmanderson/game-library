@@ -77,10 +77,6 @@
   opacity: 0.6;
 }
 
-.resign-row {
-  margin-top: 0.1rem;
-}
-
 .controls-row .resign-btn {
   padding: 0.25rem 0.9rem;
   font-size: 0.8rem;
@@ -97,21 +93,60 @@
   opacity: 1;
 }
 
-.resign-confirm-text {
-  font-size: 0.85rem;
+.resign-type-menu {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.resign-type-label {
+  font-size: 0.8rem;
   color: var(--text-secondary);
 }
 
-.controls-row .resign-confirm-btn {
+.controls-row .resign-type-btn {
   padding: 0.25rem 0.7rem;
   font-size: 0.8rem;
   background: var(--danger);
+}
+
+.controls-row .resign-type-btn.resign-type-gammon {
+  background: #c0392b;
+}
+
+.controls-row .resign-type-btn.resign-type-backgammon {
+  background: #922b21;
 }
 
 .controls-row .resign-cancel-btn {
   padding: 0.25rem 0.7rem;
   font-size: 0.8rem;
   background: var(--text-secondary);
+}
+
+.resign-offer-text {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+.controls-row .accept-resign-btn {
+  padding: 0.4rem 1rem;
+  font-size: 0.9rem;
+  background: var(--success);
+}
+
+.controls-row .reject-resign-btn {
+  padding: 0.4rem 1rem;
+  font-size: 0.9rem;
+  background: var(--danger);
+}
+
+.resign-waiting-text {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-style: italic;
 }
 
 /* Compact controls when inside board overlay */
@@ -141,8 +176,10 @@
 }
 
 .board-overlay .controls-row .resign-btn,
-.board-overlay .controls-row .resign-confirm-btn,
-.board-overlay .controls-row .resign-cancel-btn {
+.board-overlay .controls-row .resign-type-btn,
+.board-overlay .controls-row .resign-cancel-btn,
+.board-overlay .controls-row .accept-resign-btn,
+.board-overlay .controls-row .reject-resign-btn {
   padding: 0.2rem 0.6rem;
   font-size: 0.75rem;
 }

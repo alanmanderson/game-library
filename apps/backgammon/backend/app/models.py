@@ -267,6 +267,12 @@ class GameAnalysis(Base):
     # fell back to a simple heuristic (e.g. model not installed).
     ml_available: bool = Column(Boolean, nullable=False, default=True)
     moves_analysed: int = Column(Integer, nullable=False, default=0)
+    # Ply depth used for this cached analysis. NULL means legacy (pre-ply) cache.
+    ply: int = Column(Integer, nullable=True)
+    # Human-readable description of the analysis engine/depth used.
+    analysis_source: str = Column(String(100), nullable=True)
+    # Background analysis status: "complete", "running", or "failed".
+    status: str = Column(String(20), nullable=False, default="complete")
     created_at: datetime = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )

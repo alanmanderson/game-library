@@ -151,6 +151,7 @@ Production domain: `backgammon.alanmanderson.com`. Run `deploy.sh` or use the `/
 - Backend tests use in-memory SQLite via fixtures in `conftest.py`
 - Backend tests require `JWT_SECRET=test` env var: `JWT_SECRET=test python3 -m pytest`
 - Frontend proxies `/api` and `/ws` to backend via Vite config (dev) or Caddy (prod)
+- **DO NOT upgrade these libraries** — they cause deadlocks in WebSocket tests: `pytest==8.4.2`, `pytest-asyncio==0.25.3`, `aiosqlite==0.22.1`. Stay on the current pinned versions (`pytest==8.3.4`, `pytest-asyncio==0.24.0`, `aiosqlite==0.20.0`).
 
 ### Frontend Architecture
 - **Home page** uses a two-panel CSS Grid layout: left play panel (380px, sticky) + right tabbed content panel (flex)

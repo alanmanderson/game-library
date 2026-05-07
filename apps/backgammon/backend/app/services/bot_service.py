@@ -957,3 +957,55 @@ def schedule_bot_double_response_if_needed(table_id: str) -> None:
     # If a double was offered and it's NOT from the bot, the bot needs to respond
     if engine.state.double_offered and engine.state.double_offered_by != bot_color:
         asyncio.create_task(execute_bot_turn(table_id))
+
+
+def schedule_bot_resign_response_if_needed(table_id: str) -> None:
+    """Schedule bot to respond to a resignation offer (always accepts)."""
+    from app.services.game_service import game_manager
+    engine = game_manager.get_engine(table_id)
+    if not engine or not is_bot_game(table_id):
+        return
+    bot_color = get_bot_color(table_id)
+    if not bot_color:
+        return
+    # If a resign was offered and it's NOT from the bot, the bot accepts
+    if engine.state.resign_offered and engine.state.resign_offered_by != bot_color:
+        asyncio.create_task(_bot_accept_resign(table_id))
+
+
+async def _bot_accept_resign(table_id: str) -> None:
+    """Bot accepts a resignation offer after a short delay."""
+    from app.services.game_service import game_manager
+    from app.api.websocket import _send_game_state_to_all, _broadcast_game_over, manager
+    from app.database import async_session
+    from app.models import Table
+
+    await asyncio.sleep(BOT_ROLL_DELAY)
+
+    async with game_manager._get_lock(table_id):
+        engine = game_manager.get_engine(table_id)
+        if not engine or not engine.state.resign_offered:
+            return
+
+        async with async_session() as db:
+            await game_manager.accept_resign(db, table_id, BOT_PLAYER_ID)
+            await db.commit()
+            await _send_game_state_to_all(table_id, db=db)
+
+            if engine.state.status == GameStatus.FINISHED:
+                table = await db.get(Table, table_id)
+                if table:
+                    match_over = table.status == "finished"
+                    game_over_data = {
+                        "winner_id": table.winner_id,
+                        "win_type": "resignation",
+                        "final_score": table.final_score,
+                        "match_over": match_over,
+                        "white_match_score": table.white_match_score,
+                        "black_match_score": table.black_match_score,
+                    }
+                    await _broadcast_game_over(table_id, game_over_data)
+                if table and table.status == "finished":
+                    game_manager.cleanup_finished_game(table_id)
+                    from app.api.websocket import _hint_usage
+                    _hint_usage.pop(table_id, None)

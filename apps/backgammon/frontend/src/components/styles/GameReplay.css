@@ -308,6 +308,14 @@
 
 /* ── Analysis panel ──────────────────────────────────────────────────── */
 
+.replay-analysis-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
 .replay-analysis-toggle {
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -328,6 +336,47 @@
 .replay-analysis-toggle--open {
   border-color: var(--accent, #d4a843);
   color: var(--accent, #d4a843);
+}
+
+.replay-ply-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.replay-ply-label {
+  font-size: 0.82rem;
+  color: var(--text-secondary, #9a9ab0);
+  margin-right: 0.2rem;
+}
+
+.replay-ply-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text-secondary, #9a9ab0);
+  padding: 0.3rem 0.6rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.replay-ply-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: var(--text-primary, #e8e8e8);
+}
+
+.replay-ply-btn--active {
+  background: rgba(212, 168, 67, 0.15);
+  border-color: var(--accent, #d4a843);
+  color: var(--accent, #d4a843);
+}
+
+.replay-ply-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .replay-analysis {
@@ -353,6 +402,43 @@
   color: var(--danger, #e74c3c);
 }
 
+.replay-analysis-progress-bar {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  margin: 0.5rem 0;
+  overflow: hidden;
+}
+
+.replay-analysis-progress-fill {
+  height: 100%;
+  background: var(--accent, #d4a843);
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+.replay-analysis-progress-detail {
+  font-size: 0.82rem;
+  color: var(--text-secondary, #9a9ab0);
+}
+
+.replay-analysis-retry-btn {
+  background: transparent;
+  border: 1px solid var(--danger, #e74c3c);
+  color: var(--danger, #e74c3c);
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  margin-left: 0.5rem;
+  transition: background 0.15s ease;
+}
+
+.replay-analysis-retry-btn:hover {
+  background: rgba(231, 76, 60, 0.15);
+}
+
 .replay-analysis-banner {
   background: rgba(212, 168, 67, 0.1);
   border: 1px solid rgba(212, 168, 67, 0.3);
@@ -360,6 +446,13 @@
   padding: 0.5rem 0.75rem;
   border-radius: 6px;
   font-size: 0.85rem;
+}
+
+.replay-analysis-banner--source {
+  background: rgba(46, 204, 113, 0.08);
+  border-color: rgba(46, 204, 113, 0.25);
+  color: var(--success, #2ecc71);
+  font-weight: 500;
 }
 
 /* Game summary */

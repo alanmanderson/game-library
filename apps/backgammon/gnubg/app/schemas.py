@@ -41,6 +41,7 @@ class Board(BaseModel):
     cube_value: int = 1
     cube_owner: Optional[Color] = None
     match_score: Optional[MatchScore] = None
+    ply: Optional[int] = Field(default=None, ge=0, le=3)
 
     @field_validator("cube_value")
     @classmethod

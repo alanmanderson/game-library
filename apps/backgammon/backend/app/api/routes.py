@@ -764,6 +764,7 @@ async def get_game_replay(
 async def get_game_analysis(
     table_id: str,
     limit: int = Query(100, ge=1, le=500),
+    ply: int = Query(2, ge=0, le=3),
     db: AsyncSession = Depends(get_db),
     current_player: Player = Depends(get_current_player),
 ) -> AnalysisResponse:
@@ -776,6 +777,10 @@ async def get_game_analysis(
     Results are cached in the ``game_analyses`` table so subsequent
     requests return instantly.  The first request for a game can be slow
     (seconds-to-tens-of-seconds depending on game length).
+
+    The ``ply`` parameter controls the evaluation depth when gnubg is
+    available: 0 (fast neural net), 2 (standard), or 3 (deep, slow).
+    Defaults to 2.
 
     Policy: only participants (the human white or black player of the
     table) may view the analysis.  Replays remain public, but move-quality
@@ -815,9 +820,45 @@ async def get_game_analysis(
     )
     total_moves = int(total_result.scalar() or 0)
 
-    # --- Return cached analysis if it covers at least the requested range ---
+    # --- Check cached analysis ---
     cached = await db.get(GameAnalysis, table_id)
-    if cached is not None and cached.moves_analysed >= min(limit, total_moves):
+
+    # If a background analysis is running at the requested ply, return progress.
+    if cached is not None and cached.status == "running" and cached.ply == ply:
+        analyses = list(cached.move_analyses or [])
+        return AnalysisResponse(
+            table_id=table_id,
+            ml_available=False,
+            moves_analysed=len(analyses),
+            total_moves=total_moves,
+            move_analyses=[MoveAnalysis(**a) for a in analyses],
+            analysis_source=cached.analysis_source,
+            analysis_ply=ply,
+            status="running",
+            progress=len(analyses) / total_moves if total_moves > 0 else 0.0,
+        )
+
+    # If a previous analysis failed, report it so frontend can offer retry.
+    if cached is not None and cached.status == "failed" and cached.ply == ply:
+        analyses = list(cached.move_analyses or [])
+        return AnalysisResponse(
+            table_id=table_id,
+            ml_available=False,
+            moves_analysed=len(analyses),
+            total_moves=total_moves,
+            move_analyses=[MoveAnalysis(**a) for a in analyses],
+            analysis_source=cached.analysis_source,
+            analysis_ply=ply,
+            status="failed",
+        )
+
+    # Return completed cached analysis if it covers the requested range and ply.
+    if (
+        cached is not None
+        and cached.status == "complete"
+        and cached.moves_analysed >= min(limit, total_moves)
+        and cached.ply == ply
+    ):
         analyses = list(cached.move_analyses or [])[:limit]
         return AnalysisResponse(
             table_id=table_id,
@@ -825,6 +866,9 @@ async def get_game_analysis(
             moves_analysed=len(analyses),
             total_moves=total_moves,
             move_analyses=[MoveAnalysis(**a) for a in analyses],
+            analysis_source=cached.analysis_source,
+            analysis_ply=cached.ply,
+            status="complete",
         )
 
     # --- Load initial board + records needed for computation ---
@@ -865,8 +909,78 @@ async def get_game_analysis(
         for r in records
     ]
 
-    # Analysis is CPU-bound (torch forward passes) — offload to a thread.
-    analyses, ml_available, moves_analysed = await asyncio.to_thread(
+    if ply >= 3:
+        # === ASYNC PATH: 3-ply runs as a background task with polling ===
+        from app.services.analysis_service import (
+            _running_analyses,
+            run_background_analysis,
+        )
+
+        # Check if a task is already running in-memory.
+        if table_id in _running_analyses and not _running_analyses[table_id].done():
+            analyses = list((cached.move_analyses if cached else None) or [])
+            return AnalysisResponse(
+                table_id=table_id,
+                ml_available=False,
+                moves_analysed=len(analyses),
+                total_moves=total_moves,
+                move_analyses=[MoveAnalysis(**a) for a in analyses],
+                analysis_source=f"GNU Backgammon ({ply}-ply)",
+                analysis_ply=ply,
+                status="running",
+                progress=len(analyses) / total_moves if total_moves > 0 else 0.0,
+            )
+
+        # Create or reset the DB row to "running".
+        if cached is None:
+            cached = GameAnalysis(
+                table_id=table_id,
+                move_analyses=[],
+                ml_available=False,
+                moves_analysed=0,
+                ply=ply,
+                analysis_source=f"GNU Backgammon ({ply}-ply)",
+                status="running",
+            )
+            db.add(cached)
+        else:
+            cached.move_analyses = []
+            cached.moves_analysed = 0
+            cached.ply = ply
+            cached.analysis_source = f"GNU Backgammon ({ply}-ply)"
+            cached.status = "running"
+        await db.commit()
+
+        # Launch background task.
+        task = asyncio.create_task(
+            run_background_analysis(
+                table_id,
+                initial_state,
+                record_dicts,
+                table.white_player_id,
+                table.black_player_id,
+                nickname_map,
+                limit,
+                ply,
+                total_moves,
+            )
+        )
+        _running_analyses[table_id] = task
+
+        return AnalysisResponse(
+            table_id=table_id,
+            ml_available=False,
+            moves_analysed=0,
+            total_moves=total_moves,
+            move_analyses=[],
+            analysis_source=f"GNU Backgammon ({ply}-ply)",
+            analysis_ply=ply,
+            status="running",
+            progress=0.0,
+        )
+
+    # === SYNC PATH: 0-ply and 2-ply (fast enough to block) ===
+    analyses, ml_available, moves_analysed, analysis_source = await asyncio.to_thread(
         compute_analysis,
         initial_state,
         record_dicts,
@@ -874,6 +988,7 @@ async def get_game_analysis(
         table.black_player_id,
         nickname_map,
         limit,
+        ply,
     )
 
     # --- Cache the result ---
@@ -883,12 +998,18 @@ async def get_game_analysis(
             move_analyses=analyses,
             ml_available=ml_available,
             moves_analysed=moves_analysed,
+            ply=ply,
+            analysis_source=analysis_source,
+            status="complete",
         )
         db.add(cached)
     else:
         cached.move_analyses = analyses
         cached.ml_available = ml_available
         cached.moves_analysed = moves_analysed
+        cached.ply = ply
+        cached.analysis_source = analysis_source
+        cached.status = "complete"
     await db.commit()
 
     return AnalysisResponse(
@@ -897,6 +1018,9 @@ async def get_game_analysis(
         moves_analysed=moves_analysed,
         total_moves=total_moves,
         move_analyses=[MoveAnalysis(**a) for a in analyses],
+        analysis_source=analysis_source,
+        analysis_ply=ply,
+        status="complete",
     )
 
 

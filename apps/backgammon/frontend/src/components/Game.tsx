@@ -1,7 +1,7 @@
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import type { Color } from "../types/game";
-import { BOT_PLAYER_ID } from "../constants";
+import { BOT_PLAYER_ID, AUTO_MOVE_KEY } from "../constants";
 import { useGameState } from "../hooks/useGameState";
 import { useGameKeyboard } from "../hooks/useGameKeyboard";
 import Board from "./Board";
@@ -23,7 +23,13 @@ function Game() {
   const [copied, setCopied] = useState(false);
   const [moveHistoryOpen, setMoveHistoryOpen] = useState(false);
   const [showShortcutHelp, setShowShortcutHelp] = useState(false);
+  const [resignMenuOpen, setResignMenuOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [autoMoveEnabled, setAutoMoveEnabled] = useState(() => {
+    try { return localStorage.getItem(AUTO_MOVE_KEY) === "true"; } catch { return false; }
+  });
   const copiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const settingsRef = useRef<HTMLDivElement>(null);
 
   const {
     playerId, gameState, myColor, table, selectedPoint, setSelectedPoint,
@@ -43,6 +49,8 @@ function Game() {
   const isMyTurn = gameState?.current_turn === myColor;
   const isMovingPhase = gameState?.status === "moving";
   const validMoves = gameState?.valid_moves ?? [];
+  const noOffer = !gameState?.double_offered && !gameState?.resign_offered;
+  const showResignButton = isMyTurn && gameState?.status === "rolling" && noOffer;
 
   // Show yellow arrows for the opponent's most recent move while we're about
   // to roll. Clears once the dice are rolled (status → "moving").
@@ -85,6 +93,52 @@ function Game() {
   const handleBearOffClick = useCallback(() => {
     // Bear-off is handled by clicking the checker directly in the new one-click mechanic.
   }, []);
+
+  const toggleAutoMove = useCallback(() => {
+    setAutoMoveEnabled((prev) => {
+      const next = !prev;
+      try { localStorage.setItem(AUTO_MOVE_KEY, String(next)); } catch {}
+      return next;
+    });
+  }, []);
+
+  // Close settings menu when clicking outside
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
+        setSettingsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [settingsOpen]);
+
+  // Auto-move: execute the single valid move after a short delay
+  useEffect(() => {
+    if (!autoMoveEnabled || !isMyTurn || !isMovingPhase || !gameState || moveInFlight) return;
+    if (gameState.valid_moves.length !== 1) return;
+
+    const move = gameState.valid_moves[0];
+    const timer = setTimeout(() => {
+      actions.makeMove(move.from_point, move.to_point);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [autoMoveEnabled, isMyTurn, isMovingPhase, gameState, moveInFlight, actions]);
+
+  // Auto-end turn when auto-move is on and no valid moves remain after at least one move
+  useEffect(() => {
+    if (!autoMoveEnabled || !isMyTurn || !isMovingPhase || !gameState || moveInFlight) return;
+    if (gameState.valid_moves.length > 0) return;
+    if (gameState.turn_moves_count === 0) return;
+
+    const timer = setTimeout(() => {
+      actions.endTurn();
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [autoMoveEnabled, isMyTurn, isMovingPhase, gameState, moveInFlight, actions]);
 
   const opponentPlayer = useMemo(() => {
     if (!table || !myColor) return null;
@@ -216,6 +270,21 @@ function Game() {
           </h2>
         </div>
         {statusMessage && <div className="game-status-msg">{statusMessage}</div>}
+        <div className="settings-wrapper" ref={settingsRef}>
+          <button className="settings-btn" onClick={() => setSettingsOpen((p) => !p)} title="Game settings" aria-label="Game settings">
+            <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path d="M11.078 0l.855 3.424a7.28 7.28 0 011.804 1.042l3.358-1.052 1.078 1.867-2.5 2.375a7.4 7.4 0 010 2.088l2.5 2.375-1.078 1.867-3.358-1.052a7.28 7.28 0 01-1.804 1.042L11.078 18H8.922l-.855-3.424a7.28 7.28 0 01-1.804-1.042L2.905 14.586l-1.078-1.867 2.5-2.375a7.4 7.4 0 010-2.088L1.827 5.88l1.078-1.867 3.358 1.052A7.28 7.28 0 018.067 4.024L8.922 0h2.156zM10 6.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5z"/></svg>
+          </button>
+          {settingsOpen && (
+            <div className="settings-menu">
+              <label className="settings-toggle">
+                <span>Auto-move</span>
+                <input type="checkbox" checked={autoMoveEnabled} onChange={toggleAutoMove} />
+                <span className="toggle-slider" />
+              </label>
+              <p className="settings-hint">Automatically play forced moves</p>
+            </div>
+          )}
+        </div>
         <button className="shortcut-help-btn" onClick={() => setShowShortcutHelp(true)} title="Keyboard shortcuts (?)" aria-label="Show keyboard shortcuts">?</button>
         <Link to="/" className="back-link">Home</Link>
       </div>
@@ -230,7 +299,7 @@ function Game() {
             <Board gameState={gameState} myColor={myColor} selectedPoint={selectedPoint} validMoves={isMyTurn ? validMoves : []} onPointClick={handlePointClick} onBarClick={handleBarClick} onBearOffClick={handleBearOffClick} cubeValue={gameState.cube_value} cubeOwner={gameState.cube_owner} animatingMove={animatingMove} hintMoves={hintMoves} moveArrows={previousMoveArrows} arrowsMoverColor={gameState.last_turn_color as Color | undefined} boardTheme={myPlayer?.board_theme} checkerStyle={myPlayer?.checker_style} />
             <div className="board-overlay">
               <Dice dice={gameState.dice} remainingDice={gameState.remaining_dice} currentTurn={diceColor} openingRoll={gameState.opening_roll} diceOrder={isMyTurn && isMovingPhase ? diceOrder : undefined} onSwap={isMyTurn && isMovingPhase ? swapDice : undefined} />
-              <GameControls gameState={gameState} myColor={myColor} opponentName={opponentName} onRollDice={actions.rollDice} onEndTurn={actions.endTurn} onUndoTurn={actions.undoTurn} onOfferDouble={actions.offerDouble} onAcceptDouble={actions.acceptDouble} onDeclineDouble={actions.declineDouble} onRequestHint={actions.requestHint} onResign={actions.resign} hintsRemaining={hintsRemaining} />
+              <GameControls gameState={gameState} myColor={myColor} opponentName={opponentName} onRollDice={actions.rollDice} onEndTurn={actions.endTurn} onUndoTurn={actions.undoTurn} onOfferDouble={actions.offerDouble} onAcceptDouble={actions.acceptDouble} onDeclineDouble={actions.declineDouble} onRequestHint={actions.requestHint} onAcceptResign={actions.acceptResign} onRejectResign={actions.rejectResign} hintsRemaining={hintsRemaining} />
             </div>
             {(gameState.status === "finished" || table.status === "game_over") && (
               <GameOverBanner gameState={gameState} table={table} tableId={tableId!} myColor={myColor} myName={myName} opponentName={opponentName} myScore={myScore} opponentScore={opponentScore} onNextGame={actions.nextGame} />
@@ -238,6 +307,22 @@ function Game() {
           </div>
 
           <PlayerInfoRow name={myName} player={myPlayer} pips={myPips} isOpponent={false} isConnected={true} isBotGame={isBotGame} isTimed={isTimed} timeMs={myTimeMs} isClockActive={isMyTurn && gameState.status !== "finished"} matchPoints={table.match_points} matchScore={myScore} formatClock={formatClock} getClockClass={getClockClass} />
+
+          {showResignButton && (
+            <div className="resign-section">
+              {resignMenuOpen ? (
+                <div className="resign-type-menu">
+                  <span className="resign-type-label">Resign:</span>
+                  <button className="resign-type-btn" onClick={() => { actions.offerResign("normal"); setResignMenuOpen(false); }}>Game</button>
+                  <button className="resign-type-btn resign-type-gammon" onClick={() => { actions.offerResign("gammon"); setResignMenuOpen(false); }}>Gammon</button>
+                  <button className="resign-type-btn resign-type-backgammon" onClick={() => { actions.offerResign("backgammon"); setResignMenuOpen(false); }}>Backgammon</button>
+                  <button className="resign-cancel-btn" onClick={() => setResignMenuOpen(false)}>Cancel</button>
+                </div>
+              ) : (
+                <button className="resign-btn" onClick={() => setResignMenuOpen(true)} title="Resign the current game">Resign</button>
+              )}
+            </div>
+          )}
 
           <GameInfo table={table} gameStatus={gameState.status} isOpen={moveHistoryOpen} onToggle={() => setMoveHistoryOpen((prev) => !prev)} />
         </div>

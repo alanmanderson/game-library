@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 # enumerate all candidate moves on a slow subprocess) so allow 30s for 2-ply evaluation.
 _TIMEOUT_FAST = httpx.Timeout(10.0, connect=2.0)  # Increased from 5s to 10s for 2-ply
 _TIMEOUT_SLOW = httpx.Timeout(30.0, connect=2.0)  # Increased from 10s to 30s for 2-ply
+_TIMEOUT_3PLY = httpx.Timeout(120.0, connect=5.0)  # 3-ply can take much longer per position
 
 
 _client: Optional[httpx.AsyncClient] = None
@@ -148,19 +149,31 @@ async def _post(
         return None
 
 
-async def evaluate(board: dict) -> Optional[dict]:
+def _timeout_for_ply(ply: Optional[int], default: httpx.Timeout = _TIMEOUT_FAST) -> httpx.Timeout:
+    """Select the appropriate timeout based on ply depth."""
+    if (ply or 0) >= 3:
+        return _TIMEOUT_3PLY
+    return default
+
+
+async def evaluate(board: dict, ply: Optional[int] = None) -> Optional[dict]:
     """Return ``{"equity": ..., "probs": {...}}`` or ``None`` if unavailable."""
-    return await _post("/evaluate", board, _TIMEOUT_FAST)
+    payload = {**board}
+    if ply is not None:
+        payload["ply"] = ply
+    return await _post("/evaluate", payload, _timeout_for_ply(ply))
 
 
-async def best_move(board: dict, dice: list[int]) -> Optional[dict]:
+async def best_move(board: dict, dice: list[int], ply: Optional[int] = None) -> Optional[dict]:
     """Return ``{"best": {...}, "candidates": [...]}`` or ``None``."""
     payload = {**board, "dice": list(dice)}
-    return await _post("/best-move", payload, _TIMEOUT_FAST)
+    if ply is not None:
+        payload["ply"] = ply
+    return await _post("/best-move", payload, _timeout_for_ply(ply))
 
 
 async def analyze_move(
-    board: dict, dice: list[int], chosen_moves: list[dict]
+    board: dict, dice: list[int], chosen_moves: list[dict], ply: Optional[int] = None
 ) -> Optional[dict]:
     """Analyze a specific move vs gnubg's best.
 
@@ -173,12 +186,17 @@ async def analyze_move(
         "dice": list(dice),
         "chosen_moves": list(chosen_moves),
     }
-    return await _post("/analyze-move", payload, _TIMEOUT_SLOW)
+    if ply is not None:
+        payload["ply"] = ply
+    return await _post("/analyze-move", payload, _timeout_for_ply(ply, _TIMEOUT_SLOW))
 
 
-async def cube_decision(board: dict) -> Optional[dict]:
+async def cube_decision(board: dict, ply: Optional[int] = None) -> Optional[dict]:
     """Return cube equities + decisions or ``None``."""
-    return await _post("/cube-decision", board, _TIMEOUT_FAST)
+    payload = {**board}
+    if ply is not None:
+        payload["ply"] = ply
+    return await _post("/cube-decision", payload, _timeout_for_ply(ply))
 
 
 # ── Synchronous helpers (for thread-pool contexts like analysis_service) ───
@@ -224,16 +242,20 @@ def _post_sync(path: str, payload: dict, timeout: httpx.Timeout) -> Optional[dic
 
 
 def analyze_move_sync(
-    board: dict, dice: list[int], chosen_moves: list[dict]
+    board: dict, dice: list[int], chosen_moves: list[dict], ply: Optional[int] = None
 ) -> Optional[dict]:
     payload = {**board, "dice": list(dice), "chosen_moves": list(chosen_moves)}
-    return _post_sync("/analyze-move", payload, _TIMEOUT_SLOW)
+    if ply is not None:
+        payload["ply"] = ply
+    return _post_sync("/analyze-move", payload, _timeout_for_ply(ply, _TIMEOUT_SLOW))
 
 
-def best_move_sync(board: dict, dice: list[int]) -> Optional[dict]:
+def best_move_sync(board: dict, dice: list[int], ply: Optional[int] = None) -> Optional[dict]:
     """Synchronous version of best_move for thread-pool contexts."""
     payload = {**board, "dice": list(dice)}
-    return _post_sync("/best-move", payload, _TIMEOUT_FAST)
+    if ply is not None:
+        payload["ply"] = ply
+    return _post_sync("/best-move", payload, _timeout_for_ply(ply))
 
 
 def is_available_sync() -> bool:

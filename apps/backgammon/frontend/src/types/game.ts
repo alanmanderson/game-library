@@ -125,6 +125,9 @@ export interface GameState {
   double_offered_by: Color | null;
   can_double: boolean;
   is_crawford_game: boolean;
+  resign_offered: boolean;
+  resign_offered_by: Color | null;
+  resign_type: WinType | null;
   pip_white?: number;
   pip_black?: number;
   time_control?: string;
@@ -327,6 +330,10 @@ export interface AnalysisData {
   moves_analysed: number;
   total_moves: number;
   move_analyses: MoveAnalysis[];
+  analysis_source?: string | null;  // e.g. "GNU Backgammon (2-ply)", "ML neural network (0-ply)"
+  analysis_ply?: number | null;     // ply depth used, or null if not gnubg
+  status?: "complete" | "running" | "failed";  // background analysis state
+  progress?: number | null;                     // 0.0-1.0 when running
 }
 
 /** Win/loss record against a single opponent. */

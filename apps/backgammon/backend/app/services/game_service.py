@@ -798,29 +798,59 @@ class GameManager:
             )
         return {"winner": winner.value if winner else None}
 
-    async def resign(self, db: AsyncSession, table_id: str, player_id: str) -> None:
-        """Resign from the current game. The resigning player loses (1 point × cube)."""
+    async def offer_resign(self, db: AsyncSession, table_id: str, player_id: str, resign_type: str) -> None:
+        """Offer to resign with the specified win type (normal/gammon/backgammon)."""
         engine = self._engines.get(table_id)
         if not engine:
             raise ValueError("Game not found")
-        if engine.state.status == GameStatus.FINISHED:
-            raise ValueError("Game is already finished")
 
         color = self.get_player_color(table_id, player_id)
         if not color:
             raise ValueError("Not a player at this table")
 
-        winner_color = Color.BLACK if color == Color.WHITE else Color.WHITE
-        engine.state.winner = winner_color
-        engine.state.win_type = WinType.NORMAL
-        engine.state.status = GameStatus.FINISHED
+        type_map = {"normal": WinType.NORMAL, "gammon": WinType.GAMMON, "backgammon": WinType.BACKGAMMON}
+        wt = type_map.get(resign_type)
+        if not wt:
+            raise ValueError(f"Invalid resign type: {resign_type}")
+
+        if not engine.offer_resign(color, wt):
+            raise ValueError("Cannot offer resignation now")
+
+    async def accept_resign(self, db: AsyncSession, table_id: str, player_id: str) -> dict:
+        """Accept a pending resignation offer. The resigning player loses."""
+        engine = self._engines.get(table_id)
+        if not engine:
+            raise ValueError("Game not found")
+
+        color = self.get_player_color(table_id, player_id)
+        if not color:
+            raise ValueError("Not a player at this table")
+
+        success, winner = engine.accept_resign(color)
+        if not success:
+            raise ValueError("No resignation to accept")
 
         await self._finish_game(db, table_id, engine)
 
-        # Override win_type to "resignation" (scoring uses NORMAL = 1 × cube)
+        # Override win_type to "resignation" in DB for display
         table = await db.get(Table, table_id)
         if table:
             table.win_type = "resignation"
+
+        return {"winner": winner.value if winner else None}
+
+    async def reject_resign(self, db: AsyncSession, table_id: str, player_id: str) -> None:
+        """Reject a pending resignation offer. Game continues."""
+        engine = self._engines.get(table_id)
+        if not engine:
+            raise ValueError("Game not found")
+
+        color = self.get_player_color(table_id, player_id)
+        if not color:
+            raise ValueError("Not a player at this table")
+
+        if not engine.reject_resign(color):
+            raise ValueError("No resignation to reject")
 
     async def undo_turn(self, db: AsyncSession, table_id: str, player_id: str) -> bool:
         """Undo all moves made this turn, restoring the board to post-roll state."""

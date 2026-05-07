@@ -52,7 +52,9 @@ export interface GameActions {
   makeMove: (fromPoint: number, toPoint: number) => void;
   requestHint: () => void;
   sendChat: (message: string) => void;
-  resign: () => void;
+  offerResign: (resignType: string) => void;
+  acceptResign: () => void;
+  rejectResign: () => void;
 }
 
 export interface GameStateHook {
@@ -260,7 +262,9 @@ export function useGameState(tableId: string | undefined): GameStateHook {
   const nextGame = useCallback(() => { sendMessage({ action: "next_game" }); }, [sendMessage]);
   const requestHint = useCallback(() => { sendMessage({ action: "request_hint" }); }, [sendMessage]);
   const sendChat = useCallback((text: string) => { sendMessage({ action: "chat", message: text }); }, [sendMessage]);
-  const resign = useCallback(() => { sendMessage({ action: "resign" }); }, [sendMessage]);
+  const offerResign = useCallback((resignType: string) => { sendMessage({ action: "offer_resign", resign_type: resignType }); }, [sendMessage]);
+  const acceptResign = useCallback(() => { sendMessage({ action: "accept_resign" }); }, [sendMessage]);
+  const rejectResign = useCallback(() => { sendMessage({ action: "reject_resign" }); }, [sendMessage]);
 
   const swapDice = useCallback(() => {
     setDiceOrder((prev) => (prev.length === 2 ? [prev[1], prev[0]] : prev));
@@ -281,8 +285,8 @@ export function useGameState(tableId: string | undefined): GameStateHook {
   );
 
   const actions = useMemo(
-    () => ({ rollDice, endTurn, undoTurn, offerDouble, acceptDouble, declineDouble, nextGame, makeMove, requestHint, sendChat, resign }),
-    [rollDice, endTurn, undoTurn, offerDouble, acceptDouble, declineDouble, nextGame, makeMove, requestHint, sendChat, resign],
+    () => ({ rollDice, endTurn, undoTurn, offerDouble, acceptDouble, declineDouble, nextGame, makeMove, requestHint, sendChat, offerResign, acceptResign, rejectResign }),
+    [rollDice, endTurn, undoTurn, offerDouble, acceptDouble, declineDouble, nextGame, makeMove, requestHint, sendChat, offerResign, acceptResign, rejectResign],
   );
 
   return {

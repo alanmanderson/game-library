@@ -219,10 +219,14 @@ function GameReplay() {
   const [analysis, setAnalysis] = useState<AnalysisData | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  /** Polling interval for background 3-ply analysis. */
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   /** Move numbers whose details panel (gammon/bg breakdown) is expanded. */
   const [expandedMoves, setExpandedMoves] = useState<Set<number>>(new Set());
   /** Index into currentAnalysis.top_moves of the candidate being previewed. */
   const [selectedCandidate, setSelectedCandidate] = useState<number | null>(null);
+  /** gnubg evaluation depth: 0 (fast), 2 (standard), 3 (deep/slow). */
+  const [analysisPly, setAnalysisPly] = useState<0 | 2 | 3>(2);
 
   // Speed slider constants: the slider is inverted so right = faster.
   // Slider range is [SPEED_SLIDER_MIN, SPEED_SLIDER_MAX]; actual delay = SPEED_OFFSET - sliderValue.
@@ -290,10 +294,11 @@ function GameReplay() {
     };
   }, [replayData]);
 
-  // Stop auto-play when we reach the end or when the component unmounts
+  // Stop auto-play and analysis polling when the component unmounts
   useEffect(() => {
     return () => {
       if (autoPlayRef.current) clearInterval(autoPlayRef.current);
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     };
   }, []);
 
@@ -365,34 +370,76 @@ function GameReplay() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [moveIndex, goTo, stopAutoPlay]);
 
-  const fetchAnalysis = useCallback(async () => {
-    if (analysis || !tableId) return;
+  /** Stop any active analysis poll. */
+  const stopPolling = useCallback(() => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+  }, []);
+
+  /** Start 60-second polling for background analysis progress. */
+  const startPolling = useCallback((ply: number) => {
+    stopPolling();
+    pollIntervalRef.current = setInterval(async () => {
+      if (!tableId) return;
+      try {
+        const updated = await getAnalysis(tableId, 100, ply);
+        setAnalysis(updated);
+        if (updated.status !== "running") {
+          stopPolling();
+          setAnalysisLoading(false);
+        }
+      } catch {
+        // Don't stop polling on transient network errors
+      }
+    }, 60_000);
+  }, [tableId, stopPolling]);
+
+  const fetchAnalysis = useCallback(async (ply: number, force = false) => {
+    if (!tableId) return;
+    if (!force && analysis && (analysis.analysis_ply ?? 2) === ply
+        && analysis.status !== "failed") return;
     setAnalysisLoading(true);
     setAnalysisError(null);
+    stopPolling();
     try {
-      const data = await getAnalysis(tableId);
+      const data = await getAnalysis(tableId, 100, ply);
       setAnalysis(data);
+      if (data.status === "running") {
+        // Keep loading state and start polling every 60s
+        startPolling(ply);
+      } else {
+        setAnalysisLoading(false);
+      }
     } catch (err) {
       setAnalysisError(
         err instanceof Error ? err.message : "Failed to load analysis.",
       );
-    } finally {
       setAnalysisLoading(false);
     }
-  }, [analysis, tableId]);
+  }, [analysis, tableId, stopPolling, startPolling]);
 
   // Fetch analysis as soon as the replay loads so the on-board quality
   // indicator is available without requiring the user to open the panel.
   useEffect(() => {
     if (!replayData) return;
-    fetchAnalysis();
-  }, [replayData, fetchAnalysis]);
+    fetchAnalysis(analysisPly);
+  }, [replayData]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-fetch when ply changes.
+  const handlePlyChange = useCallback((newPly: 0 | 2 | 3) => {
+    stopPolling();
+    setAnalysisPly(newPly);
+    setAnalysis(null);
+    fetchAnalysis(newPly, true);
+  }, [fetchAnalysis, stopPolling]);
 
   const handleToggleAnalysis = useCallback(async () => {
     const next = !analysisOpen;
     setAnalysisOpen(next);
-    if (next) await fetchAnalysis();
-  }, [analysisOpen, fetchAnalysis]);
+    if (next) await fetchAnalysis(analysisPly);
+  }, [analysisOpen, fetchAnalysis, analysisPly]);
 
   /** Top-3 key moments: moves with the largest equity_loss. */
   const keyMoments = useMemo<MoveAnalysis[]>(() => {
@@ -830,32 +877,93 @@ function GameReplay() {
         </div>
       )}
 
-      {/* Analysis toggle */}
+      {/* Analysis toggle + ply selector */}
       {!embed && (
-        <button
-          type="button"
-          className={`replay-analysis-toggle${analysisOpen ? " replay-analysis-toggle--open" : ""}`}
-          onClick={handleToggleAnalysis}
-          aria-expanded={analysisOpen}
-          aria-controls="replay-analysis-panel"
-        >
-          {analysisOpen ? "▼ Hide analysis" : "▶ Show move analysis"}
-        </button>
+        <div className="replay-analysis-controls">
+          <button
+            type="button"
+            className={`replay-analysis-toggle${analysisOpen ? " replay-analysis-toggle--open" : ""}`}
+            onClick={handleToggleAnalysis}
+            aria-expanded={analysisOpen}
+            aria-controls="replay-analysis-panel"
+          >
+            {analysisOpen ? "▼ Hide analysis" : "▶ Show move analysis"}
+          </button>
+          <div className="replay-ply-selector" role="radiogroup" aria-label="Analysis depth">
+            <span className="replay-ply-label">Depth:</span>
+            {([0, 2, 3] as const).map((p) => (
+              <button
+                key={p}
+                type="button"
+                className={`replay-ply-btn${analysisPly === p ? " replay-ply-btn--active" : ""}`}
+                onClick={() => handlePlyChange(p)}
+                disabled={analysisLoading}
+                aria-pressed={analysisPly === p}
+                title={
+                  p === 0 ? "Fast (neural net only)" :
+                  p === 2 ? "Standard (2-ply lookahead)" :
+                  "Deep (3-ply, slower)"
+                }
+              >
+                {p}-ply
+              </button>
+            ))}
+          </div>
+        </div>
       )}
 
       {analysisOpen && (
         <div id="replay-analysis-panel" className="replay-analysis">
-          {analysisLoading && (
-            <div className="replay-analysis-status">Analysing game…</div>
+          {/* Progress bar for background analysis */}
+          {analysis?.status === "running" && (
+            <div className="replay-analysis-status">
+              <div>Deep analysis in progress… {analysis.progress != null ? `${Math.round(analysis.progress * 100)}%` : ""}</div>
+              {analysis.progress != null && (
+                <div className="replay-analysis-progress-bar">
+                  <div
+                    className="replay-analysis-progress-fill"
+                    style={{ width: `${analysis.progress * 100}%` }}
+                  />
+                </div>
+              )}
+              <div className="replay-analysis-progress-detail">
+                {analysis.moves_analysed} of {analysis.total_moves} moves analysed (polling every 60s)
+              </div>
+            </div>
+          )}
+          {/* Failed state with retry */}
+          {analysis?.status === "failed" && !analysisLoading && (
+            <div className="replay-analysis-status replay-analysis-status--error">
+              Deep analysis failed.{" "}
+              <button
+                type="button"
+                className="replay-analysis-retry-btn"
+                onClick={() => fetchAnalysis(analysisPly, true)}
+              >
+                Retry
+              </button>
+            </div>
+          )}
+          {/* Initial loading (no status yet) */}
+          {analysisLoading && !analysis?.status && (
+            <div className="replay-analysis-status">
+              Analysing game{analysisPly >= 3 ? " (deep analysis, this may take a while)" : ""}…
+            </div>
           )}
           {analysisError && !analysisLoading && (
             <div className="replay-analysis-status replay-analysis-status--error">
               {analysisError}
             </div>
           )}
-          {!analysisLoading && !analysisError && analysis && (
+          {/* Show results: complete analysis, or partial results while running */}
+          {analysis && analysis.status !== "failed" && analysis.move_analyses.length > 0 && (
             <>
-              {analysisSource !== "gnubg" && !analysis.ml_available && (
+              {analysis.analysis_source && analysis.status === "complete" && (
+                <div className="replay-analysis-banner replay-analysis-banner--source">
+                  Analyzed by {analysis.analysis_source}
+                </div>
+              )}
+              {!analysis.analysis_source && analysisSource !== "gnubg" && !analysis.ml_available && (
                 <div className="replay-analysis-banner">
                   ML model unavailable — showing pip-count fallback analysis.
                 </div>
@@ -971,7 +1079,7 @@ function GameReplay() {
                     : ""}
                   )
                 </h3>
-                {analysisSource === "gnubg" && (
+                {analysisSource === "gnubg" && !analysis.analysis_source && (
                   <p
                     className="replay-analysis-attribution"
                     title="Each move is evaluated by the gnubg engine. Win probabilities reflect the chance the mover wins from that position."

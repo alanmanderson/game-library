@@ -64,6 +64,9 @@ const INITIAL_STATE = {
   double_offered_by: null,
   can_double: false,
   is_crawford_game: false,
+  resign_offered: false,
+  resign_offered_by: null,
+  resign_type: null,
 };
 
 const STATE_AFTER_MOVE1 = {
@@ -424,7 +427,7 @@ describe("GameReplay – analysis panel", () => {
     );
 
     await waitFor(() => {
-      expect(api.getAnalysis).toHaveBeenCalledWith("TABLE001");
+      expect(api.getAnalysis).toHaveBeenCalledWith("TABLE001", 100, 2);
     });
 
     await waitFor(() => {

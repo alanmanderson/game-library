@@ -39,6 +39,9 @@ function makeGameState(overrides: Partial<GameState> = {}): GameState {
     double_offered_by: null,
     can_double: false,
     is_crawford_game: false,
+    resign_offered: false,
+    resign_offered_by: null,
+    resign_type: null,
     ...overrides,
   };
 }
@@ -51,7 +54,8 @@ function makeHandlers() {
     onOfferDouble: vi.fn(),
     onAcceptDouble: vi.fn(),
     onDeclineDouble: vi.fn(),
-    onResign: vi.fn(),
+    onAcceptResign: vi.fn(),
+    onRejectResign: vi.fn(),
   };
 }
 

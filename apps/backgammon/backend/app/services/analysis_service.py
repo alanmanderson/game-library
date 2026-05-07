@@ -240,7 +240,8 @@ def compute_analysis(
     black_player_id: Optional[str],
     player_nicknames: Optional[dict[str, str]] = None,
     move_limit: int = DEFAULT_MOVE_LIMIT,
-) -> tuple[list[dict], bool, int]:
+    ply: Optional[int] = None,
+) -> tuple[list[dict], bool, int, str]:
     """Compute per-move analysis for a completed game.
 
     Args:
@@ -252,9 +253,10 @@ def compute_analysis(
         black_player_id: id of the black player.
         player_nicknames: optional {player_id: nickname} map.
         move_limit: truncate analysis after this many moves.
+        ply: evaluation depth for gnubg (0, 2, or 3). None uses gnubg default.
 
     Returns:
-        ``(analyses, ml_available, moves_analysed)``.
+        ``(analyses, ml_available, moves_analysed, analysis_source)``.
     """
     player_nicknames = player_nicknames or {}
 
@@ -272,11 +274,13 @@ def compute_analysis(
                 black_player_id,
                 player_nicknames,
                 move_limit,
+                ply,
             )
     except Exception as exc:  # pragma: no cover - defensive
         logger.warning("gnubg analysis path failed, falling back: %s", exc)
 
     evaluator, ml_available = _make_evaluator()
+    analysis_source = "ML neural network (0-ply)" if ml_available else "Pip-count heuristic"
 
     engine = BackgammonEngine()
     analyses: list[dict] = []
@@ -392,7 +396,7 @@ def compute_analysis(
 
         prev_state = game_state_after
 
-    return analyses, ml_available, len(analyses)
+    return analyses, ml_available, len(analyses), analysis_source
 
 
 # gnubg equity_loss → main-backend quality label. The gnubg service has
@@ -455,7 +459,8 @@ def _compute_analysis_gnubg(
     black_player_id: Optional[str],
     player_nicknames: dict[str, str],
     move_limit: int,
-) -> tuple[list[dict], bool, int]:
+    ply: Optional[int] = None,
+) -> tuple[list[dict], bool, int, str]:
     """gnubg-backed analysis — one POST per move.
 
     gnubg does the best-move enumeration and the chosen-move evaluation
@@ -464,6 +469,10 @@ def _compute_analysis_gnubg(
     path by raising; the outer ``compute_analysis`` handles that.
     """
     from app.services import gnubg_client
+
+    # Default to 2-ply if not specified (matches gnubg engine startup default)
+    effective_ply = ply if ply is not None else 2
+    analysis_source = f"GNU Backgammon ({effective_ply}-ply)"
 
     analyses: list[dict] = []
     prev_state = initial_state
@@ -503,6 +512,7 @@ def _compute_analysis_gnubg(
                 board_payload,
                 [dice.die1, dice.die2],
                 chosen_moves,
+                ply=effective_ply,
             )
         except Exception as exc:  # pragma: no cover - defensive
             logger.warning("gnubg analyze_move failed: %s", exc)
@@ -540,7 +550,7 @@ def _compute_analysis_gnubg(
         top_moves_list = None
         try:
             bm_resp = gnubg_client.best_move_sync(
-                board_payload, [dice.die1, dice.die2]
+                board_payload, [dice.die1, dice.die2], ply=effective_ply
             )
             if bm_resp and bm_resp.get("candidates"):
                 all_cands = bm_resp["candidates"]
@@ -597,4 +607,221 @@ def _compute_analysis_gnubg(
 
     # gnubg-backed analysis counts as "ml_available" from the UI's
     # perspective — it's not the heuristic fallback.
-    return analyses, True, len(analyses)
+    return analyses, True, len(analyses), analysis_source
+
+
+# ── Shared helper for building a move analysis dict from gnubg response ───
+
+
+def _build_gnubg_analysis_dict(
+    record: dict,
+    color: Color,
+    resp: dict,
+    bm_resp: Optional[dict],
+    player_nicknames: dict[str, str],
+) -> dict:
+    """Build a per-move analysis dict from gnubg analyze_move + best_move responses."""
+    best = resp.get("best") or {}
+    chosen = resp.get("chosen") or {}
+    best_probs = best.get("probs") or None
+    chosen_probs = chosen.get("probs") or None
+    best_equity = float(best.get("equity") or 0.0)
+    chosen_equity = float(chosen.get("equity") or 0.0)
+    equity_loss = max(0.0, float(resp.get("equity_loss") or 0.0))
+    gnubg_quality = str(resp.get("quality") or "good")
+    quality = _GNUBG_QUALITY_MAP.get(gnubg_quality, "good")
+
+    best_moves_list = best.get("moves") or []
+    if best_moves_list:
+        best_notation = _moves_to_backend_notation(best_moves_list, color)
+    else:
+        best_notation = best.get("notation")
+
+    top_moves_list = None
+    if bm_resp and bm_resp.get("candidates"):
+        all_cands = bm_resp["candidates"]
+        top_eq = all_cands[0].get("equity", 0.0) if all_cands else 0.0
+        top_moves_list = []
+        for i, c in enumerate(all_cands[:5]):
+            cand_notation = c.get("notation", "")
+            cand_moves = c.get("moves", [])
+            if cand_moves:
+                cand_notation = _moves_to_backend_notation(cand_moves, color)
+            top_moves_list.append({
+                "rank": i + 1,
+                "notation": cand_notation,
+                "equity": round(c.get("equity", 0.0), 4),
+                "equity_diff": round(c.get("equity", 0.0) - top_eq, 4),
+                "probs": c.get("probs"),
+            })
+
+    return {
+        "move_number": int(record.get("move_number") or 0),
+        "player_color": color.value,
+        "player_nickname": player_nicknames.get(record.get("player_id") or ""),
+        "dice_roll": record.get("dice_roll") or "",
+        "moves_notation": record.get("moves_notation") or "",
+        "equity_before": round(best_equity, 4),
+        "equity_after": round(chosen_equity, 4),
+        "best_equity": round(best_equity, 4),
+        "equity_loss": round(equity_loss, 4),
+        "quality": quality,
+        "best_move_notation": best_notation,
+        "best_probs": best_probs,
+        "chosen_probs": chosen_probs,
+        "best_win_prob": (
+            float(best_probs["win"]) if best_probs and "win" in best_probs else None
+        ),
+        "chosen_win_prob": (
+            float(chosen_probs["win"])
+            if chosen_probs and "win" in chosen_probs
+            else None
+        ),
+        "source": "gnubg",
+        "top_moves": top_moves_list,
+    }
+
+
+# ── Background 3-ply analysis ────────────────────────────────────────────
+
+import asyncio
+
+# In-memory registry of running background analysis tasks.
+# Primary guard against duplicate concurrent analyses.
+_running_analyses: dict[str, asyncio.Task] = {}
+
+# Write incremental progress to DB every N moves.
+_PROGRESS_BATCH_SIZE = 5
+
+
+async def run_background_analysis(
+    table_id: str,
+    initial_state: dict,
+    record_dicts: list[dict],
+    white_player_id: Optional[str],
+    black_player_id: Optional[str],
+    nickname_map: dict[str, str],
+    limit: int,
+    ply: int,
+    total_moves: int,
+) -> None:
+    """Background coroutine that runs deep (3-ply) analysis incrementally.
+
+    Uses the async gnubg_client methods and writes partial results to
+    the database every ``_PROGRESS_BATCH_SIZE`` moves so the polling
+    endpoint can report progress.
+    """
+    from app.database import async_session
+    from app.models import GameAnalysis
+    from app.services import gnubg_client
+
+    effective_ply = ply if ply is not None else 3
+    analysis_source = f"GNU Backgammon ({effective_ply}-ply)"
+
+    analyses: list[dict] = []
+    prev_state = initial_state
+    move_limit = min(len(record_dicts), max(0, limit))
+    failures = 0
+
+    try:
+        for idx, record in enumerate(record_dicts[:move_limit]):
+            color = _color_from_record(
+                record.get("player_id"), white_player_id, black_player_id
+            )
+            dice = _parse_dice(record.get("dice_roll") or "")
+            game_state_after = record.get("game_state_after") or prev_state
+
+            if color is None or dice is None:
+                prev_state = game_state_after
+                continue
+
+            chosen_moves = _parse_notation_to_steps(
+                record.get("moves_notation") or "", color
+            )
+
+            board_payload = {
+                "points": list(prev_state.get("points") or [0] * 26),
+                "bar_white": int(prev_state.get("bar_white") or 0),
+                "bar_black": int(prev_state.get("bar_black") or 0),
+                "off_white": int(prev_state.get("off_white") or 0),
+                "off_black": int(prev_state.get("off_black") or 0),
+                "turn": color.value,
+                "cube_value": int(prev_state.get("cube_value") or 1),
+                "cube_owner": prev_state.get("cube_owner"),
+                "match_score": None,
+            }
+
+            # Async gnubg calls
+            try:
+                resp = await gnubg_client.analyze_move(
+                    board_payload,
+                    [dice.die1, dice.die2],
+                    chosen_moves,
+                    ply=effective_ply,
+                )
+            except Exception as exc:
+                logger.warning("gnubg analyze_move (async) failed: %s", exc)
+                resp = None
+
+            if resp is None:
+                failures += 1
+                prev_state = game_state_after
+                if failures >= 3:
+                    raise RuntimeError("gnubg analysis unavailable")
+                continue
+
+            bm_resp = None
+            try:
+                bm_resp = await gnubg_client.best_move(
+                    board_payload, [dice.die1, dice.die2], ply=effective_ply
+                )
+            except Exception as exc:
+                logger.debug("gnubg best_move (async) failed: %s", exc)
+
+            analysis_dict = _build_gnubg_analysis_dict(
+                record, color, resp, bm_resp, nickname_map
+            )
+            analyses.append(analysis_dict)
+            prev_state = game_state_after
+
+            # Write incremental progress every N moves
+            if (idx + 1) % _PROGRESS_BATCH_SIZE == 0:
+                try:
+                    async with async_session() as db:
+                        cached = await db.get(GameAnalysis, table_id)
+                        if cached and cached.status == "running":
+                            cached.move_analyses = list(analyses)
+                            cached.moves_analysed = len(analyses)
+                            await db.commit()
+                except Exception:
+                    logger.warning("Failed to write incremental progress for %s", table_id)
+
+        # Write final result
+        async with async_session() as db:
+            cached = await db.get(GameAnalysis, table_id)
+            if cached:
+                cached.move_analyses = analyses
+                cached.ml_available = True
+                cached.moves_analysed = len(analyses)
+                cached.ply = ply
+                cached.analysis_source = analysis_source
+                cached.status = "complete"
+                await db.commit()
+
+        logger.info(
+            "Background %d-ply analysis complete for table %s (%d moves)",
+            effective_ply, table_id, len(analyses),
+        )
+
+    except Exception:
+        logger.exception("Background %d-ply analysis failed for table %s", effective_ply, table_id)
+        try:
+            async with async_session() as db:
+                cached = await db.get(GameAnalysis, table_id)
+                if cached:
+                    cached.status = "failed"
+                    await db.commit()
+        except Exception:
+            logger.exception("Failed to mark analysis as failed for %s", table_id)
+    finally:
+        _running_analyses.pop(table_id, None)

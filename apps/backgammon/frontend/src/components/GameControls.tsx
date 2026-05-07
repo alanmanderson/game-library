@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { GameState, Color } from "../types/game";
 import "./styles/GameControls.css";
 
@@ -12,7 +12,8 @@ interface GameControlsProps {
   onAcceptDouble: () => void;
   onDeclineDouble: () => void;
   onRequestHint: () => void;
-  onResign: () => void;
+  onAcceptResign: () => void;
+  onRejectResign: () => void;
   opponentName: string;
   hintsRemaining: number;
 }
@@ -27,11 +28,11 @@ function GameControls({
   onAcceptDouble,
   onDeclineDouble,
   onRequestHint,
-  onResign,
+  onAcceptResign,
+  onRejectResign,
   opponentName,
   hintsRemaining,
 }: GameControlsProps) {
-  const [confirmResign, setConfirmResign] = useState(false);
   const isMyTurn = gameState.current_turn === myColor;
 
   const statusInfo = useMemo(() => {
@@ -55,14 +56,24 @@ function GameControls({
     return { className: "opponent-turn", text: `${opponentName}'s turn` };
   }, [gameState.status, gameState.winner, isMyTurn, myColor, opponentName]);
 
+  const noOffer = !gameState.double_offered && !gameState.resign_offered;
+
   const showRollButton =
-    isMyTurn && gameState.status === "rolling" && !gameState.double_offered;
+    isMyTurn && gameState.status === "rolling" && noOffer;
 
   const showDoubleButton =
-    gameState.can_double && !gameState.double_offered;
+    gameState.can_double && noOffer;
 
   const showAcceptDeclineButtons =
     gameState.double_offered && gameState.double_offered_by !== myColor;
+
+  // Accept/reject resignation: when opponent offered a resignation
+  const showAcceptRejectResign =
+    gameState.resign_offered && gameState.resign_offered_by !== myColor;
+
+  // Waiting for opponent to respond to your resignation
+  const showResignWaiting =
+    gameState.resign_offered && gameState.resign_offered_by === myColor;
 
   const showUndoButton = isMyTurn && gameState.can_undo;
 
@@ -73,9 +84,6 @@ function GameControls({
     (gameState.remaining_dice.length === 0 || gameState.valid_moves.length === 0);
 
   // End Turn shows when no valid moves remain and no "confirm" button is shown.
-  // This covers both the normal blocked case (dice still in hand) and the edge
-  // case where the server restarted mid-turn and turn_moves_count was reset to 0
-  // even though all dice were already used (remaining_dice is empty).
   const showEndTurnButton =
     isMyTurn &&
     gameState.status === "moving" &&
@@ -87,8 +95,11 @@ function GameControls({
     gameState.status === "moving" &&
     gameState.valid_moves.length > 0;
 
-  const showResignButton =
-    gameState.status === "rolling" || gameState.status === "moving";
+  const resignTypeLabel = (type: string | null) => {
+    if (type === "gammon") return "gammon";
+    if (type === "backgammon") return "backgammon";
+    return "single game";
+  };
 
   return (
     <div className="game-controls">
@@ -102,6 +113,22 @@ function GameControls({
               Decline Double
             </button>
           </>
+        )}
+        {showAcceptRejectResign && (
+          <>
+            <span className="resign-offer-text">
+              {opponentName} offers to resign a {resignTypeLabel(gameState.resign_type)}.
+            </span>
+            <button className="accept-resign-btn" onClick={onAcceptResign} title="Accept resignation">
+              Accept
+            </button>
+            <button className="reject-resign-btn" onClick={onRejectResign} title="Reject resignation">
+              Reject
+            </button>
+          </>
+        )}
+        {showResignWaiting && (
+          <span className="resign-waiting-text">Waiting for opponent to respond to resignation...</span>
         )}
         {showDoubleButton && (
           <button className="double-btn" onClick={onOfferDouble} title="Offer double (D)">
@@ -139,21 +166,6 @@ function GameControls({
           </button>
         )}
       </div>
-      {showResignButton && (
-        <div className="controls-row resign-row">
-          {confirmResign ? (
-            <>
-              <span className="resign-confirm-text">Resign?</span>
-              <button className="resign-confirm-btn" onClick={() => { onResign(); setConfirmResign(false); }}>Yes</button>
-              <button className="resign-cancel-btn" onClick={() => setConfirmResign(false)}>No</button>
-            </>
-          ) : (
-            <button className="resign-btn" onClick={() => setConfirmResign(true)} title="Resign the current game">
-              Resign
-            </button>
-          )}
-        </div>
-      )}
     </div>
   );
 }

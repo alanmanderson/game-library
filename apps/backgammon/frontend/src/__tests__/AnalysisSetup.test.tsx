@@ -80,6 +80,9 @@ const EMPTY_GAME_STATE = {
   double_offered_by: null,
   can_double: false,
   is_crawford_game: false,
+  resign_offered: false,
+  resign_offered_by: null,
+  resign_type: null,
 };
 
 function makeSessionResponse(sessionId: string) {

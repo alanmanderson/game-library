@@ -389,6 +389,10 @@ class AnalysisResponse(BaseModel):
     moves_analysed: int
     total_moves: int
     move_analyses: list[MoveAnalysis]
+    analysis_source: Optional[str] = None  # e.g. "GNU Backgammon (2-ply)", "ML neural network (0-ply)"
+    analysis_ply: Optional[int] = None     # ply depth used (0, 2, 3) or None if not gnubg
+    status: str = "complete"               # "complete" | "running" | "failed"
+    progress: Optional[float] = None       # 0.0-1.0, set when status="running"
 
 
 # ── Leaderboard Schemas ───────────────────────────────────────────────────

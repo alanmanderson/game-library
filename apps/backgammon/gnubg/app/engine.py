@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 # giving a reliable framing marker without relying on prompt format.
 _SENTINEL = "__gnubg_sentinel_done__"
 _STARTUP_TIMEOUT = 15.0
-_COMMAND_TIMEOUT = 60.0  # Increased from 30s to 60s for 2-ply evaluation
+_COMMAND_TIMEOUT = 180.0  # 3-ply evaluations can take minutes per position
 
 
 class GnubgUnavailableError(RuntimeError):
@@ -68,6 +68,7 @@ class GnubgEngine:
         self._lock = asyncio.Lock()
         self._version: str = "unknown"
         self._ready: bool = False
+        self._current_ply: int = 2  # tracks the active ply level in gnubg
 
     # ── Lifecycle ──────────────────────────────────────────────────────────
 
@@ -150,6 +151,15 @@ class GnubgEngine:
     async def _ensure_started(self) -> None:
         if not self.ready:
             await self.start()
+
+    async def _set_ply(self, ply: Optional[int]) -> None:
+        """Set the evaluation ply level if it differs from current. Caller holds the lock."""
+        if ply is None or ply == self._current_ply:
+            return
+        await self._raw_command(f"set evaluation chequer ply {ply}")
+        await self._raw_command(f"set evaluation cube ply {ply}")
+        self._current_ply = ply
+        logger.info("gnubg ply changed to %d", ply)
 
     # ── Low-level I/O ──────────────────────────────────────────────────────
 
@@ -327,6 +337,7 @@ class GnubgEngine:
     async def evaluate(self, board: Board) -> EvaluateResponse:
         await self._ensure_started()
         async with self._lock:
+            await self._set_ply(board.ply)
             await self._set_board(board)
             out = await self._raw_command("eval")
             parsed = parser.parse_eval(out)
@@ -338,6 +349,7 @@ class GnubgEngine:
     async def best_move(self, req: MoveDice) -> BestMoveResponse:
         await self._ensure_started()
         async with self._lock:
+            await self._set_ply(req.ply)
             await self._set_board(req)
             await self._raw_command(f"set dice {req.dice[0]} {req.dice[1]}")
             out = await self._raw_command("hint")
@@ -406,6 +418,7 @@ class GnubgEngine:
     async def cube_decision(self, board: Board) -> CubeDecisionResponse:
         await self._ensure_started()
         async with self._lock:
+            await self._set_ply(board.ply)
             await self._set_board(board)
             out = await self._raw_command("cube")
             parsed = parser.parse_cube(out)

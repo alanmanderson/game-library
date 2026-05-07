@@ -75,6 +75,22 @@ async def lifespan(app: FastAPI):
     global _start_time
     _start_time = time.time()
     logger.info("Application starting up")
+    # Reset any stale "running" analysis jobs from a previous server instance.
+    try:
+        from sqlalchemy import update
+        from app.models import GameAnalysis
+        async with async_session() as db:
+            result = await db.execute(
+                update(GameAnalysis)
+                .where(GameAnalysis.status == "running")
+                .values(status="failed")
+            )
+            if result.rowcount:
+                logger.info("Reset %d stale analysis job(s) to 'failed'", result.rowcount)
+            await db.commit()
+    except Exception:
+        logger.exception("Error resetting stale analysis jobs")
+
     cleanup_task = asyncio.create_task(_periodic_engine_cleanup())
     yield
     cleanup_task.cancel()

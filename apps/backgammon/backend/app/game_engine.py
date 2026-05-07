@@ -233,6 +233,10 @@ class GameState:
     double_offered_by: Optional[Color] = None
     # Crawford rule: no doubling allowed during the Crawford game
     is_crawford_game: bool = False
+    # Resignation offer
+    resign_offered: bool = False
+    resign_offered_by: Optional[Color] = None
+    resign_type: Optional[WinType] = None  # NORMAL, GAMMON, or BACKGAMMON
 
 
 # ---------------------------------------------------------------------------
@@ -464,6 +468,59 @@ class BackgammonEngine:
         self.state.double_offered_by = None
         self._record_turn()
         return True, winner
+
+    # ------------------------------------------------------------------
+    # Resignation
+    # ------------------------------------------------------------------
+
+    def offer_resign(self, color: Color, resign_type: WinType) -> bool:
+        """Offer to resign with the given win type.
+
+        Returns True if the offer was valid and made.
+        """
+        if self.state.status == GameStatus.FINISHED:
+            return False
+        if self.state.status == GameStatus.WAITING:
+            return False
+        if self.state.resign_offered or self.state.double_offered:
+            return False
+        self.state.resign_offered = True
+        self.state.resign_offered_by = color
+        self.state.resign_type = resign_type
+        return True
+
+    def accept_resign(self, color: Color) -> tuple[bool, Optional[Color]]:
+        """Accept a pending resignation offer, ending the game.
+
+        Returns (success, winner) where winner is the accepting player.
+        """
+        if not self.state.resign_offered:
+            return False, None
+        if self.state.resign_offered_by == color:
+            return False, None  # can't accept your own resignation
+        winner = color  # the player accepting the resignation wins
+        self.state.winner = winner
+        self.state.win_type = self.state.resign_type
+        self.state.status = GameStatus.FINISHED
+        self.state.resign_offered = False
+        self.state.resign_offered_by = None
+        self.state.resign_type = None
+        self._record_turn()
+        return True, winner
+
+    def reject_resign(self, color: Color) -> bool:
+        """Reject a pending resignation offer. Game continues.
+
+        Returns True if successful.
+        """
+        if not self.state.resign_offered:
+            return False
+        if self.state.resign_offered_by == color:
+            return False  # can't reject your own resignation
+        self.state.resign_offered = False
+        self.state.resign_offered_by = None
+        self.state.resign_type = None
+        return True
 
     # ------------------------------------------------------------------
     # Move generation
@@ -1393,6 +1450,9 @@ class BackgammonEngine:
             "double_offered": s.double_offered,
             "double_offered_by": s.double_offered_by.value if s.double_offered_by else None,
             "is_crawford_game": s.is_crawford_game,
+            "resign_offered": s.resign_offered,
+            "resign_offered_by": s.resign_offered_by.value if s.resign_offered_by else None,
+            "resign_type": s.resign_type.name.lower() if s.resign_type else None,
             # Last completed turn — used by the client to highlight the
             # opponent's most recent move while you're about to roll.
             "last_turn_color": (

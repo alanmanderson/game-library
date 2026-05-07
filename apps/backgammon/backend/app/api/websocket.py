@@ -19,8 +19,8 @@ from app.game_engine import GameStatus
 from app.services.game_service import game_manager
 from app.services.bot_service import (
     is_bot_game, is_bot_player, schedule_bot_turn_if_needed,
-    schedule_bot_double_response_if_needed, restore_bot_difficulty,
-    evaluate_hint_moves,
+    schedule_bot_double_response_if_needed, schedule_bot_resign_response_if_needed,
+    restore_bot_difficulty, evaluate_hint_moves,
 )
 
 logger = logging.getLogger(__name__)
@@ -499,6 +499,7 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, player_id: str
                 # All game actions require a database session and per-table lock
                 trigger_bot = False
                 trigger_bot_double = False
+                trigger_bot_resign = False
 
                 async with game_manager._get_lock(table_id):
                     # Check for timeout before processing any action
@@ -576,8 +577,16 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, player_id: str
                             elif action == "decline_double":
                                 await _handle_decline_double(db, websocket, table_id, player_id)
 
-                            elif action == "resign":
-                                await _handle_resign(db, websocket, table_id, player_id)
+                            elif action == "offer_resign":
+                                resign_type = message.get("resign_type", "normal")
+                                await _handle_offer_resign(db, websocket, table_id, player_id, resign_type)
+                                trigger_bot_resign = True
+
+                            elif action == "accept_resign":
+                                await _handle_accept_resign(db, websocket, table_id, player_id)
+
+                            elif action == "reject_resign":
+                                await _handle_reject_resign(db, websocket, table_id, player_id)
 
                             elif action == "next_game":
                                 await _handle_next_game(db, websocket, table_id, player_id)
@@ -610,7 +619,9 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, player_id: str
 
                 # Schedule bot turn outside the lock to avoid deadlocks
                 if trigger_bot and is_bot_game(table_id):
-                    if trigger_bot_double:
+                    if trigger_bot_resign:
+                        schedule_bot_resign_response_if_needed(table_id)
+                    elif trigger_bot_double:
                         schedule_bot_double_response_if_needed(table_id)
                     else:
                         schedule_bot_turn_if_needed(table_id)
@@ -741,11 +752,19 @@ async def _handle_decline_double(
             _hint_usage.pop(table_id, None)
 
 
-async def _handle_resign(
+async def _handle_offer_resign(
+    db, websocket: WebSocket, table_id: str, player_id: str, resign_type: str
+) -> None:
+    """Handle an offer_resign action: propose resignation with a win type."""
+    await game_manager.offer_resign(db, table_id, player_id, resign_type)
+    await _send_game_state_to_all(table_id, db=db)
+
+
+async def _handle_accept_resign(
     db, websocket: WebSocket, table_id: str, player_id: str
 ) -> None:
-    """Handle a resign action: the resigning player loses the current game."""
-    await game_manager.resign(db, table_id, player_id)
+    """Handle an accept_resign action: accept the resignation, ending the game."""
+    await game_manager.accept_resign(db, table_id, player_id)
 
     await _send_game_state_to_all(table_id, db=db)
 
@@ -766,6 +785,14 @@ async def _handle_resign(
         if table and table.status == "finished":
             game_manager.cleanup_finished_game(table_id)
             _hint_usage.pop(table_id, None)
+
+
+async def _handle_reject_resign(
+    db, websocket: WebSocket, table_id: str, player_id: str
+) -> None:
+    """Handle a reject_resign action: reject the resignation, game continues."""
+    await game_manager.reject_resign(db, table_id, player_id)
+    await _send_game_state_to_all(table_id, db=db)
 
 
 async def _handle_next_game(

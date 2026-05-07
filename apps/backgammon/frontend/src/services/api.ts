@@ -290,9 +290,9 @@ export function getReplay(tableId: string): Promise<ReplayData> {
  * server and can take several seconds for long games. Subsequent calls
  * return instantly from the cache.
  */
-export function getAnalysis(tableId: string, limit = 100): Promise<AnalysisData> {
+export function getAnalysis(tableId: string, limit = 100, ply = 2): Promise<AnalysisData> {
   return request<AnalysisData>(
-    `/api/tables/${tableId}/analysis?limit=${limit}`,
+    `/api/tables/${tableId}/analysis?limit=${limit}&ply=${ply}`,
   );
 }
 
