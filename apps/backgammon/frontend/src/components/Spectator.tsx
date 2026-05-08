@@ -2,7 +2,6 @@ import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import type { GameState, Table, WSMessage } from "../types/game";
 import { useWebSocket } from "../hooks/useWebSocket";
-import { TOKEN_KEY } from "../constants";
 import Board from "./Board";
 import Dice from "./Dice";
 import GameInfo from "./GameInfo";
@@ -24,13 +23,13 @@ function Spectator() {
   const errorTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const clockIntervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
-  // Build WebSocket URL for spectator endpoint
+  // Build WebSocket URL for spectator endpoint.
+  // Do NOT append the auth token here — useWebSocket.connect() appends it
+  // automatically. Including it here caused a double-token bug (#167).
   const wsUrl = useMemo(() => {
     if (!tableId) return "";
-    const token = localStorage.getItem(TOKEN_KEY);
-    if (!token) return "";
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    return `${protocol}//${window.location.host}/ws/${tableId}/spectate?token=${token}`;
+    return `${protocol}//${window.location.host}/ws/${tableId}/spectate`;
   }, [tableId]);
 
   const handleMessage = useCallback((message: WSMessage) => {
