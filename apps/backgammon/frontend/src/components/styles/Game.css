@@ -68,7 +68,6 @@
   align-items: stretch;
   border: 1px solid #2c2c48;
   border-radius: 9px;
-  overflow: hidden;
   background: rgba(255, 255, 255, 0.02);
   flex-shrink: 0;
 }
@@ -88,7 +87,8 @@
   border-right: 1px solid #2c2c48;
   transition: color 0.15s, background 0.15s;
 }
-.hc-btn:last-child { border-right: none; }
+.hc-btn:last-child { border-right: none; border-radius: 0 8px 8px 0; }
+.header-controls > :first-child > .hc-btn { border-radius: 8px 0 0 8px; }
 .hc-btn:hover {
   color: var(--accent);
   background: rgba(212, 168, 67, 0.10);
