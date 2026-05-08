@@ -133,7 +133,7 @@ jobs:
           echo "Waiting for service to start..."
           for i in 1 2 3 4 5 6; do
             sleep 5
-            if RESULT=$(ssh -i ~/.ssh/id_deploy gnubg "cd /opt/gnubg && docker compose exec -T gnubg curl -sf http://localhost:8001/health" 2>&1); then
+            if RESULT=$(ssh -i ~/.ssh/id_deploy gnubg "curl -sf http://localhost:8001/health" 2>&1); then
               echo "Health check passed: $RESULT"
               exit 0
             fi
