@@ -302,6 +302,7 @@ class BackgammonEngine:
     def __init__(self) -> None:
         self.state = GameState()
         self._cached_valid_moves: Optional[list[Move]] = None
+        self._move_snapshots: list[dict] = []
         self._setup_initial_position()
 
     # ------------------------------------------------------------------
@@ -353,10 +354,8 @@ class BackgammonEngine:
             self.state.remaining_dice = list(dice.values)
             self.state.status = GameStatus.MOVING
 
-            # Save snapshot for undo (same as roll_dice does)
-            self._turn_snapshot = self._snapshot_internals()
-            self._turn_snapshot["remaining_dice"] = list(self.state.remaining_dice)
-            self._turn_snapshot["turn_moves"] = []
+            # Reset move snapshot stack for undo
+            self._move_snapshots = []
 
             self._auto_skip_if_no_moves()
         else:
@@ -366,7 +365,7 @@ class BackgammonEngine:
     # Dice
     # ------------------------------------------------------------------
 
-    _turn_snapshot: Optional[dict] = None  # saved at roll for undo
+    # _move_snapshots is initialised in __init__
 
     def roll_dice(self, die1: Optional[int] = None,
                   die2: Optional[int] = None) -> DiceRoll:
@@ -391,10 +390,8 @@ class BackgammonEngine:
         self.state.status = GameStatus.MOVING
         self._cached_valid_moves = None
 
-        # Save snapshot for undo (before auto-skip check)
-        self._turn_snapshot = self._snapshot_internals()
-        self._turn_snapshot["remaining_dice"] = list(self.state.remaining_dice)
-        self._turn_snapshot["turn_moves"] = []
+        # Reset move snapshot stack for undo
+        self._move_snapshots = []
 
         self._auto_skip_if_no_moves()
         return roll
@@ -1170,6 +1167,12 @@ class BackgammonEngine:
 
         color = self.state.current_turn
 
+        # Save snapshot before applying the move so undo can revert it.
+        snap = self._snapshot_internals()
+        snap["remaining_dice"] = list(self.state.remaining_dice)
+        snap["turn_moves"] = [Move(m.from_point, m.to_point) for m in self.state.turn_moves]
+        self._move_snapshots.append(snap)
+
         # Try single-die move first.
         die_used = self._die_value_for_move(color, move)
         if die_used is not None and die_used in self.state.remaining_dice:
@@ -1286,21 +1289,25 @@ class BackgammonEngine:
         return True
 
     def undo_turn(self) -> bool:
-        """Undo all moves made this turn, restoring the board to post-roll state.
+        """Undo the most recent move made this turn.
+
+        Each call reverts exactly one move.  Call repeatedly to undo
+        multiple moves in reverse order.
 
         Returns ``True`` if the undo succeeded, ``False`` if there is
         nothing to undo (no moves made this turn, or no snapshot saved).
         """
-        if self._turn_snapshot is None:
+        if not self._move_snapshots:
             return False
         if not self.state.turn_moves:
             return False
         if self.state.status != GameStatus.MOVING:
             return False
 
-        self._restore_internals(self._turn_snapshot)
-        self.state.remaining_dice = list(self._turn_snapshot["remaining_dice"])
-        self.state.turn_moves = []
+        snap = self._move_snapshots.pop()
+        self._restore_internals(snap)
+        self.state.remaining_dice = list(snap["remaining_dice"])
+        self.state.turn_moves = [Move(m.from_point, m.to_point) for m in snap["turn_moves"]]
         self._cached_valid_moves = None
         return True
 

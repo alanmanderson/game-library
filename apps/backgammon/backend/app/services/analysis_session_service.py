@@ -213,7 +213,7 @@ class AnalysisSessionManager:
         return session.engine.get_state_snapshot()
 
     async def undo_move(self, session_id: str) -> dict:
-        """Undo all moves made this turn (back to post-roll state)."""
+        """Undo the most recent move made this turn."""
         session = self._sessions[session_id]
         # undo_turn() requires turn_moves to be non-empty; it's safe to call
         # even when there's nothing to undo — it returns False and the board

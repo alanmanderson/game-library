@@ -405,12 +405,10 @@ class GameManager:
         s.moves_history = []
         s.turn_moves = []
 
-        # Prepare the internal _turn_snapshot so undo works for future
-        # moves made after restoration (snapshot of current board).
-        if s.status == GameStatus.MOVING:
-            engine._turn_snapshot = engine._snapshot_internals()
-            engine._turn_snapshot["remaining_dice"] = list(s.remaining_dice)
-            engine._turn_snapshot["turn_moves"] = []
+        # Reset the move snapshot stack — turn_moves is empty after
+        # restoration so there is nothing to undo yet, but new moves
+        # made after restoration will push snapshots normally.
+        engine._move_snapshots = []
 
         # Store the restored engine
         self._engines[table_id] = engine
@@ -507,10 +505,7 @@ class GameManager:
         s.moves_history = []
         s.turn_moves = []
 
-        if s.status == GameStatus.MOVING:
-            engine._turn_snapshot = engine._snapshot_internals()
-            engine._turn_snapshot["remaining_dice"] = list(s.remaining_dice)
-            engine._turn_snapshot["turn_moves"] = []
+        engine._move_snapshots = []
 
         logger.info("Restored engine state from snapshot for table %s", table_id)
 
@@ -853,7 +848,7 @@ class GameManager:
             raise ValueError("No resignation to reject")
 
     async def undo_turn(self, db: AsyncSession, table_id: str, player_id: str) -> bool:
-        """Undo all moves made this turn, restoring the board to post-roll state."""
+        """Undo the most recent move made this turn."""
         engine = self._engines.get(table_id)
         if not engine:
             raise ValueError("Game not found")

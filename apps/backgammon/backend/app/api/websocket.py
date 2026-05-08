@@ -710,7 +710,7 @@ async def _handle_end_turn(
 async def _handle_undo_turn(
     db, websocket: WebSocket, table_id: str, player_id: str
 ) -> None:
-    """Handle an undo_turn action: rewind all moves this turn."""
+    """Handle an undo_turn action: revert the most recent move this turn."""
     await game_manager.undo_turn(db, table_id, player_id)
 
     # Broadcast updated game state to all connected players
