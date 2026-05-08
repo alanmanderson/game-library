@@ -379,6 +379,118 @@ class TestWebSocketConnection:
                 ws.receive_json()
             assert exc_info.value.code == 4004
 
+    def test_non_participant_rejected(self, ws_test_env):
+        """A player who is not white or black on the table is rejected (code 4003)."""
+        client = ws_test_env["client"]
+        sf = ws_test_env["session_factory"]
+        tid, white, black = _run_async(_create_game(sf))
+        intruder = _run_async(_create_player(sf, "Intruder"))
+
+        with client.websocket_connect(
+            f"/ws/{tid}/{intruder.id}?token={_token(intruder.id)}"
+        ) as ws:
+            with pytest.raises(WebSocketDisconnect) as exc_info:
+                ws.receive_json()
+            assert exc_info.value.code == 4003
+
+    def test_participant_can_connect(self, ws_test_env):
+        """White and black players can connect to their game."""
+        client = ws_test_env["client"]
+        sf = ws_test_env["session_factory"]
+        tid, white, black = _run_async(_create_game(sf))
+
+        # White player connects successfully
+        with client.websocket_connect(
+            f"/ws/{tid}/{white.id}?token={_token(white.id)}"
+        ) as ws:
+            msg = ws.receive_json()
+            assert msg["type"] == "game_state"
+
+        # Black player connects successfully
+        with client.websocket_connect(
+            f"/ws/{tid}/{black.id}?token={_token(black.id)}"
+        ) as ws:
+            msg = ws.receive_json()
+            assert msg["type"] == "game_state"
+
+    def test_creator_connects_to_waiting_table(self, ws_test_env):
+        """The table creator can connect to a waiting table (before anyone joins)."""
+        client = ws_test_env["client"]
+        sf = ws_test_env["session_factory"]
+        creator = _run_async(_create_player(sf, "Creator"))
+        token = _token(creator.id)
+
+        # Create a table via the API (creator is assigned white by default)
+        resp = client.post(
+            "/api/tables",
+            json={"player_id": creator.id},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        tid = resp.json()["id"]
+
+        # Creator connects to the waiting table
+        with client.websocket_connect(
+            f"/ws/{tid}/{creator.id}?token={token}"
+        ) as ws:
+            msg = ws.receive_json()
+            assert msg["type"] == "waiting"
+            assert msg["data"]["status"] == "waiting"
+
+    def test_non_participant_rejected_on_waiting_table(self, ws_test_env):
+        """A random player cannot connect to someone else's waiting table."""
+        client = ws_test_env["client"]
+        sf = ws_test_env["session_factory"]
+        creator = _run_async(_create_player(sf, "Creator"))
+        outsider = _run_async(_create_player(sf, "Outsider"))
+        creator_token = _token(creator.id)
+
+        resp = client.post(
+            "/api/tables",
+            json={"player_id": creator.id},
+            headers={"Authorization": f"Bearer {creator_token}"},
+        )
+        tid = resp.json()["id"]
+
+        with client.websocket_connect(
+            f"/ws/{tid}/{outsider.id}?token={_token(outsider.id)}"
+        ) as ws:
+            with pytest.raises(WebSocketDisconnect) as exc_info:
+                ws.receive_json()
+            assert exc_info.value.code == 4003
+
+    def test_non_participant_does_not_trigger_notifications(self, ws_test_env):
+        """A non-participant connection attempt does not send opponent_reconnected
+        or opponent_disconnected to actual players."""
+        client = ws_test_env["client"]
+        sf = ws_test_env["session_factory"]
+        tid, white, black = _run_async(_create_game(sf))
+        intruder = _run_async(_create_player(sf, "Intruder"))
+
+        # White player connects first
+        with client.websocket_connect(
+            f"/ws/{tid}/{white.id}?token={_token(white.id)}"
+        ) as ws_white:
+            init_msg = ws_white.receive_json()
+            assert init_msg["type"] == "game_state"
+
+            # Intruder tries to connect and is rejected
+            with client.websocket_connect(
+                f"/ws/{tid}/{intruder.id}?token={_token(intruder.id)}"
+            ) as ws_intruder:
+                with pytest.raises(WebSocketDisconnect) as exc_info:
+                    ws_intruder.receive_json()
+                assert exc_info.value.code == 4003
+
+            # Now the real other player connects -- white should get
+            # opponent_reconnected (not spurious disconnect/reconnect)
+            with client.websocket_connect(
+                f"/ws/{tid}/{black.id}?token={_token(black.id)}"
+            ) as ws_black:
+                reconnect = ws_white.receive_json()
+                assert reconnect["type"] == "opponent_reconnected"
+                ws_black.receive_json()  # black's initial game_state
+
 
 # ===========================================================================
 # Message Handling Tests

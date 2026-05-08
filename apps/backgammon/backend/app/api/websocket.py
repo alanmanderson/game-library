@@ -444,6 +444,15 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, player_id: str
         await websocket.close(code=4004, reason=reason)
         return
 
+    # Reject non-participants: the connecting player must be the white or
+    # black player on the table.  This covers all statuses — "waiting"
+    # (creator is already assigned a slot), "playing", "game_over", and
+    # "finished".  Non-participants should use the /spectate endpoint.
+    if player_id != table.white_player_id and player_id != table.black_player_id:
+        await websocket.accept()
+        await websocket.close(code=4003, reason="Not a participant of this game")
+        return
+
     # Accept and register the connection
     await manager.connect(table_id, player_id, websocket)
 
