@@ -114,30 +114,29 @@ function Game() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, [settingsOpen]);
 
-  // Auto-move: execute the single valid move after a short delay
+  // Auto-move: when there are 0 or 1 valid moves before the player has moved any
+  // checkers, execute automatically. Once the player has moved a checker
+  // (turn_moves_count > 0), never auto-move — let them review and confirm.
   useEffect(() => {
     if (!autoMoveEnabled || !isMyTurn || !isMovingPhase || !gameState || moveInFlight) return;
-    if (gameState.valid_moves.length !== 1) return;
+    if (gameState.turn_moves_count > 0) return;
 
-    const move = gameState.valid_moves[0];
-    const timer = setTimeout(() => {
-      actions.makeMove(move.from_point, move.to_point);
-    }, 500);
+    if (gameState.valid_moves.length === 0) {
+      // No valid moves at all — auto-end turn (forced pass)
+      const timer = setTimeout(() => {
+        actions.endTurn();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
 
-    return () => clearTimeout(timer);
-  }, [autoMoveEnabled, isMyTurn, isMovingPhase, gameState, moveInFlight, actions]);
-
-  // Auto-end turn when auto-move is on and no valid moves remain after at least one move
-  useEffect(() => {
-    if (!autoMoveEnabled || !isMyTurn || !isMovingPhase || !gameState || moveInFlight) return;
-    if (gameState.valid_moves.length > 0) return;
-    if (gameState.turn_moves_count === 0) return;
-
-    const timer = setTimeout(() => {
-      actions.endTurn();
-    }, 500);
-
-    return () => clearTimeout(timer);
+    if (gameState.valid_moves.length === 1) {
+      // Exactly one valid move — play it automatically
+      const move = gameState.valid_moves[0];
+      const timer = setTimeout(() => {
+        actions.makeMove(move.from_point, move.to_point);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
   }, [autoMoveEnabled, isMyTurn, isMovingPhase, gameState, moveInFlight, actions]);
 
   const opponentPlayer = useMemo(() => {
