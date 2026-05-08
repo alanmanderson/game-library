@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import type { Color } from "../types/game";
-import { BOT_PLAYER_ID, AUTO_MOVE_KEY } from "../constants";
+import { BOT_PLAYER_ID, AUTO_MOVE_KEY, HINTS_ENABLED_KEY } from "../constants";
 import { useGameState } from "../hooks/useGameState";
 import { useGameKeyboard } from "../hooks/useGameKeyboard";
 import Board from "./Board";
@@ -55,6 +55,9 @@ function Game() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [autoMoveEnabled, setAutoMoveEnabled] = useState(() => {
     try { return localStorage.getItem(AUTO_MOVE_KEY) === "true"; } catch { return false; }
+  });
+  const [hintsEnabled, setHintsEnabled] = useState(() => {
+    try { return localStorage.getItem(HINTS_ENABLED_KEY) !== "false"; } catch { return true; }
   });
   const copiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const settingsRef = useRef<HTMLDivElement>(null);
@@ -126,6 +129,14 @@ function Game() {
     setAutoMoveEnabled((prev) => {
       const next = !prev;
       try { localStorage.setItem(AUTO_MOVE_KEY, String(next)); } catch {}
+      return next;
+    });
+  }, []);
+
+  const toggleHints = useCallback(() => {
+    setHintsEnabled((prev) => {
+      const next = !prev;
+      try { localStorage.setItem(HINTS_ENABLED_KEY, String(next)); } catch {}
       return next;
     });
   }, []);
@@ -324,6 +335,15 @@ function Game() {
                   <span className="toggle-slider" />
                 </label>
                 <p className="settings-hint">Automatically play forced moves</p>
+                <div className="menu-divider" />
+                <label className="settings-toggle">
+                  <span>Show hints</span>
+                  <input type="checkbox" checked={hintsEnabled} onChange={toggleHints} />
+                  <span className="toggle-slider" />
+                </label>
+                <p className="settings-hint" style={{ marginBottom: 0 }}>
+                  {hintsEnabled ? "Hint button shown during your turn" : "Hint button hidden — focus mode"}
+                </p>
               </div>
             )}
           </div>
@@ -351,7 +371,7 @@ function Game() {
             <Board gameState={gameState} myColor={myColor} selectedPoint={selectedPoint} validMoves={isMyTurn ? validMoves : []} onPointClick={handlePointClick} onBarClick={handleBarClick} onBearOffClick={handleBearOffClick} cubeValue={gameState.cube_value} cubeOwner={gameState.cube_owner} animatingMove={animatingMove} hintMoves={hintMoves} moveArrows={previousMoveArrows} arrowsMoverColor={gameState.last_turn_color as Color | undefined} boardTheme={myPlayer?.board_theme} checkerStyle={myPlayer?.checker_style} />
             <div className="board-overlay">
               <Dice dice={gameState.dice} remainingDice={gameState.remaining_dice} currentTurn={diceColor} openingRoll={gameState.opening_roll} diceOrder={isMyTurn && isMovingPhase ? diceOrder : undefined} onSwap={isMyTurn && isMovingPhase ? swapDice : undefined} />
-              <GameControls gameState={gameState} myColor={myColor} opponentName={opponentName} onRollDice={actions.rollDice} onEndTurn={actions.endTurn} onUndoTurn={actions.undoTurn} onOfferDouble={actions.offerDouble} onAcceptDouble={actions.acceptDouble} onDeclineDouble={actions.declineDouble} onRequestHint={actions.requestHint} onAcceptResign={actions.acceptResign} onRejectResign={actions.rejectResign} hintsRemaining={hintsRemaining} />
+              <GameControls gameState={gameState} myColor={myColor} opponentName={opponentName} onRollDice={actions.rollDice} onEndTurn={actions.endTurn} onUndoTurn={actions.undoTurn} onOfferDouble={actions.offerDouble} onAcceptDouble={actions.acceptDouble} onDeclineDouble={actions.declineDouble} onRequestHint={actions.requestHint} onAcceptResign={actions.acceptResign} onRejectResign={actions.rejectResign} hintsRemaining={hintsRemaining} hintsEnabled={hintsEnabled} />
             </div>
             {(gameState.status === "finished" || table.status === "game_over") && (
               <GameOverBanner gameState={gameState} table={table} tableId={tableId!} myColor={myColor} myName={myName} opponentName={opponentName} myScore={myScore} opponentScore={opponentScore} onNextGame={actions.nextGame} />

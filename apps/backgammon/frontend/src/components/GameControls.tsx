@@ -16,6 +16,7 @@ interface GameControlsProps {
   onRejectResign: () => void;
   opponentName: string;
   hintsRemaining: number;
+  hintsEnabled: boolean;
 }
 
 function GameControls({
@@ -32,6 +33,7 @@ function GameControls({
   onRejectResign,
   opponentName,
   hintsRemaining,
+  hintsEnabled,
 }: GameControlsProps) {
   const isMyTurn = gameState.current_turn === myColor;
 
@@ -91,6 +93,7 @@ function GameControls({
     gameState.turn_moves_count === 0;
 
   const showHintButton =
+    hintsEnabled &&
     isMyTurn &&
     gameState.status === "moving" &&
     gameState.valid_moves.length > 0;
