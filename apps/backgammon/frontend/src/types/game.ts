@@ -214,6 +214,7 @@ export interface MoveRecord {
   player_id: string | null;
   dice_roll: string;
   moves_notation: string;
+  bot_strategy: string | null;
   created_at: string;
 }
 

@@ -959,6 +959,9 @@ class GameManager:
 
         notation = moves_to_notation(moves, color)
 
+        from app.services.bot_service import is_bot_player, get_bot_strategy
+        strategy = get_bot_strategy(table_id) if is_bot_player(player_id) else None
+
         record = MoveRecord(
             table_id=table_id,
             player_id=player_id,
@@ -966,6 +969,7 @@ class GameManager:
             dice_roll=f"{dice.die1}-{dice.die2}",
             moves_notation=notation,
             game_state_after=engine.get_state_snapshot(),
+            bot_strategy=strategy,
         )
         db.add(record)
 

@@ -33,6 +33,10 @@ BOT_ROLL_DELAY = 0.8
 # --- Difficulty tracking (in-memory, per table) ---
 _table_difficulties: dict[str, str] = {}
 
+# --- Strategy tracking (in-memory, per table) ---
+# Records which bot engine was used for the most recent turn.
+_table_strategies: dict[str, str] = {}
+
 
 def set_bot_difficulty(table_id: str, difficulty: str) -> None:
     """Store the bot difficulty for a table."""
@@ -42,6 +46,16 @@ def set_bot_difficulty(table_id: str, difficulty: str) -> None:
 def get_bot_difficulty(table_id: str) -> str:
     """Get the bot difficulty for a table (defaults to 'hard')."""
     return _table_difficulties.get(table_id, "hard")
+
+
+def set_bot_strategy(table_id: str, strategy: str) -> None:
+    """Store the bot strategy used for the current turn."""
+    _table_strategies[table_id] = strategy
+
+
+def get_bot_strategy(table_id: str) -> str | None:
+    """Get the bot strategy used for the most recent turn, or None."""
+    return _table_strategies.get(table_id)
 
 
 async def restore_bot_difficulty(table_id: str, db: AsyncSession) -> None:
@@ -414,6 +428,7 @@ def _plan_bot_turn(engine, table_id: str):
         difficulty = "expert"
 
     if difficulty == "easy":
+        set_bot_strategy(table_id, "random")
         return None  # easy uses random per-move
 
     # --- Expert: opening book ---
@@ -428,6 +443,7 @@ def _plan_bot_turn(engine, table_id: str):
                 book_moves = get_opening_moves(dice, color)
                 if book_moves is not None:
                     logger.info("Expert bot using opening book for %s", dice)
+                    set_bot_strategy(table_id, "opening_book")
                     return book_moves
         except ImportError:
             pass
@@ -468,6 +484,7 @@ def _plan_bot_turn(engine, table_id: str):
                                 best_eq = eq
                                 best_turn = turn
                         if best_turn is not None:
+                            set_bot_strategy(table_id, "bearoff_db")
                             return best_turn
 
             # Race / bearoff fallback: pip-count evaluator
@@ -482,6 +499,7 @@ def _plan_bot_turn(engine, table_id: str):
                     if eq > best_eq:
                         best_eq = eq
                         best_turn = turn
+                set_bot_strategy(table_id, "race")
                 return best_turn
         except ImportError:
             pass
@@ -500,6 +518,7 @@ def _plan_bot_turn(engine, table_id: str):
                     engine._restore_internals(saved)
                     scored_turns.append((eq, turn))
                 scored_turns.sort(key=lambda x: x[0], reverse=True)
+                set_bot_strategy(table_id, "v2_nn")
                 return _evaluate_1ply(engine, color, scored_turns,
                                       v2_bot._evaluate_position)
             except (ValueError, IndexError, KeyError) as e:
@@ -533,6 +552,7 @@ def _plan_bot_turn(engine, table_id: str):
                     engine._restore_internals(saved)
                     scored_turns.append((eq, turn))
                 scored_turns.sort(key=lambda x: x[0], reverse=True)
+                set_bot_strategy(table_id, "v1_nn")
                 return _evaluate_1ply(engine, color, scored_turns, _eval_v1)
             except (ValueError, IndexError, KeyError, ImportError) as e:
                 logger.warning("ML full-turn eval failed: %s", e)
@@ -549,8 +569,10 @@ def _plan_bot_turn(engine, table_id: str):
             if s > best_score:
                 best_score = s
                 best_turn = turn
+        set_bot_strategy(table_id, "heuristic")
         return best_turn
 
+    set_bot_strategy(table_id, "random")
     return None  # fall back to per-move selection
 
 
@@ -778,6 +800,8 @@ async def execute_bot_turn(table_id: str) -> None:
             if engine is not None:
                 try:
                     planned_turn = await _plan_bot_turn_gnu(engine, table_id)
+                    if planned_turn is not None:
+                        set_bot_strategy(table_id, "gnubg")
                 except Exception as e:
                     logger.warning("gnu bot turn planning failed: %s", e)
             if planned_turn is None:
@@ -834,6 +858,7 @@ async def execute_bot_turn(table_id: str) -> None:
                             planned_move.from_point, planned_move.to_point,
                         )
                         planned_turn = None  # abandon plan
+                        set_bot_strategy(table_id, "random")
                 if move is None:
                     move = _select_bot_move(engine, valid_moves, table_id)
                 move_index += 1
