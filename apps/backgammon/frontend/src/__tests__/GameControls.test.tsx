@@ -73,6 +73,7 @@ function renderControls(
       opponentName={opponentName}
       onRequestHint={vi.fn()}
       hintsRemaining={3}
+      hintsEnabled={true}
       {...handlers}
     />,
   );

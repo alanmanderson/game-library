@@ -582,6 +582,12 @@
   animation: fadeIn 0.15s ease;
 }
 
+.menu-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 0.4rem 0;
+}
+
 .settings-toggle {
   display: flex;
   align-items: center;
