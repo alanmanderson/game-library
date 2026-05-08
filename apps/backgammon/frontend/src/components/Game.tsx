@@ -18,6 +18,34 @@ import ChatPanel from "./ChatPanel";
 import "./styles/Game.css";
 import { inferDie, findPreferredMove } from "../utils/moveHelpers";
 
+/* -- Inline SVG icons (kept local; no new dependency) --------------------- */
+const GearSvg = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+    <path d="M11.078 0l.855 3.424a7.28 7.28 0 011.804 1.042l3.358-1.052 1.078 1.867-2.5 2.375a7.4 7.4 0 010 2.088l2.5 2.375-1.078 1.867-3.358-1.052a7.28 7.28 0 01-1.804 1.042L11.078 18H8.922l-.855-3.424a7.28 7.28 0 01-1.804-1.042L2.905 14.586l-1.078-1.867 2.5-2.375a7.4 7.4 0 010-2.088L1.827 5.88l1.078-1.867 3.358 1.052A7.28 7.28 0 018.067 4.024L8.922 0h2.156zM10 6.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5z"/>
+  </svg>
+);
+const HelpSvg = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+    <path d="M10 0a10 10 0 100 20 10 10 0 000-20zm0 1.6a8.4 8.4 0 110 16.8 8.4 8.4 0 010-16.8zm.05 11.05c-.62 0-1.05.42-1.05 1.05 0 .62.43 1.05 1.05 1.05.61 0 1.05-.43 1.05-1.05 0-.63-.44-1.05-1.05-1.05zM10 4.2c-1.92 0-3.25 1.13-3.4 2.86l-.01.18h1.7c0-.93.65-1.55 1.66-1.55 1 0 1.66.55 1.66 1.4 0 .65-.27 1-1.13 1.5-1 .58-1.42 1.18-1.36 2.18l.01.5h1.66v-.4c0-.65.25-.97 1.13-1.5 1-.6 1.5-1.32 1.5-2.36 0-1.7-1.4-2.81-3.42-2.81z"/>
+  </svg>
+);
+const HomeSvg = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+    <path d="M10 1.2L0.6 9.2l1.4 1.65L3 10.05V18a1 1 0 0 0 1 1h3.5v-5.5h5V19H16a1 1 0 0 0 1-1v-7.95l1 0.8 1.4-1.65L10 1.2z"/>
+  </svg>
+);
+const CopySvg = ({ size = 12 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true">
+    <rect x="6" y="6" width="11" height="11" rx="1.8"/>
+    <path d="M13 6V4.2A1.2 1.2 0 0 0 11.8 3H4.2A1.2 1.2 0 0 0 3 4.2v7.6A1.2 1.2 0 0 0 4.2 13H6"/>
+  </svg>
+);
+const CheckSvg = ({ size = 12 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M4 10.5l4 4 8-9"/>
+  </svg>
+);
+
 function Game() {
   const { tableId } = useParams<{ tableId: string }>();
   const [copied, setCopied] = useState(false);
@@ -262,30 +290,55 @@ function Game() {
           <h2>
             Backgammon{" "}
             <span className="header-table-id">
-              ({table.id}{" "}
-              <button className="header-copy-btn" onClick={handleCopy}>{copied ? "Copied!" : "Copy"}</button>
+              ({table.id}
+              <button
+                className="header-copy-btn"
+                onClick={handleCopy}
+                title={copied ? "Copied!" : "Copy table id"}
+                aria-label={copied ? "Copied" : "Copy table id"}
+              >
+                {copied ? <CheckSvg /> : <CopySvg />}
+              </button>
               )
             </span>
           </h2>
         </div>
+
         {statusMessage && <div className="game-status-msg">{statusMessage}</div>}
-        <div className="settings-wrapper" ref={settingsRef}>
-          <button className="settings-btn" onClick={() => setSettingsOpen((p) => !p)} title="Game settings" aria-label="Game settings">
-            <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path d="M11.078 0l.855 3.424a7.28 7.28 0 011.804 1.042l3.358-1.052 1.078 1.867-2.5 2.375a7.4 7.4 0 010 2.088l2.5 2.375-1.078 1.867-3.358-1.052a7.28 7.28 0 01-1.804 1.042L11.078 18H8.922l-.855-3.424a7.28 7.28 0 01-1.804-1.042L2.905 14.586l-1.078-1.867 2.5-2.375a7.4 7.4 0 010-2.088L1.827 5.88l1.078-1.867 3.358 1.052A7.28 7.28 0 018.067 4.024L8.922 0h2.156zM10 6.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5z"/></svg>
+
+        <div className="header-controls">
+          <div className="settings-wrapper" ref={settingsRef}>
+            <button
+              className="hc-btn"
+              onClick={() => setSettingsOpen((p) => !p)}
+              title="Game settings"
+              aria-label="Game settings"
+            >
+              <GearSvg />
+            </button>
+            {settingsOpen && (
+              <div className="settings-menu">
+                <label className="settings-toggle">
+                  <span>Auto-move</span>
+                  <input type="checkbox" checked={autoMoveEnabled} onChange={toggleAutoMove} />
+                  <span className="toggle-slider" />
+                </label>
+                <p className="settings-hint">Automatically play forced moves</p>
+              </div>
+            )}
+          </div>
+          <button
+            className="hc-btn"
+            onClick={() => setShowShortcutHelp(true)}
+            title="Keyboard shortcuts (?)"
+            aria-label="Show keyboard shortcuts"
+          >
+            <HelpSvg />
           </button>
-          {settingsOpen && (
-            <div className="settings-menu">
-              <label className="settings-toggle">
-                <span>Auto-move</span>
-                <input type="checkbox" checked={autoMoveEnabled} onChange={toggleAutoMove} />
-                <span className="toggle-slider" />
-              </label>
-              <p className="settings-hint">Automatically play forced moves</p>
-            </div>
-          )}
+          <Link to="/" className="hc-btn hc-btn--home" title="Home" aria-label="Home">
+            <HomeSvg />
+          </Link>
         </div>
-        <button className="shortcut-help-btn" onClick={() => setShowShortcutHelp(true)} title="Keyboard shortcuts (?)" aria-label="Show keyboard shortcuts">?</button>
-        <Link to="/" className="back-link">Home</Link>
       </div>
 
       <ConnectionBanners isBotGame={isBotGame} opponentConnected={opponentConnected} opponentReconnected={opponentReconnected} opponentName={opponentName} error={error} spectatorCount={table.spectator_count ?? 0} />
