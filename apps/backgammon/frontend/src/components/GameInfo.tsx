@@ -6,6 +6,17 @@ import "./styles/GameInfo.css";
 
 const PAGE_SIZE = 1000;
 
+const STRATEGY_LABELS: Record<string, string> = {
+  gnubg: "GNU",
+  opening_book: "book",
+  bearoff_db: "bearoff",
+  race: "race",
+  v2_nn: "v2",
+  v1_nn: "v1",
+  heuristic: "heur",
+  random: "rand",
+};
+
 interface GameInfoProps {
   table: Table;
   gameStatus: GameStatus;
@@ -112,6 +123,11 @@ function GameInfo({ table, gameStatus, isOpen: externalIsOpen, onToggle }: GameI
                     <strong>#{record.move_number}</strong>{" "}
                     {record.dice_roll ? `[${record.dice_roll}] ` : ""}
                     {notationToPlayerPerspective(record.moves_notation, moverColor)}
+                    {record.bot_strategy && (
+                      <span className="bot-strategy-tag" title={record.bot_strategy}>
+                        {STRATEGY_LABELS[record.bot_strategy] ?? record.bot_strategy}
+                      </span>
+                    )}
                   </div>
                 );
               })}

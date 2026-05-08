@@ -141,6 +141,7 @@ class MoveRecord(Base):
     dice_roll: str = Column(String(10), nullable=False)
     moves_notation: str = Column(String(200), nullable=False)
     game_state_after: dict | None = Column(MutableDict.as_mutable(JSON), nullable=True)
+    bot_strategy: str | None = Column(String(20), nullable=True)
     created_at: datetime = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     # Relationships

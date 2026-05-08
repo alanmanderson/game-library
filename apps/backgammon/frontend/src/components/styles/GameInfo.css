@@ -61,6 +61,14 @@
   background: rgba(255, 255, 255, 0.03);
 }
 
+.bot-strategy-tag {
+  margin-left: 0.4rem;
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+  opacity: 0.5;
+  font-style: italic;
+}
+
 .move-history-empty {
   color: var(--text-secondary);
   font-size: 0.85rem;

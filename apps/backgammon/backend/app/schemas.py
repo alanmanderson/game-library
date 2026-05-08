@@ -186,6 +186,7 @@ class MoveRecordResponse(BaseModel):
     player_id: Optional[str] = None
     dice_roll: str
     moves_notation: str
+    bot_strategy: Optional[str] = None
     created_at: datetime
 
 
