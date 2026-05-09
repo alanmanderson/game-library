@@ -403,7 +403,29 @@ def _select_bot_move(engine, valid_moves, table_id: str = ""):
     if difficulty == "medium":
         return max(valid_moves, key=lambda m: _heuristic_score_move(engine, m))
 
-    # Default: random (ML full-turn eval is the normal path now)
+    # For gnu/expert/hard: use the V2 or V1 neural net for per-move fallback
+    # instead of random, so the bot still plays well when the full-turn plan
+    # couldn't be validated.
+    if difficulty in ("gnu", "expert", "hard"):
+        v2_bot = _load_v2_bot()
+        if v2_bot is not None:
+            color = engine.state.current_turn
+            best_move, best_eq = None, float('-inf')
+            for move in valid_moves:
+                snap = engine._snapshot_internals()
+                engine._apply_move_internal(color, move)
+                try:
+                    eq = v2_bot._evaluate_position(engine, color)
+                except Exception:
+                    eq = 0.0
+                engine._restore_internals(snap)
+                if eq > best_eq:
+                    best_eq = eq
+                    best_move = move
+            if best_move is not None:
+                return best_move
+
+    # Default: random
     return random.choice(valid_moves)
 
 
@@ -800,10 +822,28 @@ async def execute_bot_turn(table_id: str) -> None:
             if engine is not None:
                 try:
                     planned_turn = await _plan_bot_turn_gnu(engine, table_id)
-                    if planned_turn is not None:
-                        set_bot_strategy(table_id, "gnubg")
                 except Exception as e:
                     logger.warning("gnu bot turn planning failed: %s", e)
+                # Validate the gnubg plan against the engine's actual valid
+                # moves (inside the lock) to catch any enumeration/filter
+                # discrepancy that could arise from lock-free planning.
+                if planned_turn is not None:
+                    async with game_manager._get_lock(table_id):
+                        engine = game_manager.get_engine(table_id)
+                        if engine and engine.state.status == GameStatus.MOVING:
+                            first_valid = engine.get_valid_moves()
+                            if planned_turn[0] in first_valid:
+                                set_bot_strategy(table_id, "gnubg")
+                            else:
+                                logger.info(
+                                    "gnubg plan first move %s->%s not in valid moves; "
+                                    "re-planning with expert for table %s",
+                                    planned_turn[0].from_point,
+                                    planned_turn[0].to_point, table_id,
+                                )
+                                planned_turn = None
+                        else:
+                            planned_turn = None
             if planned_turn is None:
                 logger.info(
                     "gnubg unavailable for table %s; falling back to expert", table_id
@@ -858,7 +898,8 @@ async def execute_bot_turn(table_id: str) -> None:
                             planned_move.from_point, planned_move.to_point,
                         )
                         planned_turn = None  # abandon plan
-                        set_bot_strategy(table_id, "random")
+                        # Fall back to expert evaluator, not random
+                        set_bot_strategy(table_id, "v2_nn")
                 if move is None:
                     move = _select_bot_move(engine, valid_moves, table_id)
                 move_index += 1

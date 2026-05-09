@@ -61,6 +61,9 @@ function Game() {
   });
   const copiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const settingsRef = useRef<HTMLDivElement>(null);
+  // Tracks whether the user manually chose a move this turn (vs auto-move).
+  // When false, forced moves keep auto-executing; when true, auto-move stops.
+  const userChoseMove = useRef(false);
 
   const {
     playerId, gameState, myColor, table, selectedPoint, setSelectedPoint,
@@ -82,6 +85,13 @@ function Game() {
   const validMoves = gameState?.valid_moves ?? [];
   const noOffer = !gameState?.double_offered && !gameState?.resign_offered;
   const showResignButton = isMyTurn && gameState?.status === "rolling" && noOffer;
+
+  // Reset userChoseMove when a new moving phase begins (new turn)
+  useEffect(() => {
+    if (isMyTurn && isMovingPhase && gameState?.turn_moves_count === 0) {
+      userChoseMove.current = false;
+    }
+  }, [isMyTurn, isMovingPhase, gameState?.turn_moves_count]);
 
   // Show yellow arrows for the opponent's most recent move while we're about
   // to roll. Clears once the dice are rolled (status → "moving").
@@ -107,7 +117,10 @@ function Game() {
       const movesFromPoint = validMoves.filter((m) => m.from_point === point);
       if (movesFromPoint.length === 0) return;
       const move = findPreferredMove(movesFromPoint, diceOrder, gameState.remaining_dice, myColor);
-      if (move) actions.makeMove(move.from_point, move.to_point);
+      if (move) {
+        userChoseMove.current = true;
+        actions.makeMove(move.from_point, move.to_point);
+      }
     },
     [isMyTurn, isMovingPhase, myColor, gameState, validMoves, diceOrder, actions, moveInFlight],
   );
@@ -118,7 +131,10 @@ function Game() {
     const movesFromBar = validMoves.filter((m) => m.from_point === barPoint);
     if (movesFromBar.length === 0) return;
     const move = findPreferredMove(movesFromBar, diceOrder, gameState.remaining_dice, myColor);
-    if (move) actions.makeMove(move.from_point, move.to_point);
+    if (move) {
+      userChoseMove.current = true;
+      actions.makeMove(move.from_point, move.to_point);
+    }
   }, [isMyTurn, isMovingPhase, myColor, gameState, validMoves, diceOrder, actions, moveInFlight]);
 
   const handleBearOffClick = useCallback(() => {
@@ -153,15 +169,16 @@ function Game() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, [settingsOpen]);
 
-  // Auto-move: when there are 0 or 1 valid moves before the player has moved any
-  // checkers, execute automatically. Once the player has moved a checker
-  // (turn_moves_count > 0), never auto-move — let them review and confirm.
+  // Auto-move: when there are 0 or 1 valid moves and the user hasn't manually
+  // chosen a move this turn, execute automatically. This handles full forced
+  // move sequences (e.g. forced first move → forced second move → auto-end).
+  // Once the user manually clicks a move, stop auto-moving to let them review.
   useEffect(() => {
     if (!autoMoveEnabled || !isMyTurn || !isMovingPhase || !gameState || moveInFlight) return;
-    if (gameState.turn_moves_count > 0) return;
+    if (userChoseMove.current) return;
 
     if (gameState.valid_moves.length === 0) {
-      // No valid moves at all — auto-end turn (forced pass)
+      // No valid moves — auto-end turn (forced pass or end of forced sequence)
       const timer = setTimeout(() => {
         actions.endTurn();
       }, 500);
