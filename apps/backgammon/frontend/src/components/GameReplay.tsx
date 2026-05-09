@@ -15,6 +15,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import type {
   AnalysisData,
+  DeepDiveResult,
   GameState,
   MoveAnalysis,
   MoveProbs,
@@ -22,9 +23,11 @@ import type {
   ReplayData,
   ReplayMoveRecord,
 } from "../types/game";
-import { getAnalysis, getReplay } from "../services/api";
+import { getAnalysis, getPositionDeepDive, getReplay } from "../services/api";
 import Board from "./Board";
 import Dice from "./Dice";
+import ReanalyzeModal from "./ReanalyzeModal";
+import DeepDivePanel from "./DeepDivePanel";
 import { STORAGE_KEY } from "../constants";
 import { parseMovesNotationRaw, notationToPlayerPerspective } from "../utils/notation";
 import "./styles/GameReplay.css";
@@ -227,6 +230,14 @@ function GameReplay() {
   const [selectedCandidate, setSelectedCandidate] = useState<number | null>(null);
   /** gnubg evaluation depth: 0 (fast), 2 (standard), 3 (deep/slow). */
   const [analysisPly, setAnalysisPly] = useState<0 | 2 | 3>(2);
+
+  // Re-analyze modal state
+  const [showReanalyzeModal, setShowReanalyzeModal] = useState(false);
+
+  // Deep-dive state
+  const [deepDiveData, setDeepDiveData] = useState<DeepDiveResult | null>(null);
+  const [deepDiveLoading, setDeepDiveLoading] = useState(false);
+  const [deepDiveMoveNumber, setDeepDiveMoveNumber] = useState<number | null>(null);
 
   // Speed slider constants: the slider is inverted so right = faster.
   // Slider range is [SPEED_SLIDER_MIN, SPEED_SLIDER_MAX]; actual delay = SPEED_OFFSET - sliderValue.
@@ -440,6 +451,59 @@ function GameReplay() {
     setAnalysisOpen(next);
     if (next) await fetchAnalysis(analysisPly);
   }, [analysisOpen, fetchAnalysis, analysisPly]);
+
+  /** Re-analyze with force flag. */
+  const handleReanalyze = useCallback(async (ply: 0 | 2 | 3) => {
+    setShowReanalyzeModal(false);
+    stopPolling();
+    setAnalysisPly(ply);
+    setAnalysis(null);
+    setAnalysisLoading(true);
+    setAnalysisError(null);
+    setAnalysisOpen(true);
+    try {
+      const data = await getAnalysis(tableId!, 100, ply, true);
+      setAnalysis(data);
+      if (data.status === "running") {
+        startPolling(ply);
+      } else {
+        setAnalysisLoading(false);
+      }
+    } catch (err) {
+      setAnalysisError(
+        err instanceof Error ? err.message : "Failed to start re-analysis.",
+      );
+      setAnalysisLoading(false);
+    }
+  }, [tableId, stopPolling, startPolling]);
+
+  /** Deep-dive: fetch maximum-depth analysis for a single position. */
+  const handleDeepDive = useCallback(async (moveNumber: number) => {
+    if (!tableId) return;
+    // Toggle off if clicking the same move.
+    if (deepDiveMoveNumber === moveNumber && deepDiveData) {
+      setDeepDiveData(null);
+      setDeepDiveMoveNumber(null);
+      return;
+    }
+    setDeepDiveMoveNumber(moveNumber);
+    setDeepDiveLoading(true);
+    setDeepDiveData(null);
+    try {
+      const data = await getPositionDeepDive(tableId, moveNumber);
+      setDeepDiveData(data);
+    } catch {
+      setDeepDiveData(null);
+    } finally {
+      setDeepDiveLoading(false);
+    }
+  }, [tableId, deepDiveMoveNumber, deepDiveData]);
+
+  /** Close deep-dive panel. */
+  const handleCloseDeepDive = useCallback(() => {
+    setDeepDiveData(null);
+    setDeepDiveMoveNumber(null);
+  }, []);
 
   /** Top-3 key moments: moves with the largest equity_loss. */
   const keyMoments = useMemo<MoveAnalysis[]>(() => {
@@ -679,15 +743,79 @@ function GameReplay() {
             {replayData.white_player_nickname ?? "White"} vs{" "}
             {replayData.black_player_nickname ?? "Black"}
           </h2>
-          <button
-            type="button"
-            className={`replay-share-btn${copied ? " replay-share-btn--copied" : ""}`}
-            onClick={handleCopyShareLink}
-            aria-label="Copy share link"
-            title="Copy a public link to this replay"
-          >
-            {copied ? "✓ Copied!" : "🔗 Copy Share Link"}
-          </button>
+          <div className="replay-header-actions">
+            {analysis?.status === "running" ? (
+              <button
+                type="button"
+                className="replay-reanalyze-btn replay-reanalyze-btn--running"
+                disabled
+              >
+                <span className="replay-reanalyze-spin" />
+                Re-analyzing &middot; {analysis.progress != null ? `${Math.round(analysis.progress * 100)}%` : "..."}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="replay-reanalyze-btn"
+                onClick={() => setShowReanalyzeModal(true)}
+                title="Re-analyze this game with different settings"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M14 2v4h-4"/>
+                  <path d="M2 14v-4h4"/>
+                  <path d="M13.5 6A6 6 0 0 0 3.4 4.4M2.5 10a6 6 0 0 0 10.1 1.6"/>
+                </svg>
+                Re-analyze
+              </button>
+            )}
+            <button
+              type="button"
+              className={`replay-share-btn${copied ? " replay-share-btn--copied" : ""}`}
+              onClick={handleCopyShareLink}
+              aria-label="Copy share link"
+              title="Copy a public link to this replay"
+            >
+              {copied ? "✓ Copied!" : "🔗 Share"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Freshness banner */}
+      {!embed && analysis && analysis.status === "complete" && analysis.analysis_source && (
+        <div className="replay-freshness">
+          Analyzed by <strong>{analysis.analysis_source}</strong>
+        </div>
+      )}
+
+      {/* Re-analysis progress card */}
+      {!embed && analysis?.status === "running" && (
+        <div className="replay-progress-card">
+          <div className="replay-progress-head">
+            <div>
+              <h4 className="replay-progress-title">
+                Re-analyzing at {analysis.analysis_ply ?? analysisPly}-ply
+              </h4>
+              <span className="replay-progress-caption">
+                {analysis.analysis_source ?? "gnubg"}
+              </span>
+            </div>
+            <span className="replay-progress-pct">
+              {analysis.progress != null ? `${Math.round(analysis.progress * 100)}%` : "..."}
+            </span>
+          </div>
+          <div className="replay-progress-track">
+            <div
+              className="replay-progress-fill"
+              style={{ width: `${(analysis.progress ?? 0) * 100}%` }}
+            />
+          </div>
+          <div className="replay-progress-meta">
+            <span>{analysis.moves_analysed} / {analysis.total_moves} moves scored</span>
+          </div>
+          <div className="replay-progress-note">
+            <strong>Old results still visible</strong> &mdash; they&apos;ll swap in when the run completes.
+          </div>
         </div>
       )}
 
@@ -830,7 +958,34 @@ function GameReplay() {
         </button>
       </div>
 
-      {/* Top candidate moves panel */}
+      {/* Deep-dive button + top candidate moves panel */}
+      {currentAnalysis && moveIndex > 0 && (
+        <div className="replay-deepdive-trigger">
+          <button
+            type="button"
+            className={`replay-deepdive-btn${deepDiveMoveNumber === moveIndex ? " replay-deepdive-btn--active" : ""}`}
+            onClick={() => handleDeepDive(moveIndex)}
+            disabled={deepDiveLoading && deepDiveMoveNumber === moveIndex}
+            title="Run maximum-depth analysis on this position"
+          >
+            {deepDiveLoading && deepDiveMoveNumber === moveIndex ? (
+              <>
+                <span className="replay-reanalyze-spin" />
+                Analyzing...
+              </>
+            ) : (
+              <>
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="7" cy="7" r="4.5"/>
+                  <path d="M14 14l-3.5-3.5M5 7h4M7 5v4"/>
+                </svg>
+                Deep-dive
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
       {currentAnalysis?.top_moves && currentAnalysis.top_moves.length > 0 && moveIndex > 0 && (
         <div className="replay-top-moves">
           <div className="replay-top-moves-header">
@@ -875,6 +1030,15 @@ function GameReplay() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {/* Deep-dive panel */}
+      {deepDiveData && deepDiveMoveNumber === moveIndex && currentMove && (
+        <DeepDivePanel
+          data={deepDiveData}
+          playedNotation={currentMove.moves_notation}
+          onClose={handleCloseDeepDive}
+        />
       )}
 
       {/* Analysis toggle + ply selector */}
@@ -1251,6 +1415,16 @@ function GameReplay() {
           {playSpeed <= 500 ? "Fast" : playSpeed >= 2500 ? "Slow" : "Normal"}
         </span>
       </div>
+
+      {/* Re-analyze modal */}
+      {showReanalyzeModal && (
+        <ReanalyzeModal
+          currentAnalysis={analysis}
+          totalMoves={totalMoves}
+          onConfirm={handleReanalyze}
+          onClose={() => setShowReanalyzeModal(false)}
+        />
+      )}
     </div>
   );
 }

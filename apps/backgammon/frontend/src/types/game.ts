@@ -662,3 +662,34 @@ export interface AnalysisSettings {
 }
 
 export type AnalysisPanelTab = "moves" | "analysis" | "settings";
+
+/** Cube action analysis for a position. */
+export interface CubeDecision {
+  action: string;
+  equity_no_double?: number | null;
+  equity_double_take?: number | null;
+  equity_double_drop?: number | null;
+}
+
+/** Full deep-dive analysis for a single position at maximum depth. */
+export interface DeepDiveResult {
+  table_id: string;
+  move_number: number;
+  player_color: "white" | "black";
+  dice_roll: string;
+  moves_notation: string;
+  win_prob?: number | null;
+  win_g_prob?: number | null;
+  win_bg_prob?: number | null;
+  lose_prob?: number | null;
+  lose_g_prob?: number | null;
+  lose_bg_prob?: number | null;
+  cubeless_equity?: number | null;
+  cubeful_equity?: number | null;
+  top_moves: MoveCandidate[];
+  cube_decision?: CubeDecision | null;
+  source: string;
+  ply: number;
+  position_id?: string | null;
+  analysis_time_ms?: number | null;
+}

@@ -396,6 +396,42 @@ class AnalysisResponse(BaseModel):
     progress: Optional[float] = None       # 0.0-1.0, set when status="running"
 
 
+class CubeDecision(BaseModel):
+    """Cube action analysis for a position."""
+    action: str                          # "No double", "Double/Take", "Double/Drop", "Too good to double"
+    equity_no_double: Optional[float] = None
+    equity_double_take: Optional[float] = None
+    equity_double_drop: Optional[float] = None
+
+
+class DeepDiveResponse(BaseModel):
+    """Full deep-dive analysis for a single position at maximum depth."""
+    table_id: str
+    move_number: int
+    player_color: str
+    dice_roll: str
+    moves_notation: str
+    # Win probabilities (0..1)
+    win_prob: Optional[float] = None
+    win_g_prob: Optional[float] = None
+    win_bg_prob: Optional[float] = None
+    lose_prob: Optional[float] = None
+    lose_g_prob: Optional[float] = None
+    lose_bg_prob: Optional[float] = None
+    # Equity
+    cubeless_equity: Optional[float] = None
+    cubeful_equity: Optional[float] = None
+    # Top candidate moves
+    top_moves: list[MoveCandidate] = []
+    # Cube decision
+    cube_decision: Optional[CubeDecision] = None
+    # Meta
+    source: str = "gnubg"
+    ply: int = 3
+    position_id: Optional[str] = None
+    analysis_time_ms: Optional[int] = None
+
+
 # ── Leaderboard Schemas ───────────────────────────────────────────────────
 
 
