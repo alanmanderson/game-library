@@ -448,7 +448,10 @@ def _flip_probs(p: Probs) -> Probs:
 
 
 def _steps_to_notation(steps: list[MoveStep], turn: str) -> str:
-    """Render MoveSteps back into gnubg-style notation."""
+    """Render MoveSteps (backend coordinates) back into gnubg-style notation.
+
+    For black, backend point P maps to gnubg point 25-P (mirrored board).
+    """
     bar_for_turn = 25 if turn == "white" else 0
     off_for_turn = 0 if turn == "white" else 25
 
@@ -457,7 +460,9 @@ def _steps_to_notation(steps: list[MoveStep], turn: str) -> str:
             return "bar"
         if (not is_from) and v == off_for_turn:
             return "off"
-        return str(v)
+        # Convert backend coordinates to gnubg's player perspective
+        pt = v if turn == "white" else 25 - v
+        return str(pt)
 
     return " ".join(f"{_tok(s.from_point, True)}/{_tok(s.to_point, False)}"
                     for s in steps)
