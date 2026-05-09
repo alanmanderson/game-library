@@ -85,6 +85,15 @@ _FIVE_FLOATS = re.compile(
     rf"^\s*{_NUM_GROUP}\s+{_NUM_GROUP}\s+{_NUM_GROUP}\s+{_NUM_GROUP}\s+{_NUM_GROUP}\s*$"
 )
 
+# Ply-prefixed row from 2-ply+ hint/eval output.
+# Captures the first 5 probability values; may be followed by equity columns.
+_PLY_ROW = re.compile(
+    rf"^\s*(?:static|\d+\s*ply)\s*:\s*"
+    rf"{_NUM_GROUP}\s+{_NUM_GROUP}\s+{_NUM_GROUP}\s+"
+    rf"{_NUM_GROUP}\s+{_NUM_GROUP}",
+    re.MULTILINE,
+)
+
 # gnubg tabular eval rows: "static: N N N N N N N" or "N ply: N N N N N N N"
 # Seven floats: win, w(g), w(bg), l(g), l(bg), equity, cubeful.
 _EVAL_ROW = re.compile(
@@ -137,21 +146,30 @@ def _find_probs(text: str) -> Optional[ParsedProbs]:
             lose_g=float(m.group(4)),
             lose_bg=float(m.group(5)),
         )
-    # Try tabular: a line of exactly five floats. Standard gnubg prints the
-    # tabular header "   Win   W(g)  W(bg)   L(g)  L(bg)" above the row.
+    # Try ply-prefixed tabular row (e.g. "2 ply: 0.55 0.15 0.01 0.12 0.005 +0.32 +0.40").
+    # gnubg uses this format in 2-ply+ hint output; the first 5 values are the probs.
+    m2 = _PLY_ROW.search(text)
+    if m2:
+        return ParsedProbs(
+            win=float(m2.group(1)),
+            win_g=float(m2.group(2)),
+            win_bg=float(m2.group(3)),
+            lose_g=float(m2.group(4)),
+            lose_bg=float(m2.group(5)),
+        )
+    # Try simple tabular: a line of exactly five floats after the header.
     lines = text.splitlines()
     for i, line in enumerate(lines):
         if re.search(r"\bWin\b.*\bW\(g\).*\bL\(g\)", line, re.IGNORECASE):
-            # Next line with five floats
             for j in range(i + 1, min(i + 4, len(lines))):
-                m2 = _FIVE_FLOATS.match(lines[j])
-                if m2:
+                m3 = _FIVE_FLOATS.match(lines[j])
+                if m3:
                     return ParsedProbs(
-                        win=float(m2.group(1)),
-                        win_g=float(m2.group(2)),
-                        win_bg=float(m2.group(3)),
-                        lose_g=float(m2.group(4)),
-                        lose_bg=float(m2.group(5)),
+                        win=float(m3.group(1)),
+                        win_g=float(m3.group(2)),
+                        win_bg=float(m3.group(3)),
+                        lose_g=float(m3.group(4)),
+                        lose_bg=float(m3.group(5)),
                     )
     return None
 

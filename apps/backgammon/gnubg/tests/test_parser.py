@@ -119,6 +119,28 @@ def test_parse_hint_tolerates_missing_probs():
     assert cands[0].probs.win == 0.0
 
 
+HINT_TWO_PLY = """\
+ 1. Cubeful 2-ply   8/5 6/5    Eq.: +0.249 ( 0.000)
+                  Win   W(g)  W(bg)   L(g)  L(bg)
+       2 ply:  0.498 0.098 0.002  0.099 0.001  +0.194  +0.249
+ 2. Cubeful 2-ply   13/10 6/5    Eq.: +0.209 ( -0.040)
+                  Win   W(g)  W(bg)   L(g)  L(bg)
+       2 ply:  0.480 0.092 0.002  0.107 0.001  +0.157  +0.209
+"""
+
+
+def test_parse_hint_two_ply():
+    cands = parse_hint(HINT_TWO_PLY)
+    assert len(cands) == 2
+    assert cands[0].rank == 1
+    assert cands[0].notation == "8/5 6/5"
+    assert cands[0].equity == pytest.approx(0.249)
+    assert cands[0].probs.win == pytest.approx(0.498)
+    assert cands[0].probs.win_g == pytest.approx(0.098)
+    assert cands[0].probs.lose_g == pytest.approx(0.099)
+    assert cands[1].probs.win == pytest.approx(0.480)
+
+
 # ── Cube ────────────────────────────────────────────────────────────────
 
 
