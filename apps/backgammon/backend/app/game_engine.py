@@ -415,6 +415,8 @@ class BackgammonEngine:
             return False
         if self.state.double_offered:
             return False
+        if self.state.resign_offered:
+            return False
         # Can double if cube is centered or owned by this player
         if self.state.cube_owner is not None and self.state.cube_owner != color:
             return False

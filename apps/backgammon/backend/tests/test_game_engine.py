@@ -1359,6 +1359,66 @@ class TestCrawfordRule:
 
 
 # -----------------------------------------------------------------------
+# Doubling blocked by pending resignation (#181)
+# -----------------------------------------------------------------------
+
+class TestDoubleBlockedByResignation:
+    """Doubling must be blocked when a resignation offer is pending.
+
+    This is the symmetric counterpart to the existing check in
+    offer_resign() which already blocks when a double is pending.
+    See: https://github.com/alanmanderson/backgammon/issues/181
+    """
+
+    def test_can_double_returns_false_when_resign_offered(self):
+        """can_double returns False while resign_offered is True."""
+        engine = BackgammonEngine()
+        engine.state.status = GameStatus.ROLLING
+        engine.state.current_turn = Color.WHITE
+        engine.state.cube_owner = None  # centered cube
+
+        # Sanity: doubling is normally allowed
+        assert engine.can_double(Color.WHITE) is True
+
+        # Simulate a pending resignation
+        engine.state.resign_offered = True
+        engine.state.resign_offered_by = Color.BLACK
+
+        assert engine.can_double(Color.WHITE) is False
+
+    def test_offer_double_fails_when_resign_offered(self):
+        """offer_double returns False (via can_double) when resignation pending."""
+        engine = BackgammonEngine()
+        engine.state.status = GameStatus.ROLLING
+        engine.state.current_turn = Color.WHITE
+        engine.state.cube_owner = None
+
+        engine.state.resign_offered = True
+        engine.state.resign_offered_by = Color.BLACK
+
+        assert engine.offer_double(Color.WHITE) is False
+        # Cube value should remain unchanged
+        assert engine.state.cube_value == 1
+        assert engine.state.double_offered is False
+
+    def test_can_double_restored_after_resign_rejected(self):
+        """After a resignation is rejected, doubling is available again."""
+        engine = BackgammonEngine()
+        engine.state.status = GameStatus.ROLLING
+        engine.state.current_turn = Color.WHITE
+        engine.state.cube_owner = None
+
+        # Offer resignation
+        engine.state.resign_offered = True
+        engine.state.resign_offered_by = Color.BLACK
+        assert engine.can_double(Color.WHITE) is False
+
+        # Reject resignation clears the flag
+        engine.reject_resign(Color.WHITE)
+        assert engine.can_double(Color.WHITE) is True
+
+
+# -----------------------------------------------------------------------
 # Full-turn enumeration
 # -----------------------------------------------------------------------
 
