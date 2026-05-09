@@ -179,9 +179,13 @@ def test_parse_notation_bearoff_white():
 
 
 def test_parse_notation_bearoff_black():
-    # black bears off to 25, bar is 0
+    # black bears off to 25, bar is 0.
+    # gnubg outputs point numbers in the player-on-roll's perspective.
+    # For black, gnubg point P = backend point 25-P.
+    # "bar/3" → bar(0) to gnubg 3 = backend 22
+    # "19/off" → gnubg 19 = backend 6 to off(25)
     steps = parse_notation_steps("bar/3 19/off", "black")
-    assert steps == [(0, 3), (19, 25)]
+    assert steps == [(0, 22), (6, 25)]
 
 
 def test_parse_notation_repeat_suffix():

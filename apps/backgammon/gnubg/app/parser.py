@@ -340,7 +340,13 @@ def parse_notation_steps(notation: str, turn: str) -> list[tuple[int, int]]:
             return bar_for_turn
         if t == "off":
             return off_for_turn
-        return int(t)
+        pt = int(t)
+        # gnubg outputs point numbers in the player-on-roll's perspective.
+        # For white this matches the backend's absolute indexing (1=home).
+        # For black the board is mirrored: gnubg's point P = backend 25-P.
+        if turn == "black":
+            pt = 25 - pt
+        return pt
 
     for segment in (notation or "").strip().split():
         # Check for repeat suffix: "13/7(2)" → repeat=2
