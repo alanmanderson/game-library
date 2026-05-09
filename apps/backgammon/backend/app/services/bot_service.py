@@ -284,6 +284,67 @@ def _evaluate_position_heuristic(engine, color) -> float:
     return score
 
 
+def _should_double_heuristic(engine, bot_color) -> bool:
+    """Decide whether medium bot should offer a double using pip count."""
+    state = engine.state
+    is_white = bot_color == Color.WHITE
+
+    # Never double if we have checkers on the bar
+    own_bar = state.bar_white if is_white else state.bar_black
+    if own_bar > 0:
+        return False
+
+    own_pips = opp_pips = 0
+    for i in range(1, 25):
+        val = state.points[i]
+        if is_white:
+            if val > 0:
+                own_pips += val * i
+            elif val < 0:
+                opp_pips += (-val) * (25 - i)
+        else:
+            if val < 0:
+                own_pips += (-val) * (25 - i)
+            elif val > 0:
+                opp_pips += val * i
+    own_pips += own_bar * 25
+    opp_pips += (state.bar_black if is_white else state.bar_white) * 25
+
+    if own_pips == 0:
+        return True  # About to bear off all checkers
+
+    pip_lead = opp_pips - own_pips
+    return pip_lead >= 15 and pip_lead / own_pips >= 0.20
+
+
+def _should_accept_heuristic(engine, bot_color) -> bool:
+    """Decide whether medium bot should accept a double using pip count."""
+    state = engine.state
+    is_white = bot_color == Color.WHITE
+
+    own_pips = opp_pips = 0
+    for i in range(1, 25):
+        val = state.points[i]
+        if is_white:
+            if val > 0:
+                own_pips += val * i
+            elif val < 0:
+                opp_pips += (-val) * (25 - i)
+        else:
+            if val < 0:
+                own_pips += (-val) * (25 - i)
+            elif val > 0:
+                opp_pips += val * i
+    own_pips += (state.bar_white if is_white else state.bar_black) * 25
+    opp_pips += (state.bar_black if is_white else state.bar_white) * 25
+
+    if own_pips == 0:
+        return True  # About to win, always take
+
+    pip_deficit = own_pips - opp_pips
+    return pip_deficit / own_pips < 0.30
+
+
 # All 21 distinct dice outcomes: (die1, die2, die_values, probability)
 _DICE_OUTCOMES: list[tuple[int, int, list[int], float]] = []
 for _d1 in range(1, 7):
@@ -771,6 +832,12 @@ async def execute_bot_turn(table_id: str) -> None:
                             should_accept = ml_bot.should_accept_double(engine)
                         except (ValueError, IndexError, KeyError):
                             pass
+                elif difficulty == "medium":
+                    bot_color = get_bot_color(table_id)
+                    if bot_color:
+                        should_accept = _should_accept_heuristic(engine, bot_color)
+                elif difficulty == "easy":
+                    should_accept = random.random() < 0.70
                 async with async_session() as db:
                     if should_accept:
                         await game_manager.accept_double(db, table_id, BOT_PLAYER_ID)
@@ -778,6 +845,52 @@ async def execute_bot_turn(table_id: str) -> None:
                         await game_manager.decline_double(db, table_id, BOT_PLAYER_ID)
                     await db.commit()
                     await _send_game_state_to_all(table_id, db=db)
+
+        # --- Consider offering a double (before rolling) ---
+        async with game_manager._get_lock(table_id):
+            engine = game_manager.get_engine(table_id)
+            if not engine or engine.state.status == GameStatus.FINISHED:
+                return
+            bot_color = get_bot_color(table_id)
+            if bot_color and engine.can_double(bot_color):
+                should_offer = False
+                difficulty = get_bot_difficulty(table_id)
+
+                if difficulty == "gnu":
+                    gnu_result = await _cube_decision_gnu(engine)
+                    if gnu_result is not None:
+                        should_offer, _ = gnu_result
+                    else:
+                        v2_bot = _load_v2_bot()
+                        if v2_bot is not None:
+                            try:
+                                should_offer = v2_bot.should_double(engine)
+                            except (ValueError, IndexError, KeyError):
+                                pass
+                elif difficulty == "expert":
+                    v2_bot = _load_v2_bot()
+                    if v2_bot is not None:
+                        try:
+                            should_offer = v2_bot.should_double(engine)
+                        except (ValueError, IndexError, KeyError):
+                            pass
+                elif difficulty == "hard":
+                    ml_bot = _load_ml_bot()
+                    if ml_bot is not None:
+                        try:
+                            should_offer = ml_bot.should_double(engine)
+                        except (ValueError, IndexError, KeyError):
+                            pass
+                elif difficulty == "medium":
+                    should_offer = _should_double_heuristic(engine, bot_color)
+                # easy: never doubles (should_offer stays False)
+
+                if should_offer:
+                    async with async_session() as db:
+                        await game_manager.offer_double(db, table_id, BOT_PLAYER_ID)
+                        await db.commit()
+                        await _send_game_state_to_all(table_id, db=db)
+                    return  # Wait for human to accept/decline
 
         # --- Roll dice (if in ROLLING phase) ---
         bot_color = get_bot_color(table_id)
