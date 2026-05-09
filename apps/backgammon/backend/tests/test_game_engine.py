@@ -1522,3 +1522,177 @@ class TestEnumerateCompleteTurns:
                  engine.state.bar_black, engine.state.off_white,
                  engine.state.off_black, list(engine.state.remaining_dice))
         assert before == after
+
+
+# -----------------------------------------------------------------------
+# Combined move hit tracking (issue #180)
+# -----------------------------------------------------------------------
+
+class TestCombinedMoveHitTracking:
+    """Tests that combined moves correctly record intermediate hits in
+    turn_moves and notation.
+
+    Fixes issue #180: combined moves previously lost intermediate hit
+    information because only the combined Move(from, to) was recorded
+    instead of the decomposed step moves.
+    """
+
+    def test_combined_move_records_step_moves(self):
+        """A combined move should record decomposed steps in turn_moves."""
+        board = empty_board()
+        board[13] = 2
+        engine = setup_engine_for_move(board, Color.WHITE, die1=3, die2=1,
+                                       off_white=13)
+        engine.make_move(Move(13, 9))
+        # Should record two step moves, not one combined move.
+        assert len(engine.state.turn_moves) == 2
+        # Steps should chain: first move ends where second begins.
+        assert engine.state.turn_moves[0].from_point == 13
+        assert engine.state.turn_moves[0].to_point == engine.state.turn_moves[1].from_point
+        assert engine.state.turn_moves[1].to_point == 9
+
+    def test_intermediate_hit_recorded_in_turn_moves(self):
+        """When a combined move hits at an intermediate point, the hit
+        should appear in the decomposed step moves in turn_moves."""
+        board = empty_board()
+        board[13] = 1
+        board[10] = -1  # blot at intermediate point
+        board[12] = -2  # block die=1-first path so only 13->10->9 works
+        engine = setup_engine_for_move(board, Color.WHITE, die1=3, die2=1,
+                                       off_white=14)
+        engine.make_move(Move(13, 9))
+
+        # Step 1: 13->10, hitting the blot.
+        assert engine.state.turn_moves[0] == Move(13, 10, is_hit=True)
+        # Step 2: 10->9, no hit.
+        assert engine.state.turn_moves[1] == Move(10, 9, is_hit=False)
+
+    def test_intermediate_hit_notation(self):
+        """Notation should show '*' at the intermediate hit point."""
+        board = empty_board()
+        board[13] = 1
+        board[10] = -1  # blot at intermediate
+        board[12] = -2  # block the non-hitting path
+        engine = setup_engine_for_move(board, Color.WHITE, die1=3, die2=1,
+                                       off_white=14)
+        engine.make_move(Move(13, 9))
+
+        notation = moves_to_notation(engine.state.turn_moves, Color.WHITE)
+        # Should show the hit at point 10: "13/10*/9"
+        assert notation == "13/10*/9"
+
+    def test_combined_move_no_hit_notation(self):
+        """Combined move with no hits should produce clean notation."""
+        board = empty_board()
+        board[13] = 2
+        engine = setup_engine_for_move(board, Color.WHITE, die1=3, die2=1,
+                                       off_white=13)
+        engine.make_move(Move(13, 9))
+
+        notation = moves_to_notation(engine.state.turn_moves, Color.WHITE)
+        # No hits anywhere: "13/12/9" or "13/10/9" depending on path.
+        assert "*" not in notation
+        # Should be a chain notation (not two separate moves).
+        assert "/" in notation
+        assert " " not in notation  # single chain, no space separator
+
+    def test_combined_hit_at_final_dest_notation(self):
+        """Combined move that hits only at the final destination."""
+        board = empty_board()
+        board[13] = 1
+        board[9] = -1  # blot at final destination
+        engine = setup_engine_for_move(board, Color.WHITE, die1=3, die2=1,
+                                       off_white=14)
+        engine.make_move(Move(13, 9, is_hit=True))
+
+        notation = moves_to_notation(engine.state.turn_moves, Color.WHITE)
+        # Hit at final: last segment should have "*"
+        assert notation.endswith("9*") or notation.endswith("/9*")
+
+    def test_combined_hit_at_both_intermediate_and_final(self):
+        """Combined move that hits at both intermediate AND final points."""
+        board = empty_board()
+        board[13] = 1
+        board[10] = -1  # blot at intermediate
+        board[9] = -1   # blot at final
+        board[12] = -2  # block the non-hitting path
+        engine = setup_engine_for_move(board, Color.WHITE, die1=3, die2=1,
+                                       off_white=14)
+        engine.make_move(Move(13, 9, is_hit=True))
+
+        # Both steps should record hits.
+        assert engine.state.turn_moves[0] == Move(13, 10, is_hit=True)
+        assert engine.state.turn_moves[1] == Move(10, 9, is_hit=True)
+        notation = moves_to_notation(engine.state.turn_moves, Color.WHITE)
+        assert notation == "13/10*/9*"
+
+    def test_combined_move_black_intermediate_hit(self):
+        """Black combined move with intermediate hit works correctly."""
+        board = empty_board()
+        board[12] = -1
+        board[15] = 1   # white blot at intermediate (die=3 first)
+        board[13] = 2   # block die=1-first path
+        engine = setup_engine_for_move(board, Color.BLACK, die1=3, die2=1,
+                                       off_black=14)
+        engine.make_move(Move(12, 16))
+
+        # Step 1: 12->15, hitting the white blot.
+        assert engine.state.turn_moves[0] == Move(12, 15, is_hit=True)
+        # Step 2: 15->16, no hit.
+        assert engine.state.turn_moves[1] == Move(15, 16, is_hit=False)
+        notation = moves_to_notation(engine.state.turn_moves, Color.BLACK)
+        assert notation == "12/15*/16"
+
+    def test_undo_after_combined_move_restores_turn_moves(self):
+        """Undoing a combined move should restore turn_moves correctly."""
+        board = empty_board()
+        board[13] = 1
+        board[10] = -1  # blot at intermediate
+        board[12] = -2  # block non-hitting path
+        engine = setup_engine_for_move(board, Color.WHITE, die1=3, die2=1,
+                                       off_white=14)
+        assert len(engine.state.turn_moves) == 0
+
+        engine.make_move(Move(13, 9))
+        assert len(engine.state.turn_moves) == 2
+
+        engine.undo_turn()
+        assert len(engine.state.turn_moves) == 0
+        # Board should be restored too.
+        assert engine.state.points[13] == 1
+        assert engine.state.points[10] == -1
+
+    def test_make_move_matches_by_coordinates(self):
+        """make_move should match moves by coordinates, not requiring
+        the caller to know the is_hit flag."""
+        board = empty_board()
+        board[13] = 1
+        board[10] = -1
+        board[12] = -2  # force hitting path
+        engine = setup_engine_for_move(board, Color.WHITE, die1=3, die2=1,
+                                       off_white=14)
+        # Caller passes Move without is_hit — should still work.
+        result = engine.make_move(Move(13, 9))
+        assert result is True
+        assert engine.state.points[9] == 1
+        assert engine.state.bar_black == 1
+
+    def test_history_records_step_moves_for_combined(self):
+        """moves_history should contain the decomposed steps after the
+        turn ends, not the combined move."""
+        board = empty_board()
+        board[13] = 1
+        board[10] = -1
+        board[12] = -2
+        engine = setup_engine_for_move(board, Color.WHITE, die1=3, die2=1,
+                                       off_white=14)
+        engine.make_move(Move(13, 9))
+        engine.end_turn()
+
+        # The last entry in moves_history should have the step moves.
+        assert len(engine.state.moves_history) > 0
+        color, dice, moves = engine.state.moves_history[-1]
+        assert color == Color.WHITE
+        assert len(moves) == 2
+        assert moves[0] == Move(13, 10, is_hit=True)
+        assert moves[1] == Move(10, 9, is_hit=False)
