@@ -12,7 +12,10 @@ from app.database import get_db
 from app.models import GameAnalysis, Player, Table, MoveRecord, PlayerStats, Season
 from app.schemas import (
     AnalysisResponse,
+    CubeDecision,
+    DeepDiveResponse,
     MoveAnalysis,
+    MoveCandidate,
     PlayerResponse,
     PlayerPreferencesUpdate,
     TableCreate,
@@ -765,6 +768,7 @@ async def get_game_analysis(
     table_id: str,
     limit: int = Query(100, ge=1, le=500),
     ply: int = Query(2, ge=0, le=3),
+    force: bool = Query(False),
     db: AsyncSession = Depends(get_db),
     current_player: Player = Depends(get_current_player),
 ) -> AnalysisResponse:
@@ -781,6 +785,9 @@ async def get_game_analysis(
     The ``ply`` parameter controls the evaluation depth when gnubg is
     available: 0 (fast neural net), 2 (standard), or 3 (deep, slow).
     Defaults to 2.
+
+    The ``force`` parameter, when True, clears the cached analysis
+    and recomputes from scratch. Used by the re-analyze flow.
 
     Policy: only participants (the human white or black player of the
     table) may view the analysis.  Replays remain public, but move-quality
@@ -822,6 +829,14 @@ async def get_game_analysis(
 
     # --- Check cached analysis ---
     cached = await db.get(GameAnalysis, table_id)
+
+    # When force=True, clear the existing cache to trigger recomputation.
+    if force and cached is not None:
+        # Don't interrupt an already-running analysis.
+        if cached.status != "running":
+            await db.delete(cached)
+            await db.commit()
+            cached = None
 
     # If a background analysis is running at the requested ply, return progress.
     if cached is not None and cached.status == "running" and cached.ply == ply:
@@ -1021,6 +1036,167 @@ async def get_game_analysis(
         analysis_source=analysis_source,
         analysis_ply=ply,
         status="complete",
+    )
+
+
+@router.get(
+    "/tables/{table_id}/analysis/deepdive/{move_number}",
+    response_model=DeepDiveResponse,
+)
+async def get_position_deep_dive(
+    table_id: str,
+    move_number: int,
+    db: AsyncSession = Depends(get_db),
+    current_player: Player = Depends(get_current_player),
+) -> DeepDiveResponse:
+    """Run a maximum-depth analysis on a single position.
+
+    Returns full win probabilities, equity values, top candidate moves,
+    and cube decision for the given move in the game. Uses gnubg at
+    3-ply depth for the highest accuracy available.
+    """
+    import asyncio
+    import time
+
+    from app.game_engine import BackgammonEngine, Color
+    from app.services import gnubg_client
+
+    table = await db.get(Table, table_id)
+    if not table:
+        raise HTTPException(status_code=404, detail="Table not found")
+
+    participant_ids = {table.white_player_id, table.black_player_id}
+    if current_player.id not in participant_ids:
+        raise HTTPException(
+            status_code=403,
+            detail="Only players who participated in this game may view its analysis.",
+        )
+
+    # Load the target move and the one before it (for pre-move state).
+    records_result = await db.execute(
+        select(MoveRecord)
+        .where(MoveRecord.table_id == table_id)
+        .where(MoveRecord.move_number.in_([move_number - 1, move_number]))
+        .order_by(MoveRecord.move_number)
+    )
+    records = records_result.scalars().all()
+
+    target_record = None
+    prev_record = None
+    for r in records:
+        if r.move_number == move_number:
+            target_record = r
+        elif r.move_number == move_number - 1:
+            prev_record = r
+
+    if not target_record:
+        raise HTTPException(status_code=404, detail="Move not found")
+
+    player_color = (
+        "white" if target_record.player_id == table.white_player_id else "black"
+    )
+
+    # Get pre-move board state from the previous move's snapshot
+    # (or initial state for move 1).
+    if prev_record and prev_record.game_state_after:
+        pre_move_state = prev_record.game_state_after
+    else:
+        pre_move_state = BackgammonEngine().get_state_snapshot()
+        # Fix starting player if first move was black.
+        if target_record.player_id == table.black_player_id:
+            pre_move_state["current_turn"] = "black"
+
+    # Parse dice from the move record.
+    dice_parts = target_record.dice_roll.split("-")
+    die1, die2 = int(dice_parts[0]), int(dice_parts[1])
+
+    # Build gnubg board payload.
+    turn = Color.WHITE if player_color == "white" else Color.BLACK
+    board = gnubg_client._board_payload(
+        pre_move_state,
+        turn,
+        cube_value=pre_move_state.get("cube_value", 1),
+        cube_owner=(
+            Color.WHITE if pre_move_state.get("cube_owner") == "white"
+            else Color.BLACK if pre_move_state.get("cube_owner") == "black"
+            else None
+        ),
+    )
+
+    start_time = time.monotonic()
+
+    # Run gnubg calls concurrently.
+    eval_result, best_result, cube_result = await asyncio.gather(
+        gnubg_client.evaluate(board, ply=3),
+        gnubg_client.best_move(board, [die1, die2], ply=3),
+        gnubg_client.cube_decision(board, ply=3),
+    )
+
+    elapsed_ms = int((time.monotonic() - start_time) * 1000)
+
+    # Parse evaluation result.
+    win_prob = None
+    win_g_prob = None
+    win_bg_prob = None
+    lose_g_prob = None
+    lose_bg_prob = None
+    cubeless_equity = None
+    cubeful_equity = None
+
+    if eval_result:
+        probs = eval_result.get("probs", {})
+        win_prob = probs.get("win")
+        win_g_prob = probs.get("win_g", probs.get("win_gammon"))
+        win_bg_prob = probs.get("win_bg", probs.get("win_backgammon"))
+        lose_g_prob = probs.get("lose_g", probs.get("lose_gammon"))
+        lose_bg_prob = probs.get("lose_bg", probs.get("lose_backgammon"))
+        cubeless_equity = eval_result.get("equity")
+        cubeful_equity = eval_result.get("cubeful_equity")
+
+    lose_prob = (1.0 - win_prob) if win_prob is not None else None
+
+    # Parse top candidate moves.
+    top_moves: list[MoveCandidate] = []
+    if best_result:
+        candidates = best_result.get("candidates", [])
+        for i, c in enumerate(candidates[:5]):
+            top_moves.append(MoveCandidate(
+                rank=i + 1,
+                notation=c.get("notation", ""),
+                equity=c.get("equity", 0.0),
+                equity_diff=c.get("equity_diff", 0.0),
+                probs=c.get("probs"),
+            ))
+
+    # Parse cube decision.
+    cube_dec = None
+    if cube_result:
+        cube_dec = CubeDecision(
+            action=cube_result.get("action", cube_result.get("recommendation", "")),
+            equity_no_double=cube_result.get("equity_no_double"),
+            equity_double_take=cube_result.get("equity_double_take"),
+            equity_double_drop=cube_result.get("equity_double_drop"),
+        )
+
+    return DeepDiveResponse(
+        table_id=table_id,
+        move_number=move_number,
+        player_color=player_color,
+        dice_roll=target_record.dice_roll,
+        moves_notation=target_record.moves_notation,
+        win_prob=win_prob,
+        win_g_prob=win_g_prob,
+        win_bg_prob=win_bg_prob,
+        lose_prob=lose_prob,
+        lose_g_prob=lose_g_prob,
+        lose_bg_prob=lose_bg_prob,
+        cubeless_equity=cubeless_equity,
+        cubeful_equity=cubeful_equity,
+        top_moves=top_moves,
+        cube_decision=cube_dec,
+        source="gnubg",
+        ply=3,
+        analysis_time_ms=elapsed_ms,
     )
 
 

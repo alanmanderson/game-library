@@ -915,3 +915,192 @@
     display: none;
   }
 }
+
+/* ── Re-analyze button ─────────────────────────────────────────────────── */
+
+.replay-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.replay-reanalyze-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(212, 168, 67, 0.35);
+  background: rgba(212, 168, 67, 0.06);
+  color: var(--accent, #d4a843);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  white-space: nowrap;
+}
+
+.replay-reanalyze-btn:hover:not(:disabled) {
+  background: rgba(212, 168, 67, 0.14);
+  border-color: var(--accent, #d4a843);
+}
+
+.replay-reanalyze-btn--running {
+  opacity: 0.85;
+  cursor: default;
+}
+
+.replay-reanalyze-spin {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: replay-spin 0.9s linear infinite;
+}
+
+@keyframes replay-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Freshness banner ──────────────────────────────────────────────────── */
+
+.replay-freshness {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: linear-gradient(90deg, rgba(212, 168, 67, 0.08), transparent 80%);
+  border: 1px solid rgba(212, 168, 67, 0.25);
+  border-radius: 6px;
+  font-size: 0.78rem;
+  color: var(--text-secondary, #9a9ab0);
+  width: 100%;
+  max-width: 860px;
+}
+
+.replay-freshness strong {
+  color: var(--accent, #d4a843);
+}
+
+/* ── Re-analysis progress card ─────────────────────────────────────────── */
+
+.replay-progress-card {
+  width: 100%;
+  max-width: 860px;
+  background: var(--bg-secondary, #22223a);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.replay-progress-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.replay-progress-title {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-primary, #e8e8e8);
+}
+
+.replay-progress-caption {
+  font-size: 0.78rem;
+  color: var(--text-secondary, #9a9ab0);
+}
+
+.replay-progress-pct {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 1.6rem;
+  color: var(--accent, #d4a843);
+  font-feature-settings: "tnum";
+}
+
+.replay-progress-track {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.replay-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent, #d4a843), #f0d078);
+  border-radius: 3px;
+  box-shadow: 0 0 10px rgba(212, 168, 67, 0.45);
+  transition: width 0.5s ease;
+}
+
+.replay-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--text-secondary, #9a9ab0);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-feature-settings: "tnum";
+}
+
+.replay-progress-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: linear-gradient(90deg, rgba(212, 168, 67, 0.08), transparent 80%);
+  border: 1px solid rgba(212, 168, 67, 0.25);
+  border-radius: 6px;
+  font-size: 0.75rem;
+  color: var(--text-secondary, #9a9ab0);
+}
+
+.replay-progress-note strong {
+  color: var(--accent, #d4a843);
+}
+
+/* ── Deep-dive trigger button ──────────────────────────────────────────── */
+
+.replay-deepdive-trigger {
+  display: flex;
+  justify-content: center;
+}
+
+.replay-deepdive-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary, #9a9ab0);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.replay-deepdive-btn:hover:not(:disabled) {
+  color: var(--accent, #d4a843);
+  border-color: var(--accent, #d4a843);
+  background: rgba(212, 168, 67, 0.06);
+}
+
+.replay-deepdive-btn--active {
+  color: var(--accent, #d4a843);
+  border-color: rgba(212, 168, 67, 0.35);
+  background: rgba(212, 168, 67, 0.1);
+}
+
+.replay-deepdive-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
