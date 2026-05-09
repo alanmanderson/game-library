@@ -1162,7 +1162,13 @@ class BackgammonEngine:
             return False
 
         valid = self.get_valid_moves()
-        if move not in valid:
+        # Match by coordinates only so callers don't need to know is_hit.
+        matched: Optional[Move] = None
+        for v in valid:
+            if v.from_point == move.from_point and v.to_point == move.to_point:
+                matched = v
+                break
+        if matched is None:
             return False
 
         color = self.state.current_turn
@@ -1170,24 +1176,26 @@ class BackgammonEngine:
         # Save snapshot before applying the move so undo can revert it.
         snap = self._snapshot_internals()
         snap["remaining_dice"] = list(self.state.remaining_dice)
-        snap["turn_moves"] = [Move(m.from_point, m.to_point) for m in self.state.turn_moves]
+        snap["turn_moves"] = [Move(m.from_point, m.to_point, m.is_hit) for m in self.state.turn_moves]
         self._move_snapshots.append(snap)
 
         # Try single-die move first.
-        die_used = self._die_value_for_move(color, move)
+        die_used = self._die_value_for_move(color, matched)
         if die_used is not None and die_used in self.state.remaining_dice:
-            self._apply_move_internal(color, move)
+            self._apply_move_internal(color, matched)
             self.state.remaining_dice.remove(die_used)
-            self.state.turn_moves.append(move)
+            self.state.turn_moves.append(matched)
         else:
             # Try combined (multi-die) move.
-            path = self._find_combined_path(color, move)
+            path = self._find_combined_path(color, matched)
             if path is None:
                 return False
             for step_move, die_val in path:
                 self._apply_move_internal(color, step_move)
                 self.state.remaining_dice.remove(die_val)
-            self.state.turn_moves.append(move)
+            # Record the decomposed step moves so intermediate hit
+            # information is preserved in turn_moves and notation.
+            self.state.turn_moves.extend(step_move for step_move, _ in path)
 
         self._cached_valid_moves = None
 
@@ -1307,7 +1315,7 @@ class BackgammonEngine:
         snap = self._move_snapshots.pop()
         self._restore_internals(snap)
         self.state.remaining_dice = list(snap["remaining_dice"])
-        self.state.turn_moves = [Move(m.from_point, m.to_point) for m in snap["turn_moves"]]
+        self.state.turn_moves = [Move(m.from_point, m.to_point, m.is_hit) for m in snap["turn_moves"]]
         self._cached_valid_moves = None
         return True
 
