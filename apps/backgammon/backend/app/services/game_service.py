@@ -761,12 +761,12 @@ class GameManager:
         success, winner = engine.decline_double(color)
         if not success:
             raise ValueError("No double to decline")
+        await self._record_cube_move(db, table_id, player_id, "Drops", engine)
+        await _increment_cube_counter(db, player_id, "cube_declines")
         await self._finish_game(db, table_id, engine)
         table = await db.get(Table, table_id)
         if table:
             table.game_state = engine.get_state_snapshot()
-        await _increment_cube_counter(db, player_id, "cube_declines")
-        await self._record_cube_move(db, table_id, player_id, "Drops", engine)
         # Persist the CubeActionRecord using the pre-decline equity we
         # captured above. We inline the write here (rather than calling
         # _record_cube_action) so the post-finish engine state doesn't
@@ -825,7 +825,7 @@ class GameManager:
         if not success:
             raise ValueError("No resignation to accept")
 
-        await self._finish_game(db, table_id, engine)
+        await self._finish_game(db, table_id, engine, is_resignation=True)
 
         # Override win_type to "resignation" in DB for display
         table = await db.get(Table, table_id)
@@ -935,6 +935,60 @@ class GameManager:
             )
         )
 
+    async def _record_game_result(
+        self,
+        db: AsyncSession,
+        table_id: str,
+        engine: BackgammonEngine,
+        table: "Table",
+        is_resignation: bool = False,
+    ) -> None:
+        """Record a game-result entry in move history so the history panel shows
+        who won, how they won, and how many points were awarded.
+
+        Uses the same dice_roll="" convention as cube-action records.
+        """
+        winner_color = engine.state.winner
+        win_type = engine.state.win_type
+        cube_value = engine.state.cube_value
+
+        if winner_color is None:
+            return  # No winner yet (shouldn't happen, but guard)
+
+        winner_label = winner_color.value.capitalize()  # "White" or "Black"
+        base_score = win_type.value if win_type else 1
+        points = base_score * cube_value
+        pts_word = "pt" if points == 1 else "pts"
+
+        win_type_name = win_type.name.lower() if win_type else "normal"
+        if win_type_name == "normal":
+            suffix = " (resignation)" if is_resignation else ""
+            notation = f"{winner_label} wins {points} {pts_word}{suffix}"
+        else:
+            notation = f"{winner_label} wins {points} {pts_word} ({win_type_name})"
+
+        result = await db.execute(
+            select(func.count(MoveRecord.id)).where(
+                MoveRecord.table_id == table_id
+            )
+        )
+        existing_count = result.scalar()
+        winner_player_id = (
+            table.white_player_id
+            if winner_color == Color.WHITE
+            else table.black_player_id
+        )
+        db.add(
+            MoveRecord(
+                table_id=table_id,
+                player_id=winner_player_id,
+                move_number=existing_count + 1,
+                dice_roll="",
+                moves_notation=notation,
+                game_state_after=engine.get_state_snapshot(),
+            )
+        )
+
     async def _record_moves(
         self, db: AsyncSession, table_id: str, player_id: str, engine: BackgammonEngine
     ) -> None:
@@ -969,7 +1023,8 @@ class GameManager:
         db.add(record)
 
     async def _finish_game(
-        self, db: AsyncSession, table_id: str, engine: BackgammonEngine
+        self, db: AsyncSession, table_id: str, engine: BackgammonEngine,
+        is_resignation: bool = False,
     ) -> None:
         """Handle game completion: update the table record and player stats.
 
@@ -1056,6 +1111,10 @@ class GameManager:
         # Advance tournament bracket if this table is part of a tournament match
         if match_over and table.winner_id:
             await self._process_tournament_advancement(db, table_id, table.winner_id)
+
+        # Record a game-result entry in move history so the history panel shows
+        # who won and by how much.
+        await self._record_game_result(db, table_id, engine, table, is_resignation=is_resignation)
 
         # Record challenge progress for each non-bot participant. Fires on every
         # individual game finish (both game_over mid-match and match-ending

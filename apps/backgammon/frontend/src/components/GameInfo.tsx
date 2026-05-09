@@ -4,6 +4,22 @@ import { getGameHistory } from "../services/api";
 import { notationToPlayerPerspective } from "../utils/notation";
 import "./styles/GameInfo.css";
 
+/**
+ * Returns true when a MoveRecord represents a cube action or game-result event
+ * rather than a normal checker move (i.e. dice_roll is empty).
+ */
+function isEventRecord(record: MoveRecord): boolean {
+  return record.dice_roll === "";
+}
+
+/**
+ * Returns true when a MoveRecord is a game-result summary line.
+ * These are written by _record_game_result and look like "White wins 2 pts (gammon)".
+ */
+function isGameResultRecord(record: MoveRecord): boolean {
+  return isEventRecord(record) && /^(White|Black) wins/.test(record.moves_notation);
+}
+
 const PAGE_SIZE = 1000;
 
 const STRATEGY_LABELS: Record<string, string> = {
@@ -118,11 +134,24 @@ function GameInfo({ table, gameStatus, isOpen: externalIsOpen, onToggle }: GameI
                   record.player_id === table.black_player?.id
                     ? "black" as const
                     : "white" as const;
+                const isEvent = isEventRecord(record);
+                const isResult = isGameResultRecord(record);
                 return (
-                  <div key={record.move_number} className="move-history-entry">
-                    <strong>#{record.move_number}</strong>{" "}
+                  <div
+                    key={record.move_number}
+                    className={
+                      isResult
+                        ? "move-history-entry move-history-result"
+                        : isEvent
+                        ? "move-history-entry move-history-event"
+                        : "move-history-entry"
+                    }
+                  >
+                    {!isEvent && <strong>#{record.move_number}</strong>}{" "}
                     {record.dice_roll ? `[${record.dice_roll}] ` : ""}
-                    {notationToPlayerPerspective(record.moves_notation, moverColor)}
+                    {isEvent
+                      ? record.moves_notation
+                      : notationToPlayerPerspective(record.moves_notation, moverColor)}
                     {record.bot_strategy && (
                       <span className="bot-strategy-tag" title={record.bot_strategy}>
                         {STRATEGY_LABELS[record.bot_strategy] ?? record.bot_strategy}

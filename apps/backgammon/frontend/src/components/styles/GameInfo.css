@@ -69,6 +69,24 @@
   font-style: italic;
 }
 
+/* Cube action events (Doubles, Takes, Drops) */
+.move-history-event {
+  color: var(--accent);
+  font-style: italic;
+  padding-left: 0.75rem;
+  opacity: 0.9;
+}
+
+/* Game result line (e.g. "White wins 2 pts (gammon)") */
+.move-history-result {
+  color: var(--success);
+  font-weight: 600;
+  text-align: center;
+  padding: 0.3rem 0.4rem;
+  margin-top: 0.15rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 .move-history-empty {
   color: var(--text-secondary);
   font-size: 0.85rem;
