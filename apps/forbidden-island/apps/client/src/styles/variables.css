@@ -1,0 +1,116 @@
+/* ─── Palette CSS Custom Properties ──────────────────────────────────── */
+/* Each palette is the same role-mapped set. Switch by setting data-palette
+   on a parent element to apply a different set. Default is "ocean". */
+
+:root,
+[data-palette="ocean"] {
+  --c-ink: #08161c;
+  --c-ink2: #0e2229;
+  --c-ink3: #143038;
+  --c-ink4: #1d4048;
+  --c-sea: #1a4d5a;
+  --c-sea2: #286b7a;
+  --c-seaHi: #3b97a8;
+  --c-parch: #f0e3c2;
+  --c-sand: #e8d4a6;
+  --c-sand2: #d6b97a;
+  --c-sand3: #b1925a;
+  --c-brass: #caa052;
+  --c-brassHi: #e8c47a;
+  --c-brassLo: #8a6b30;
+  --c-inkText: #231a10;
+  --c-inkText2: #5a4a2a;
+  --c-danger: #c9523a;
+  --c-flame: #e07140;
+  --c-leaf: #5e8a3a;
+  --c-role_explorer: #7aa544;
+  --c-role_diver: #231a10;
+  --c-role_engineer: #c33e2c;
+  --c-role_pilot: #3b7cc4;
+  --c-role_messenger: #f3ead4;
+  --c-role_navigator: #e0b342;
+}
+
+[data-palette="storm"] {
+  --c-ink: #0a0d12;
+  --c-ink2: #11161e;
+  --c-ink3: #1a212c;
+  --c-ink4: #252e3c;
+  --c-sea: #23415a;
+  --c-sea2: #3a5e7e;
+  --c-seaHi: #5a86ab;
+  --c-parch: #ecdfc1;
+  --c-sand: #d8c499;
+  --c-sand2: #b89c64;
+  --c-sand3: #8d764a;
+  --c-brass: #b88a3a;
+  --c-brassHi: #d9aa5a;
+  --c-brassLo: #6e5220;
+  --c-inkText: #0e1218;
+  --c-inkText2: #3d4654;
+  --c-danger: #d44a3e;
+  --c-flame: #e07a35;
+  --c-leaf: #6b8c3a;
+  --c-role_explorer: #7aa544;
+  --c-role_diver: #0e1218;
+  --c-role_engineer: #c33e2c;
+  --c-role_pilot: #3b7cc4;
+  --c-role_messenger: #f3ead4;
+  --c-role_navigator: #e0b342;
+}
+
+[data-palette="tropic"] {
+  --c-ink: #04282e;
+  --c-ink2: #0b3a40;
+  --c-ink3: #114c54;
+  --c-ink4: #1b6068;
+  --c-sea: #1c7b87;
+  --c-sea2: #2ea0ad;
+  --c-seaHi: #5fc4cf;
+  --c-parch: #fbeed3;
+  --c-sand: #f7dca8;
+  --c-sand2: #e4ba74;
+  --c-sand3: #b88f48;
+  --c-brass: #e0a44a;
+  --c-brassHi: #f5c878;
+  --c-brassLo: #8e6020;
+  --c-inkText: #0a1a1c;
+  --c-inkText2: #3a5258;
+  --c-danger: #e35a3a;
+  --c-flame: #ee8240;
+  --c-leaf: #76b94a;
+  --c-role_explorer: #8bc34a;
+  --c-role_diver: #0a1a1c;
+  --c-role_engineer: #e04030;
+  --c-role_pilot: #3aa0e4;
+  --c-role_messenger: #fff4d8;
+  --c-role_navigator: #f5c440;
+}
+
+[data-palette="dusk"] {
+  --c-ink: #0c0a1a;
+  --c-ink2: #161227;
+  --c-ink3: #211a36;
+  --c-ink4: #2e2447;
+  --c-sea: #3b2f5a;
+  --c-sea2: #5a487d;
+  --c-seaHi: #8a72b0;
+  --c-parch: #ecdcc6;
+  --c-sand: #d8c0a0;
+  --c-sand2: #b39370;
+  --c-sand3: #876b48;
+  --c-brass: #c98f54;
+  --c-brassHi: #e4ad74;
+  --c-brassLo: #6f4a22;
+  --c-inkText: #16101e;
+  --c-inkText2: #4a3d54;
+  --c-danger: #d35265;
+  --c-flame: #dc7048;
+  --c-leaf: #7a9c52;
+  --c-role_explorer: #9cc060;
+  --c-role_diver: #16101e;
+  --c-role_engineer: #d6483e;
+  --c-role_pilot: #5a8ee0;
+  --c-role_messenger: #f3e6cf;
+  --c-role_navigator: #e8b550;
+}
