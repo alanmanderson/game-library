@@ -13,9 +13,10 @@ export function ScreenBg({ children, style }: ScreenBgProps) {
     <div
       style={{
         width: '100%',
-        height: '100%',
+        minHeight: '100%',
         position: 'relative',
-        overflow: 'hidden',
+        overflowX: 'hidden',
+        overflowY: 'auto',
         background: `
           radial-gradient(80% 60% at 30% 10%, rgba(58,151,168,.10) 0%, transparent 60%),
           radial-gradient(60% 50% at 80% 90%, rgba(202,160,82,.08) 0%, transparent 60%),
