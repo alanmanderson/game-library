@@ -147,3 +147,54 @@ a {
   color: inherit;
   text-decoration: none;
 }
+
+/* ─── Responsive ────────────────────────────────────────────────────── */
+
+/* Smooth scrolling for internal navigation */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Mobile: prevent horizontal overflow, allow vertical scroll in sheets */
+@media (max-width: 767px) {
+  body {
+    overflow-x: hidden;
+  }
+
+  html, body, #root {
+    overflow: auto;
+    overflow-x: hidden;
+  }
+
+  /* Touch targets: ensure minimum 44px for interactive elements */
+  button, a, [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Exception: tiny inline elements that are part of larger touch targets */
+  .fi-cap, .fi-mono {
+    min-height: unset;
+    min-width: unset;
+  }
+}
+
+/* Tablet: allow vertical scroll if content overflows */
+@media (min-width: 768px) and (max-width: 1024px) {
+  html, body, #root {
+    overflow: hidden;
+  }
+
+  /* Touch targets for tablet */
+  button, a, [role="button"] {
+    min-height: 44px;
+  }
+}
+
+/* Prevent text size adjustment on orientation change (iOS) */
+@media (max-width: 1024px) {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+}

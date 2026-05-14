@@ -6,10 +6,13 @@ import { Frame } from '../components/ui/Frame';
 import { Button } from '../components/ui/Button';
 import { Pill } from '../components/ui/Pill';
 import { Parch } from '../components/ui/Parch';
+import { MobileHomeLayout } from '../components/layout/MobileHomeLayout';
 import { useStore } from '../store/store';
+import { useBreakpoint } from '../hooks/useBreakpoint';
 
 export function HomeScreen() {
   const navigate = useNavigate();
+  const breakpoint = useBreakpoint();
   const [name, setName] = useState(() => localStorage.getItem('fi-player-name') || '');
   const games = useStore((s) => s.gameList);
   const send = useStore((s) => s.send);
@@ -38,6 +41,23 @@ export function HomeScreen() {
     navigate(`/game/${rejoinInfo.gameId}`);
   }
 
+  // ─── Mobile layout ───────────────────────────────────────────────────
+  if (breakpoint === 'mobile') {
+    return (
+      <MobileHomeLayout
+        name={name}
+        onNameChange={setName}
+        canCreate={canCreate}
+        onCreateGame={handleCreate}
+        onJoinGame={handleJoin}
+        onRejoin={handleRejoin}
+        games={games}
+        hasRejoin={!!rejoinInfo}
+      />
+    );
+  }
+
+  // ─── Desktop / Tablet layout (existing) ───────────────────────────────
   return (
     <ScreenBg>
       <div style={{

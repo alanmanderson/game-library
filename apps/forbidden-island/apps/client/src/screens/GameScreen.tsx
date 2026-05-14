@@ -1,4 +1,5 @@
-import { useMemo, useCallback, type ReactNode } from 'react';
+import { useMemo, useCallback, useEffect, type ReactNode } from 'react';
+import { AnimatePresence } from 'framer-motion';
 import { ScreenBg } from '../components/ui/ScreenBg';
 import { BrandMark } from '../components/ui/BrandMark';
 import { Frame } from '../components/ui/Frame';
@@ -12,7 +13,23 @@ import { TreasureCard } from '../components/cards/TreasureCard';
 import { DeckStack } from '../components/cards/DeckStack';
 import { GameLog } from '../components/status/GameLog';
 import { ActionBar } from '../components/actions/ActionBar';
+import { SpecialCardBar } from '../components/actions/SpecialCardBar';
+import { TabletGameLayout } from '../components/layout/TabletGameLayout';
+import { MobileGameLayout } from '../components/layout/MobileGameLayout';
+
+// Overlays
+import { WatersRiseOverlay } from '../components/overlays/WatersRiseOverlay';
+import { DiscardOverlay } from '../components/overlays/DiscardOverlay';
+import { SwimOverlay } from '../components/overlays/SwimOverlay';
+import { HelicopterLiftOverlay } from '../components/overlays/HelicopterLiftOverlay';
+import { SandbagsOverlay } from '../components/overlays/SandbagsOverlay';
+import { NavigatorOverlay } from '../components/overlays/NavigatorOverlay';
+import { DrawPhaseOverlay } from '../components/overlays/DrawPhaseOverlay';
+
 import { useStore } from '../store/store';
+import { useBreakpoint } from '../hooks/useBreakpoint';
+import { useValidTargets } from '../hooks/useValidTargets';
+import { useAnimationQueue } from '../hooks/useAnimationQueue';
 import { flattenLayout, SAMPLE_LAYOUT } from '../data/tiles';
 import type { Tile } from '@forbidden-island/shared/types/tiles';
 import type { ClientPlayerView } from '@forbidden-island/shared/types/players';
@@ -20,13 +37,161 @@ import type { GameLogEntry } from '@forbidden-island/shared/types/game';
 import type { TreasureCard as TreasureCardType } from '@forbidden-island/shared/types/cards';
 
 export function GameScreen() {
+  const breakpoint = useBreakpoint();
   const gameState = useStore((s) => s.gameState);
   const activeMode = useStore((s) => s.activeActionMode);
-  const validTargets = useStore((s) => s.validTargets);
   const selectedTile = useStore((s) => s.selectedTile);
   const send = useStore((s) => s.send);
   const setActiveMode = useStore((s) => s.setActiveActionMode);
   const setSelectedTile = useStore((s) => s.setSelectedTile);
+  const setValidTargets = useStore((s) => s.setValidTargets);
+
+  // Overlay + animation state
+  const activeOverlay = useStore((s) => s.activeOverlay);
+  const openOverlay = useStore((s) => s.openOverlay);
+  const { isAnimating } = useAnimationQueue();
+
+  // Compute valid targets from game state + active action mode
+  const computedTargets = useValidTargets(activeMode);
+
+  // Sync computed targets into the store so other components can read them
+  useEffect(() => {
+    setValidTargets(computedTargets);
+  }, [computedTargets, setValidTargets]);
+
+  const validTargets = useStore((s) => s.validTargets);
+
+  const myId = gameState?.myPlayerId;
+  const currentPlayerIdx = gameState?.currentPlayerIndex ?? 0;
+  const currentPlayer = gameState?.players?.[currentPlayerIdx];
+  const isMyTurn = currentPlayer?.id === myId;
+  const me = gameState?.players?.find((p: ClientPlayerView) => p.id === myId);
+
+  // Block user interactions while animating or overlay is active
+  const inputBlocked = isAnimating || activeOverlay !== null;
+
+  const handleActionSelect = useCallback((id: string) => {
+    if (inputBlocked) return;
+    if (id === 'end') {
+      send({ type: 'game:action', action: { type: 'end_actions' } });
+      return;
+    }
+    // Navigator "move another" opens the Navigator overlay when selecting 'navigate'
+    // (If a navigate action exists in the action bar)
+    if (id === 'navigate' && me?.role === 'navigator') {
+      openOverlay('navigator', {});
+      return;
+    }
+    setActiveMode(activeMode === id ? null : id);
+  }, [activeMode, send, setActiveMode, inputBlocked, me?.role, openOverlay]);
+
+  const handleTileClick = useCallback((tileId: string) => {
+    // Always allow selecting tiles for info
+    setSelectedTile(tileId);
+
+    if (inputBlocked) return;
+    if (!activeMode || !isMyTurn) return;
+    const tgt = validTargets[tileId];
+    if (!tgt) return;
+
+    // find tile position
+    const tile = gameState?.tiles.find((t: Tile) => t.id === tileId);
+    if (!tile) return;
+    const pos = tile.position;
+
+    if (activeMode === 'move') {
+      send({ type: 'game:action', action: { type: 'move', targetPosition: pos } });
+    } else if (activeMode === 'shore') {
+      send({ type: 'game:action', action: { type: 'shore_up', targetPosition: pos } });
+    }
+    setActiveMode(null);
+    setSelectedTile(null);
+  }, [activeMode, isMyTurn, validTargets, gameState?.tiles, send, setActiveMode, setSelectedTile, inputBlocked]);
+
+  // Render the active overlay
+  const overlayElement = (() => {
+    switch (activeOverlay) {
+      case 'waters_rise':
+        return <WatersRiseOverlay key="waters_rise" />;
+      case 'discard':
+        return <DiscardOverlay key="discard" />;
+      case 'swim':
+        return <SwimOverlay key="swim" />;
+      case 'helicopter_lift':
+        return <HelicopterLiftOverlay key="helicopter_lift" />;
+      case 'sandbags':
+        return <SandbagsOverlay key="sandbags" />;
+      case 'navigator':
+        return <NavigatorOverlay key="navigator" />;
+      case 'draw_treasure':
+        return <DrawPhaseOverlay key="draw_treasure" mode="treasure" />;
+      case 'draw_flood':
+        return <DrawPhaseOverlay key="draw_flood" mode="flood" />;
+      default:
+        return null;
+    }
+  })();
+
+  // ─── Responsive routing ───────────────────────────────────────────────
+  const layoutContent = (() => {
+    if (breakpoint === 'mobile') {
+      return (
+        <MobileGameLayout
+          validTargets={validTargets}
+          onActionSelect={handleActionSelect}
+          onTileClick={handleTileClick}
+        />
+      );
+    }
+    if (breakpoint === 'tablet') {
+      return (
+        <TabletGameLayout
+          validTargets={validTargets}
+          onActionSelect={handleActionSelect}
+          onTileClick={handleTileClick}
+        />
+      );
+    }
+    return (
+      <DesktopGameLayout
+        validTargets={validTargets}
+        onActionSelect={handleActionSelect}
+        onTileClick={handleTileClick}
+        isAnimating={isAnimating}
+        inputBlocked={inputBlocked}
+      />
+    );
+  })();
+
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      {layoutContent}
+      {/* Overlay layer renders above all layouts */}
+      <AnimatePresence mode="wait">
+        {overlayElement}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ─── Desktop layout extracted to keep the main component clean ──────────
+
+function DesktopGameLayout({
+  validTargets,
+  onActionSelect,
+  onTileClick,
+  isAnimating,
+  inputBlocked,
+}: {
+  validTargets: Record<string, string>;
+  onActionSelect: (id: string) => void;
+  onTileClick: (tileId: string) => void;
+  isAnimating: boolean;
+  inputBlocked: boolean;
+}) {
+  const gameState = useStore((s) => s.gameState);
+  const activeMode = useStore((s) => s.activeActionMode);
+  const selectedTile = useStore((s) => s.selectedTile);
 
   // Derive board data from game state
   const tiles = useMemo(() => {
@@ -47,9 +212,9 @@ export function GameScreen() {
 
   const myId = gameState?.myPlayerId;
   const currentPlayerIdx = gameState?.currentPlayerIndex ?? 0;
-  const currentPlayer = gameState?.players[currentPlayerIdx];
+  const currentPlayer = gameState?.players?.[currentPlayerIdx];
   const isMyTurn = currentPlayer?.id === myId;
-  const me = gameState?.players.find((p: ClientPlayerView) => p.id === myId);
+  const me = gameState?.players?.find((p: ClientPlayerView) => p.id === myId);
   const myHand = me?.hand || [];
   const phase = gameState?.phase ?? 'action';
   const actionsRemaining = gameState?.actionsRemaining ?? 3;
@@ -59,7 +224,6 @@ export function GameScreen() {
     if (!gameState?.players) return {};
     const map: Record<string, ReactNode[]> = {};
     gameState.players.forEach((p: ClientPlayerView) => {
-      // find tile at player position
       const t = gameState.tiles.find(
         (tile: Tile) => tile.position.row === p.position.row && tile.position.col === p.position.col
       );
@@ -79,50 +243,14 @@ export function GameScreen() {
     return map;
   }, [gameState?.players, gameState?.tiles, currentPlayer?.id]);
 
-  // Action availability
+  // Action availability (disable when input is blocked)
   const available = useMemo(() => ({
-    move: isMyTurn && phase === 'action' && actionsRemaining > 0,
-    shore: isMyTurn && phase === 'action' && actionsRemaining > 0,
-    give: isMyTurn && phase === 'action' && actionsRemaining > 0,
-    capture: isMyTurn && phase === 'action' && actionsRemaining > 0,
-    end: isMyTurn && phase === 'action',
-  }), [isMyTurn, phase, actionsRemaining]);
-
-  const handleActionSelect = useCallback((id: string) => {
-    if (id === 'end') {
-      send({ type: 'game:action', action: { type: 'end_actions' } });
-      return;
-    }
-    setActiveMode(activeMode === id ? null : id);
-  }, [activeMode, send, setActiveMode]);
-
-  const handleTileClick = useCallback((tileId: string) => {
-    if (!activeMode || !isMyTurn) return;
-    const tgt = validTargets[tileId];
-    if (!tgt) {
-      setSelectedTile(tileId);
-      return;
-    }
-    // find tile position
-    const tile = gameState?.tiles.find((t: Tile) => t.id === tileId);
-    if (!tile) return;
-    const pos = tile.position;
-
-    if (activeMode === 'move') {
-      send({ type: 'game:action', action: { type: 'move', targetPosition: pos } });
-    } else if (activeMode === 'shore') {
-      send({ type: 'game:action', action: { type: 'shore_up', targetPosition: pos } });
-    }
-    setActiveMode(null);
-    setSelectedTile(null);
-  }, [activeMode, isMyTurn, validTargets, gameState?.tiles, send, setActiveMode, setSelectedTile]);
-
-  // Convert targets record to tile target type
-  const targetMap = useMemo(() => {
-    const m: Record<string, string> = {};
-    Object.entries(validTargets).forEach(([k, v]) => { m[k] = v; });
-    return m;
-  }, [validTargets]);
+    move: isMyTurn && phase === 'action' && actionsRemaining > 0 && !inputBlocked,
+    shore: isMyTurn && phase === 'action' && actionsRemaining > 0 && !inputBlocked,
+    give: isMyTurn && phase === 'action' && actionsRemaining > 0 && !inputBlocked,
+    capture: isMyTurn && phase === 'action' && actionsRemaining > 0 && !inputBlocked,
+    end: isMyTurn && phase === 'action' && !inputBlocked,
+  }), [isMyTurn, phase, actionsRemaining, inputBlocked]);
 
   // Log entries
   const logEntries = useMemo(() => {
@@ -170,6 +298,24 @@ export function GameScreen() {
             isYou={isMyTurn}
             phase={phase}
           />
+          {/* Animation processing indicator */}
+          {isAnimating && (
+            <div
+              className="fi-mono"
+              style={{
+                fontSize: 9,
+                color: 'var(--c-brassHi)',
+                letterSpacing: '.12em',
+                padding: '4px 10px',
+                background: 'rgba(232,196,122,.08)',
+                border: '1px solid rgba(232,196,122,.25)',
+                borderRadius: 8,
+                animation: 'fi-pulse 1.2s ease-in-out infinite',
+              }}
+            >
+              RESOLVING...
+            </div>
+          )}
         </div>
 
         {/* LEFT SIDEBAR */}
@@ -191,16 +337,19 @@ export function GameScreen() {
             tileSize={108}
             gap={9}
             states={tileStates}
-            targets={targetMap as any}
+            targets={validTargets as any}
             selected={selectedTile}
             captured={gameState?.capturedTreasures || []}
             pawnsOnTile={pawnsOnTile}
-            onTileClick={handleTileClick}
+            onTileClick={inputBlocked ? undefined : onTileClick}
           />
         </div>
 
         {/* RIGHT SIDEBAR */}
         <div style={{ gridArea: 'right', display: 'flex', flexDirection: 'column', gap: 14, overflow: 'hidden' }}>
+          {/* Special card bar for off-turn play */}
+          <SpecialCardBar />
+
           <Frame tone="ink2" padded={false} style={{ padding: 14 }}>
             <div className="fi-cap" style={{ marginBottom: 10 }}>Your Hand - {myHand.length} / 5</div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -227,7 +376,7 @@ export function GameScreen() {
             available={available}
             hint={{}}
             activeMode={activeMode}
-            onSelect={handleActionSelect}
+            onSelect={onActionSelect}
           />
         </div>
       </div>
