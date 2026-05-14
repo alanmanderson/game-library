@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ScreenBg } from '../components/ui/ScreenBg';
 import { BrandMark } from '../components/ui/BrandMark';
@@ -19,9 +19,19 @@ export function CreateGameScreen() {
   const navigate = useNavigate();
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
   const send = useStore((s) => s.send);
+  const currentLobby = useStore((s) => s.currentLobby);
+  const [creating, setCreating] = useState(false);
+
+  // Navigate to lobby when server confirms game creation
+  useEffect(() => {
+    if (creating && currentLobby) {
+      navigate(`/game/${currentLobby.gameId}/lobby`);
+    }
+  }, [creating, currentLobby, navigate]);
 
   function handleCreate() {
     const name = localStorage.getItem('fi-player-name') || 'Mariner';
+    setCreating(true);
     send({ type: 'lobby:create', playerName: name, difficulty });
   }
 

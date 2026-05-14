@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ScreenBg } from '../components/ui/ScreenBg';
 import { BrandMark } from '../components/ui/BrandMark';
@@ -15,7 +16,15 @@ export function LobbyScreen() {
   const navigate = useNavigate();
   const { id: gameId } = useParams<{ id: string }>();
   const lobby = useStore((s) => s.currentLobby);
+  const gameState = useStore((s) => s.gameState);
   const myId = useStore((s) => s.playerId);
+
+  // Navigate to game screen when game starts
+  useEffect(() => {
+    if (gameState && gameId) {
+      navigate(`/game/${gameId}`);
+    }
+  }, [gameState, gameId, navigate]);
   const send = useStore((s) => s.send);
 
   const players = lobby?.players || [];

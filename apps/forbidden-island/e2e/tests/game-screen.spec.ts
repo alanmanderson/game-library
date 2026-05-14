@@ -23,8 +23,8 @@ test.describe('Game Screen Elements', () => {
     await page1.waitForURL('**/lobby', { timeout: 10000 });
 
     // Player 1 picks Pilot
-    await page1.getByText('Pilot', { exact: true }).click();
-    await page1.waitForTimeout(500);
+    await page1.getByText('Pilot', { exact: true }).first().click();
+    await page1.waitForTimeout(1000);
 
     // Player 2: Join game
     await page2.goto('/');
@@ -36,7 +36,7 @@ test.describe('Game Screen Elements', () => {
     await page2.waitForURL('**/lobby', { timeout: 10000 });
 
     // Player 2 picks Explorer
-    await page2.getByText('Explorer', { exact: true }).click();
+    await page2.getByText('Explorer', { exact: true }).first().click();
     await page2.waitForTimeout(1000);
 
     // Start game

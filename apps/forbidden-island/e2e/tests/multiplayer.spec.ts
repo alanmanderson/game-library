@@ -38,9 +38,8 @@ test.describe('Two-Player Game Setup', () => {
     });
 
     test('Player 1 selects a role', async () => {
-      await page1.getByText('Pilot', { exact: true }).click();
-      await page1.waitForTimeout(500);
-      await expect(page1.getByText('YOU')).toBeVisible();
+      await page1.getByText('Pilot', { exact: true }).first().click();
+      await expect(page1.getByText('YOU', { exact: true })).toBeVisible({ timeout: 5000 });
     });
 
     test('Player 2 sees the game in the open expeditions list', async () => {
@@ -50,13 +49,10 @@ test.describe('Two-Player Game Setup', () => {
 
       await page2.locator('input[placeholder="Mariner..."]').fill('Bob');
 
-      // Wait for game list to populate via WebSocket
-      // The server broadcasts the game list when a new game is created
-      await page2.waitForTimeout(2000);
-
-      // Alice's game should appear in the list
+      // Wait for game list to populate via WebSocket — the server broadcasts
+      // when a new game is created, but WS needs time to connect first
       const aliceExpedition = page2.getByText("Alice's expedition");
-      await expect(aliceExpedition).toBeVisible({ timeout: 5000 });
+      await expect(aliceExpedition).toBeVisible({ timeout: 10000 });
     });
 
     test('Player 2 joins the game', async () => {
@@ -70,22 +66,21 @@ test.describe('Two-Player Game Setup', () => {
 
     test('both players see each other in the crew list', async () => {
       // Player 1 should see Bob
-      await expect(page1.getByText('Bob')).toBeVisible({ timeout: 5000 });
+      await expect(page1.getByText('Bob')).toBeVisible({ timeout: 10000 });
       // Player 2 should see Alice
-      await expect(page2.getByText('Alice')).toBeVisible({ timeout: 5000 });
+      await expect(page2.getByText('Alice')).toBeVisible({ timeout: 10000 });
 
       // Player count should be 2 / 4
-      await expect(page1.getByText('2 / 4 aboard')).toBeVisible();
-      await expect(page2.getByText('2 / 4 aboard')).toBeVisible();
+      await expect(page1.getByText('2 / 4 aboard')).toBeVisible({ timeout: 5000 });
+      await expect(page2.getByText('2 / 4 aboard')).toBeVisible({ timeout: 5000 });
     });
 
     test('Player 2 selects a role', async () => {
       // Select Explorer (Pilot is already taken by Alice)
-      await page2.getByText('Explorer', { exact: true }).click();
-      await page2.waitForTimeout(500);
+      await page2.getByText('Explorer', { exact: true }).first().click();
 
       // Player 2 should see "YOU" on their selected role
-      await expect(page2.getByText('YOU')).toBeVisible();
+      await expect(page2.getByText('YOU', { exact: true })).toBeVisible({ timeout: 5000 });
     });
 
     test('Set Sail becomes enabled when all players have roles', async () => {

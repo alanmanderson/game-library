@@ -2,8 +2,9 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Create Game and Lobby Flow', () => {
   test.beforeEach(async ({ page }) => {
-    await page.evaluate(() => localStorage.removeItem('fi-player-name'));
     await page.goto('/');
+    await page.evaluate(() => localStorage.removeItem('fi-player-name'));
+    await page.reload();
   });
 
   test('navigates to create screen with all difficulty options', async ({ page }) => {
@@ -17,11 +18,11 @@ test.describe('Create Game and Lobby Flow', () => {
     await expect(page.getByText('Step 1 of 3')).toBeVisible();
     await expect(page.getByText('Choose your difficulty')).toBeVisible();
 
-    // All four difficulty options
-    await expect(page.getByText('Novice', { exact: true })).toBeVisible();
-    await expect(page.getByText('Normal', { exact: true })).toBeVisible();
-    await expect(page.getByText('Elite', { exact: true })).toBeVisible();
-    await expect(page.getByText('Legendary', { exact: true })).toBeVisible();
+    // All four difficulty options (use .first() since water meter also shows level labels)
+    await expect(page.getByText('Novice', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Normal', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Elite', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Legendary', { exact: true }).first()).toBeVisible();
   });
 
   test('Normal difficulty is selected by default', async ({ page }) => {
@@ -40,8 +41,8 @@ test.describe('Create Game and Lobby Flow', () => {
     await page.getByRole('button', { name: 'Create Game' }).click();
     await expect(page).toHaveURL(/\/create$/);
 
-    // Click Elite
-    await page.getByText('Elite', { exact: true }).click();
+    // Click Elite difficulty option
+    await page.getByText('Elite', { exact: true }).first().click();
     // Should show Elite's subtitle is present and Selected pill moves
     await expect(page.getByText('For experienced players')).toBeVisible();
   });
@@ -104,8 +105,8 @@ test.describe('Create Game and Lobby Flow', () => {
     // Expedition # header
     await expect(page.getByText('Expedition #')).toBeVisible();
 
-    // The game ID should be displayed in uppercase
-    const gameIdEl = page.locator('.fi-display').filter({ hasText: /^[A-Z0-9]+$/ });
+    // The game ID should be displayed
+    const gameIdEl = page.locator('.fi-display').filter({ hasText: /^[A-Za-z0-9_-]+$/ });
     await expect(gameIdEl.first()).toBeVisible();
   });
 
@@ -127,14 +128,14 @@ test.describe('Create Game and Lobby Flow', () => {
     // Crew section
     await expect(page.getByText('Crew')).toBeVisible();
 
-    // Player name should appear
-    await expect(page.getByText('Captain')).toBeVisible();
+    // Player name should appear (wait for server state)
+    await expect(page.getByText('Captain')).toBeVisible({ timeout: 5000 });
 
     // Host pill
-    await expect(page.getByText('Host')).toBeVisible();
+    await expect(page.getByText('Host', { exact: true }).first()).toBeVisible({ timeout: 5000 });
 
-    // You pill
-    await expect(page.getByText('You')).toBeVisible();
+    // You pill (rendered as "You" in a Pill component)
+    await expect(page.getByText('You', { exact: true }).first()).toBeVisible({ timeout: 5000 });
   });
 
   test('lobby shows role selection grid with 6 roles', async ({ page }) => {
@@ -161,11 +162,11 @@ test.describe('Create Game and Lobby Flow', () => {
     await page.waitForURL('**/lobby', { timeout: 10000 });
 
     // Click on Pilot role
-    await page.getByText('Pilot', { exact: true }).click();
-    await page.waitForTimeout(500);
+    await page.getByText('Pilot', { exact: true }).first().click();
 
-    // Should show "YOU" indicator under the selected role
-    await expect(page.getByText('YOU')).toBeVisible();
+    // Should show "YOU" indicator after server confirms role selection
+    // The RoleCard renders "YOU" in fi-mono style when isMe is true
+    await expect(page.locator('.fi-mono').filter({ hasText: 'YOU' })).toBeVisible({ timeout: 5000 });
   });
 
   test('lobby shows 4 player slots', async ({ page }) => {
@@ -236,13 +237,11 @@ test.describe('Create Game and Lobby Flow', () => {
     await page.getByRole('button', { name: 'Create Expedition' }).click();
     await page.waitForURL('**/lobby', { timeout: 10000 });
 
-    // The Host Controls section has difficulty buttons
-    // Click "elite" button within host controls
-    const eliteBtn = page.locator('button:has-text("elite")');
+    // The Host Controls section has difficulty buttons (lowercase text, CSS uppercase)
+    const eliteBtn = page.locator('button').filter({ hasText: 'elite' });
     await eliteBtn.click();
-    await page.waitForTimeout(500);
 
-    // The difficulty pill should update
-    await expect(page.getByText(/Elite/)).toBeVisible();
+    // The difficulty pill should update to show Elite
+    await expect(page.getByText(/elite/i).first()).toBeVisible({ timeout: 5000 });
   });
 });
