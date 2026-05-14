@@ -2,6 +2,9 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
+const API_PORT = process.env.VITE_API_PORT ?? '3000';
+const CLIENT_PORT = parseInt(process.env.VITE_PORT ?? '8000', 10);
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -10,14 +13,18 @@ export default defineConfig({
     },
   },
   server: {
+    port: CLIENT_PORT,
+    strictPort: true,
+    host: '0.0.0.0',
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: `http://localhost:${API_PORT}`,
         changeOrigin: true,
       },
-      '/ws': {
-        target: 'ws://localhost:3001',
+      '/game-ws': {
+        target: `http://localhost:${API_PORT}`,
         ws: true,
+        rewrite: (path: string) => path.replace(/^\/game-ws/, '/ws'),
       },
     },
   },

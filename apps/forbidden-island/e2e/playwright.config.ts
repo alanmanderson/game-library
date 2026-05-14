@@ -4,19 +4,19 @@ export default defineConfig({
   testDir: './tests',
   timeout: 30000,
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: 'http://localhost:8000',
     headless: true,
   },
   webServer: [
     {
       command: 'cd ../apps/server && npx tsx src/index.ts',
-      port: 3001,
+      port: 3000,
       reuseExistingServer: true,
       timeout: 10000,
     },
     {
-      command: 'cd ../apps/client && npx vite --port 5173',
-      port: 5173,
+      command: 'cd ../apps/client && npx vite',
+      port: 8000,
       reuseExistingServer: true,
       timeout: 10000,
     },

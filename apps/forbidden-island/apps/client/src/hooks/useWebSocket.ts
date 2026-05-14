@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useStore } from '../store/store';
 import type { ServerMessage } from '@forbidden-island/shared/types/protocol';
 
-const WS_URL = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`;
+const WS_URL = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/game-ws`;
 const RECONNECT_DELAY = 2000;
 const MAX_RECONNECT_DELAY = 30000;
 
