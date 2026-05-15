@@ -1,0 +1,77 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.eggs/
+dist/
+build/
+
+# Node
+node_modules/
+*.tsbuildinfo
+.turbo/
+
+# .NET
+**/bin/
+**/obj/
+*.user
+*.suo
+.vs/
+
+# React Native / Expo
+.expo/
+
+# Environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+terraform.tfvars
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+
+# Test
+coverage/
+test-results/
+playwright-report/
+screenshots/
+
+# Build / Publish
+publish/
+.azure/
+
+# Claude Code (local config)
+.mcp.json
+
+# Vite
+.vite/
+.cache/
