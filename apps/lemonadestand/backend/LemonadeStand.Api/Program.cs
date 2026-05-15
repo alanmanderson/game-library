@@ -72,6 +72,15 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
+// --- Serve frontend static files (production) ---
+var wwwrootPath = Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+if (Directory.Exists(wwwrootPath))
+{
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+    app.MapFallbackToFile("index.html");
+}
+
 // --- Ensure database is created ---
 await app.InitializeDatabaseAsync();
 
