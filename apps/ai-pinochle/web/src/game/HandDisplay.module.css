@@ -1,0 +1,81 @@
+.hand {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-3) 0;
+  overflow-x: auto;
+}
+
+.card {
+  width: 80px;
+  height: 112px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: #fff;
+  object-fit: contain;
+  margin-left: -20px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  box-shadow: var(--shadow-card);
+  cursor: default;
+}
+
+.card:first-child {
+  margin-left: 0;
+}
+
+.card:hover {
+  transform: translateY(-8px);
+  z-index: 1;
+}
+
+.trump {
+  border-color: var(--color-accent);
+  box-shadow:
+    0 0 0 1px var(--color-accent),
+    0 1px 2px rgba(0, 0, 0, 0.08),
+    0 4px 12px rgba(201, 135, 31, 0.35);
+}
+
+.legal {
+  border-color: var(--color-success);
+  box-shadow:
+    0 0 0 1px var(--color-success),
+    0 1px 2px rgba(0, 0, 0, 0.08),
+    0 4px 12px rgba(31, 122, 58, 0.4);
+  cursor: pointer;
+}
+
+.legal:hover {
+  transform: translateY(-12px);
+  box-shadow:
+    0 0 0 2px var(--color-success),
+    0 6px 18px rgba(31, 122, 58, 0.55);
+}
+
+.legal:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.disabled:hover {
+  transform: none;
+}
+
+.suggested {
+  box-shadow: 0 0 0 2px var(--color-accent);
+  border-radius: var(--radius-sm);
+}
+
+.hintBanner {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-1) var(--space-3);
+  font-size: 0.8rem;
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+  border-radius: var(--radius-sm);
+  text-align: center;
+}

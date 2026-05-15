@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install *)",
+      "Bash(pip3 install *)",
+      "Bash(python -m pytest *)",
+      "Bash(source * && pip install *)",
+      "Bash(source * && pip3 install *)",
+      "Bash(source * && python -m pytest *)",
+      "Bash(git add * && git commit *)",
+      "Bash(git commit *)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log *)"
+    ]
+  }
+}

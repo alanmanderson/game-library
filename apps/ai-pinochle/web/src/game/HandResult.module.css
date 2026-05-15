@@ -1,0 +1,114 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.25rem;
+  color: #eee;
+}
+
+.bidInfo {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #ccc;
+}
+
+.made {
+  color: #4caf50;
+  font-weight: 600;
+}
+
+.set {
+  color: #f44336;
+  font-weight: 600;
+}
+
+.scoreTable {
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.scoreTable th,
+.scoreTable td {
+  padding: 0.4rem 0.75rem;
+  text-align: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.scoreTable th {
+  font-size: 0.75rem;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.scoreTable td {
+  color: #ccc;
+}
+
+.teamCell {
+  font-weight: 600;
+}
+
+.positive {
+  color: #4caf50;
+  font-weight: 600;
+}
+
+.negative {
+  color: #f44336;
+  font-weight: 600;
+}
+
+.gameScore {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+}
+
+.gameScore > span {
+  font-size: 0.7rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.gameScoreValues {
+  display: flex;
+  gap: 1.5rem;
+  font-size: 0.9rem;
+  color: #eee;
+}
+
+.okButton {
+  padding: 0.625rem 2rem;
+  background: #2e7d32;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.okButton:hover:not(:disabled) {
+  background: #1b5e20;
+}
+
+.okButton:disabled {
+  background: #aaa;
+  cursor: default;
+}
+
+.ackProgress {
+  font-size: 0.75rem;
+  color: #888;
+}

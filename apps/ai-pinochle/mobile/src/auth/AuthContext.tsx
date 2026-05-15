@@ -1,0 +1,114 @@
+import React, {
+  createContext,
+  useContext,
+  useReducer,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import type { User, AuthState } from "@pinochle/shared";
+
+type AuthAction =
+  | { type: "LOGIN_SUCCESS"; token: string; user: User }
+  | { type: "LOGOUT" }
+  | { type: "RESTORE"; token: string; user: User };
+
+interface AuthContextValue extends AuthState {
+  login: (token: string, user: User) => void;
+  logout: () => void;
+  loading: boolean;
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+function isTokenExpired(token: string): boolean {
+  try {
+    const payload = token.split(".")[1];
+    const decoded = JSON.parse(atob(payload));
+    return decoded.exp * 1000 < Date.now();
+  } catch {
+    return true;
+  }
+}
+
+function authReducer(_state: AuthState, action: AuthAction): AuthState {
+  switch (action.type) {
+    case "LOGIN_SUCCESS":
+    case "RESTORE":
+      return { token: action.token, user: action.user };
+    case "LOGOUT":
+      return { token: null, user: null };
+  }
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [state, dispatch] = useReducer(authReducer, {
+    token: null,
+    user: null,
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        // SECURITY: AsyncStorage is unencrypted on both iOS and Android.
+        // In production, sensitive auth tokens should be stored in secure storage
+        // such as react-native-keychain or expo-secure-store instead.
+        const token = await AsyncStorage.getItem("token");
+        const raw = await AsyncStorage.getItem("user");
+        if (token && raw) {
+          if (isTokenExpired(token)) {
+            await AsyncStorage.removeItem("token");
+            await AsyncStorage.removeItem("user");
+          } else {
+            const user = JSON.parse(raw) as User;
+            dispatch({ type: "RESTORE", token, user });
+          }
+        }
+      } catch {
+        // ignore restore errors
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const login = (token: string, user: User) => {
+    // SECURITY: AsyncStorage is unencrypted. Consider using secure storage
+    // (react-native-keychain, expo-secure-store) in production environments.
+    (async () => {
+      try {
+        await AsyncStorage.setItem("token", token);
+        await AsyncStorage.setItem("user", JSON.stringify(user));
+      } catch {
+        // ignore storage errors
+      }
+    })();
+    dispatch({ type: "LOGIN_SUCCESS", token, user });
+  };
+
+  const logout = () => {
+    (async () => {
+      try {
+        await AsyncStorage.removeItem("token");
+        await AsyncStorage.removeItem("user");
+      } catch {
+        // ignore storage errors
+      }
+    })();
+    dispatch({ type: "LOGOUT" });
+  };
+
+  return (
+    <AuthContext.Provider value={{ ...state, login, logout, loading }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth(): AuthContextValue {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
+  return ctx;
+}

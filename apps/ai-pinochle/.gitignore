@@ -1,0 +1,29 @@
+# Node
+node_modules/
+.expo/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.env
+*.egg-info/
+dist/
+.pytest_cache/
+
+# Logs
+logs/
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Terraform
+infra/.terraform/
+infra/*.tfstate*
+infra/terraform.tfvars

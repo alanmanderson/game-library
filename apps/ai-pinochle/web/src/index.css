@@ -1,0 +1,157 @@
+/*
+ * Pinochle branding tokens.
+ *
+ * These custom properties mirror the `tokens` object exported from
+ * `@pinochle/shared` (`shared/src/tokens.ts`). Keep them in sync — if you
+ * change a value here, update the matching entry in tokens.ts.
+ */
+
+:root {
+  /* Brand / action */
+  --color-primary: #0E5C3A;
+  --color-primary-hover: #0B7A48;
+  --color-primary-active: #083F28;
+  --color-secondary: #3A2A1F;
+  --color-accent: #C9871F;
+  --color-accent-soft: #F5E2B8;
+
+  /* Surfaces & text */
+  --color-bg: #FAF6EF;
+  --color-surface: #FFFFFF;
+  --color-surface-elevated: #FFFDF7;
+  --color-text: #1B1A17;
+  --color-text-muted: #6B665E;
+  --color-border: #E4DDD0;
+
+  /* Status */
+  --color-success: #1F7A3A;
+  --color-warning: #B7791F;
+  --color-error: #B3261E;
+
+  /* Table / cards */
+  --color-felt: #0F4A2E;
+  --color-felt-rim: #5C3A1E;
+  --color-card-back: #7A1F2B;
+
+  /* Suits (colorblind-safe) */
+  --suit-spade: #1B1A17;
+  --suit-club: #0E5C3A;
+  --suit-heart: #B3261E;
+  --suit-diamond: #1E5FB3;
+
+  /* Type */
+  --font-display: "Fraunces", "Georgia", serif;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* Radii */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+
+  /* Shadows */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.06);
+  --shadow-elevated: 0 8px 24px rgba(0, 0, 0, 0.18);
+
+  /* Spacing (4/8/12/16/24/32/48/64) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--color-text);
+  margin: 0;
+}
+
+h1 {
+  font-size: 2.25rem;
+}
+h2 {
+  font-size: 1.75rem;
+}
+h3 {
+  font-size: 1.25rem;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/*
+ * Shared alert banners — used across lobby, auth, room, and game modules.
+ * Apply as a className alongside a module's layout class to get consistent
+ * error/success styling. Markup should live in role="alert" or aria-live
+ * where appropriate.
+ */
+.alert {
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  line-height: 1.4;
+  border: 1px solid transparent;
+}
+
+.alert--error {
+  background: color-mix(in srgb, var(--color-error) 10%, var(--color-surface));
+  color: var(--color-error);
+  border-color: color-mix(in srgb, var(--color-error) 30%, transparent);
+}
+
+.alert--success {
+  background: color-mix(in srgb, var(--color-success) 10%, var(--color-surface));
+  color: var(--color-success);
+  border-color: color-mix(in srgb, var(--color-success) 30%, transparent);
+}
+
+.alert--warning {
+  background: var(--color-accent-soft);
+  color: var(--color-secondary);
+  border-color: color-mix(in srgb, var(--color-warning) 40%, transparent);
+}
+
+/* Utility: uppercase phase labels and room codes with spec letter-spacing. */
+.phase-label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-family: var(--font-body);
+  font-weight: 600;
+}
+
+.room-code {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}

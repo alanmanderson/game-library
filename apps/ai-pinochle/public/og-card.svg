@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Pinochle">
+  <!-- Cream background -->
+  <rect width="512" height="512" fill="#FAF6EF"/>
+
+  <!-- Thin brass frame -->
+  <rect x="24" y="24" width="464" height="464" rx="24"
+        fill="none" stroke="#C9871F" stroke-width="2" opacity="0.6"/>
+
+  <!-- Monogram plaque, centered-upper -->
+  <g transform="translate(176 112)">
+    <rect x="0" y="0" width="160" height="160" rx="28" fill="#0F4A2E"/>
+    <rect x="6" y="6" width="148" height="148" rx="23.5"
+          fill="none" stroke="#C9871F" stroke-width="2.5" opacity="0.85"/>
+    <g transform="translate(40 28) scale(2.5)" fill="#FAF6EF">
+      <path d="M16 0
+               C12 4, 8 7, 8 12
+               C8 15, 10 16.5, 12.5 15.5
+               L11.5 19
+               L20.5 19
+               L19.5 15.5
+               C22 16.5, 24 15, 24 12
+               C24 11, 23.8 10, 23.4 9.2
+               C22.8 10, 22 10.4, 21 10
+               C20 9.6, 19.5 8.7, 19.7 7.8
+               C19.9 6.9, 20.6 6.3, 21.5 6.4
+               C20.5 4, 18 2, 16 0 Z"/>
+      <path d="M16 26
+               C14 24, 10 23, 10 27
+               C10 30, 14 33, 16 35
+               C18 33, 22 30, 22 27
+               C22 23, 18 24, 16 26 Z"/>
+    </g>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="256" y="338" text-anchor="middle"
+        font-family='"Fraunces","Georgia",serif'
+        font-weight="700"
+        font-size="72"
+        fill="#1B1A17">Pinochle</text>
+
+  <!-- Tagline -->
+  <text x="256" y="380" text-anchor="middle"
+        font-family='"Inter",system-ui,sans-serif'
+        font-weight="500"
+        font-size="20"
+        letter-spacing="0.12em"
+        fill="#6B665E">PARTNERSHIP PINOCHLE, ONLINE</text>
+
+  <!-- Suit pips footer: S, H, D, C in brand colors -->
+  <g transform="translate(256 440)" text-anchor="middle"
+     font-family='"Georgia",serif' font-size="32">
+    <text x="-72" y="0" fill="#1B1A17">&#9824;</text>
+    <text x="-24" y="0" fill="#B3261E">&#9829;</text>
+    <text x="24" y="0" fill="#1E5FB3">&#9830;</text>
+    <text x="72" y="0" fill="#0E5C3A">&#9827;</text>
+  </g>
+</svg>

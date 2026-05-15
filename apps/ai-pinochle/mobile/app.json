@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "Pinochle",
+    "slug": "pinochle",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#1a3a1a"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#1a3a1a"
+      },
+      "package": "com.pinochle.app"
+    },
+    "newArchEnabled": true,
+    "plugins": ["expo-screen-orientation"]
+  }
+}

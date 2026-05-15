@@ -1,0 +1,31 @@
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px 8px;
+  background: var(--color-accent);
+  color: #fff;
+  border-radius: 999px;
+  font-family: var(--font-body);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  box-shadow: var(--shadow-card);
+}
+
+.crown {
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.suit {
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.suit--spade { color: var(--suit-spade); }
+.suit--club { color: var(--suit-club); }
+.suit--heart { color: var(--suit-heart); }
+.suit--diamond { color: var(--suit-diamond); }

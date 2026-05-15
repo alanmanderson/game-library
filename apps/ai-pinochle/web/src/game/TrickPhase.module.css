@@ -1,0 +1,196 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.infoTop {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.trickNum {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #ccc;
+}
+
+.trumpBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.5rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  font-size: 0.75rem;
+}
+
+.trumpLabel {
+  color: #aaa;
+  text-transform: uppercase;
+  font-size: 0.65rem;
+  letter-spacing: 0.05em;
+}
+
+.trumpSymbol {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.trumpName {
+  color: #eee;
+  font-weight: 600;
+}
+
+.scores {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.75rem;
+  color: #aaa;
+}
+
+.gameScore {
+  color: #ffd700;
+  font-weight: 600;
+}
+
+.trickTable {
+  display: grid;
+  grid-template-areas:
+    ".    top    ."
+    "left center right"
+    ".   bottom   .";
+  grid-template-columns: 80px 80px 80px;
+  grid-template-rows: 100px 60px 100px;
+  place-items: center;
+}
+
+.topSlot {
+  grid-area: top;
+}
+
+.leftSlot {
+  grid-area: left;
+}
+
+.centerSlot {
+  grid-area: center;
+}
+
+.rightSlot {
+  grid-area: right;
+}
+
+.bottomSlot {
+  grid-area: bottom;
+}
+
+.trickCard {
+  width: 60px;
+  height: 84px;
+  border-radius: 4px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  object-fit: contain;
+  background: #fff;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.winner {
+  border-color: #ffd700;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.7);
+}
+
+.emptySlot {
+  width: 60px;
+  height: 84px;
+  border-radius: 4px;
+  border: 2px dashed rgba(255, 255, 255, 0.15);
+}
+
+.winnerBadge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 0.25rem 0.5rem;
+  background: rgba(255, 215, 0, 0.15);
+  border: 1px solid rgba(255, 215, 0, 0.4);
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #ffd700;
+  white-space: nowrap;
+}
+
+.winnerPoints {
+  font-size: 0.65rem;
+  color: #ccc;
+}
+
+.turnIndicator {
+  min-height: 1.5rem;
+}
+
+.yourTurn {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #4caf50;
+}
+
+.waiting {
+  font-size: 0.875rem;
+  color: #888;
+}
+
+.hintBanner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  border: 1px solid var(--color-accent-soft);
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  color: var(--color-text);
+  margin-bottom: var(--space-2);
+}
+
+.hintLabel {
+  font-weight: 600;
+  color: var(--color-accent);
+  white-space: nowrap;
+}
+
+.hintButton {
+  margin-left: var(--space-2);
+  padding: 0.2rem 0.6rem;
+  background: transparent;
+  color: var(--color-accent-soft);
+  border: 1px solid color-mix(in srgb, var(--color-accent-soft) 50%, transparent);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.hintButton:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent-soft) 18%, transparent);
+  color: #fff;
+}
+
+.hintButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

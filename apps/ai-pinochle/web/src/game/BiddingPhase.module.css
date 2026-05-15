@@ -1,0 +1,165 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.25rem;
+  color: #333;
+}
+
+.status p {
+  margin: 0;
+  font-size: 1rem;
+  color: #555;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.turnLabel {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #2e7d32;
+}
+
+.stepperRow {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.stepperButton {
+  min-width: 44px;
+  padding: 0.5rem 0.75rem;
+  background: #fff;
+  color: #333;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.stepperButton:hover:not(:disabled) {
+  background: #f0f0f0;
+  border-color: #888;
+}
+
+.stepperButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.bidValue {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 70px;
+  padding: 0.35rem 0.75rem;
+  background: #fafafa;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.bidNumber {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #333;
+  line-height: 1;
+}
+
+.bidMin {
+  font-size: 0.65rem;
+  color: #888;
+  margin-top: 2px;
+}
+
+.bidRow {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.bidInput {
+  width: 80px;
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 1rem;
+  text-align: center;
+}
+
+.bidButton {
+  padding: 0.5rem 1.25rem;
+  background: #4a90d9;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.bidButton:hover {
+  background: #357abd;
+}
+
+.passButton {
+  padding: 0.5rem 1.25rem;
+  background: #888;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.passButton:hover {
+  background: #666;
+}
+
+.waiting {
+  margin: 0;
+  font-size: 1rem;
+  color: #888;
+}
+
+.hintBanner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  border: 1px solid var(--color-accent-soft);
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  color: var(--color-text);
+  margin-bottom: var(--space-3);
+}
+
+.hintLabel {
+  font-weight: 600;
+  color: var(--color-accent);
+  white-space: nowrap;
+}
+
+/* Visually hidden but readable by screen readers */
+.bidLabel {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
