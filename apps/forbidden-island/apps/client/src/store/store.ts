@@ -268,11 +268,13 @@ export const useStore = create<Store>((set, get) => ({
               openOverlay('draw_flood', { floodReveals: [] });
             }
           } else if (gs.phase === 'action') {
-            // Clear overlays when returning to action phase
-            const current = get().activeOverlay;
-            if (current === 'draw_treasure' || current === 'draw_flood' || current === 'discard' || current === 'swim') {
-              set({ activeOverlay: null, overlayData: {} });
-            }
+            // Flush any pending animations and close phase-driven overlays when
+            // returning to the action phase. The server resolves draw/flood phases
+            // server-side and sends the final state in one batch, so animation
+            // events (treasure_draw, flood_reveal, etc.) are already reflected in
+            // the game state. Without this flush the animation timers keep
+            // isAnimating===true, which blocks all input with a "RESOLVING..." banner.
+            set({ activeOverlay: null, overlayData: {}, animationQueue: [], currentAnimation: null, isAnimating: false });
           }
         }
         break;
