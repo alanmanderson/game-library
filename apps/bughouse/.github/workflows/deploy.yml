@@ -1,0 +1,91 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Frontend type check
+        run: |
+          cd frontend
+          npx tsc --noEmit
+
+      - name: Run backend tests
+        run: |
+          cd backend
+          pip install -r requirements.txt pytest anyio pytest-anyio
+          python -m pytest tests.py -v
+
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set Azure subscription
+        run: az account set --subscription "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+
+      - name: Log in to ACR
+        run: az acr login --name "${{ secrets.ACR_NAME }}"
+
+      - name: Build and push Docker image
+        run: |
+          IMAGE="${{ secrets.ACR_NAME }}.azurecr.io/bughouse:${{ github.sha }}"
+          IMAGE_LATEST="${{ secrets.ACR_NAME }}.azurecr.io/bughouse:latest"
+          docker build -t "$IMAGE" -t "$IMAGE_LATEST" .
+          docker push "$IMAGE"
+          docker push "$IMAGE_LATEST"
+
+      - name: Set container app secrets
+        run: |
+          az containerapp secret set \
+            --name "${{ secrets.CONTAINER_APP_NAME }}" \
+            --resource-group "${{ secrets.RESOURCE_GROUP }}" \
+            --secrets \
+              database-url="${{ secrets.DATABASE_URL }}" \
+              jwt-secret-key="${{ secrets.JWT_SECRET_KEY }}" \
+              google-client-id="${{ secrets.GOOGLE_CLIENT_ID }}" \
+              google-client-secret="${{ secrets.GOOGLE_CLIENT_SECRET }}"
+
+      - name: Deploy to Container App
+        run: |
+          az containerapp update \
+            --name "${{ secrets.CONTAINER_APP_NAME }}" \
+            --resource-group "${{ secrets.RESOURCE_GROUP }}" \
+            --image "${{ secrets.ACR_NAME }}.azurecr.io/bughouse:${{ github.sha }}" \
+            --set-env-vars \
+              BUGHOUSE_DATABASE_URL=secretref:database-url \
+              BUGHOUSE_JWT_SECRET_KEY=secretref:jwt-secret-key \
+              BUGHOUSE_GOOGLE_CLIENT_ID=secretref:google-client-id \
+              BUGHOUSE_GOOGLE_CLIENT_SECRET=secretref:google-client-secret \
+              CORS_ALLOWED_ORIGINS="https://bughouse.alanmanderson.com"
