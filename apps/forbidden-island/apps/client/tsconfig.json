@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "paths": {
+      "@forbidden-island/shared": ["../../packages/shared/src"],
+      "@forbidden-island/shared/*": ["../../packages/shared/src/*"]
+    }
+  },
+  "include": ["src"]
+}
