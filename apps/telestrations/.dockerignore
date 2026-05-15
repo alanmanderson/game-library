@@ -1,0 +1,42 @@
+# Dependencies - rebuilt inside the container
+node_modules
+server/node_modules
+client/node_modules
+
+# Build output - rebuilt inside the container
+server/dist
+client/dist
+
+# Git
+.git
+.gitignore
+
+# CI/CD config
+.github
+
+# Docs
+docs
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Environment files with secrets
+.env
+server/.env
+client/.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Logs
+*.log
+npm-debug.log*
