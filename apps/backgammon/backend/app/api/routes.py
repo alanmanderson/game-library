@@ -1,0 +1,1578 @@
+"""REST API routes for the backgammon application."""
+
+from datetime import datetime, timedelta, timezone
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import PlainTextResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, or_, func, case
+
+from app.database import get_db
+from app.models import GameAnalysis, Player, Table, MoveRecord, PlayerStats, Season
+from app.schemas import (
+    AnalysisResponse,
+    CubeDecision,
+    DeepDiveResponse,
+    MoveAnalysis,
+    MoveCandidate,
+    PlayerResponse,
+    PlayerPreferencesUpdate,
+    TableCreate,
+    TableResponse,
+    JoinTableRequest,
+    InviteBotRequest,
+    MoveRecordResponse,
+    PaginatedMoveHistoryResponse,
+    StatsOverview,
+    AdvancedStatsResponse,
+    DashboardResponse,
+    GameHistoryItem,
+    LobbyTable,
+    ActiveGame,
+    LeaderboardEntry,
+    LeaderboardResponse,
+    ReplayMoveRecord,
+    ReplayResponse,
+    SeasonResponse,
+    PlayerSeasonHistoryEntry,
+    ChallengesResponse,
+    ChallengeProgress,
+)
+from app.cosmetics import BOARD_THEMES, CHECKER_STYLES
+from app.services.game_service import game_manager
+from app.services.stats_service import get_player_stats, get_advanced_stats
+from app.services.season_stats_service import get_season_history
+from app.services.bot_service import (
+    BOT_PLAYER_ID, ensure_bot_player, schedule_bot_turn_if_needed,
+    set_bot_difficulty,
+)
+from app.api.websocket import notify_game_started, manager as ws_manager
+from app.api.auth import get_current_player
+
+router = APIRouter(prefix="/api")
+
+
+# ------------------------------------------------------------------
+# Player endpoints
+# ------------------------------------------------------------------
+
+
+@router.get("/players/{player_id}", response_model=PlayerResponse)
+async def get_player(
+    player_id: str,
+    current_player: Player = Depends(get_current_player),
+    db: AsyncSession = Depends(get_db),
+) -> Player:
+    """Retrieve a player by ID."""
+    player = await db.get(Player, player_id)
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    return player
+
+
+@router.patch("/players/me/preferences", response_model=PlayerResponse)
+async def update_my_preferences(
+    data: PlayerPreferencesUpdate,
+    current_player: Player = Depends(get_current_player),
+    db: AsyncSession = Depends(get_db),
+) -> Player:
+    """Update the authenticated player's cosmetic preferences.
+
+    Accepts a partial update (``board_theme`` and/or ``checker_style``).
+    Rejects unknown theme/style IDs with 400. Guests may also call this
+    so their choice lasts for their session — the row will be deleted when
+    the guest record is cleaned up, so persistence is best-effort.
+    """
+    if data.board_theme is not None:
+        if data.board_theme not in BOARD_THEMES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown board_theme: {data.board_theme!r}",
+            )
+        current_player.board_theme = data.board_theme
+
+    if data.checker_style is not None:
+        if data.checker_style not in CHECKER_STYLES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown checker_style: {data.checker_style!r}",
+            )
+        current_player.checker_style = data.checker_style
+
+    await db.flush()
+    await db.refresh(current_player)
+    return current_player
+
+
+@router.get("/players/{player_id}/stats", response_model=StatsOverview)
+async def player_stats(
+    player_id: str,
+    current_player: Player = Depends(get_current_player),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Get aggregated statistics for a player across all opponents.
+
+    Returns 403 for guest players since their stats are not persisted.
+    """
+    if current_player.id != player_id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this resource")
+    player = await db.get(Player, player_id)
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    if player.is_guest:
+        raise HTTPException(
+            status_code=403,
+            detail="Stats are not available for guest players",
+        )
+    return await get_player_stats(db, player_id)
+
+
+@router.get(
+    "/players/{player_id}/advanced-stats",
+    response_model=AdvancedStatsResponse,
+)
+async def player_advanced_stats(
+    player_id: str,
+    current_player: Player = Depends(get_current_player),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Return advanced per-player statistics.
+
+    Includes gammon/backgammon rates, per-color win rates, per-time-control
+    win rates, cube action counts, and an ELO rating history series.
+    Guarded the same way as ``/dashboard``: authenticated player must match,
+    guests are rejected since their stats are not persisted.
+    """
+    if current_player.id != player_id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this resource")
+    player = await db.get(Player, player_id)
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    if player.is_guest:
+        raise HTTPException(
+            status_code=403,
+            detail="Advanced stats are not available for guest players",
+        )
+    return await get_advanced_stats(db, player_id)
+
+
+@router.get(
+    "/players/{player_id}/season-history",
+    response_model=list[PlayerSeasonHistoryEntry],
+)
+async def player_season_history(
+    player_id: str,
+    current_player: Player = Depends(get_current_player),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    """Return the player's per-season history snapshots.
+
+    One row per season they've played at least one rated game in, ordered
+    with the active / most recent season first. Guarded identically to
+    ``/advanced-stats``: the requester must be the player themselves and
+    guests are rejected (no season stats are persisted for guests).
+    """
+    if current_player.id != player_id:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to access this resource"
+        )
+    player = await db.get(Player, player_id)
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    if player.is_guest:
+        raise HTTPException(
+            status_code=403,
+            detail="Season history is not available for guest players",
+        )
+    return await get_season_history(db, player_id)
+
+
+@router.get("/challenges/me", response_model=ChallengesResponse)
+async def my_challenges(
+    current_player: Player = Depends(get_current_player),
+    db: AsyncSession = Depends(get_db),
+) -> ChallengesResponse:
+    """Return the authenticated player's active daily + weekly challenges.
+
+    Guests are rejected — challenge progress is only persisted for registered
+    accounts. PlayerChallenge rows for the current period are upserted on
+    demand so callers never see a stale or missing period.
+    """
+    if current_player.is_guest:
+        raise HTTPException(
+            status_code=403,
+            detail="Challenges are not available for guest players",
+        )
+
+    from app.services.challenge_service import get_active_player_challenges
+
+    rows = await get_active_player_challenges(db, current_player.id)
+    await db.commit()
+    daily = [ChallengeProgress(**r) for r in rows if r["type"] == "daily"]
+    weekly = [ChallengeProgress(**r) for r in rows if r["type"] == "weekly"]
+    return ChallengesResponse(
+        daily=daily,
+        weekly=weekly,
+        challenge_points=getattr(current_player, "challenge_points", 0) or 0,
+    )
+
+
+@router.get("/players/{player_id}/dashboard", response_model=DashboardResponse)
+async def player_dashboard(
+    player_id: str,
+    current_player: Player = Depends(get_current_player),
+    db: AsyncSession = Depends(get_db),
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    """Get a player's dashboard with past games, results, and summary stats.
+
+    Returns 404 if the player does not exist, 403 for guest players.
+    Supports pagination via limit and offset query parameters.
+    """
+    if current_player.id != player_id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this resource")
+    player = await db.get(Player, player_id)
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+    if player.is_guest:
+        raise HTTPException(
+            status_code=403,
+            detail="Dashboard is not available for guest players",
+        )
+
+    # Base filter for tables where the player participated and the game started
+    table_filter = [
+        or_(
+            Table.white_player_id == player_id,
+            Table.black_player_id == player_id,
+        ),
+        Table.status != "waiting",
+    ]
+
+    # Get total count of matching tables
+    count_result = await db.execute(
+        select(func.count(Table.id)).where(*table_filter)
+    )
+    total_count = count_result.scalar()
+
+    # Query tables with pagination
+    stmt = (
+        select(Table)
+        .where(*table_filter)
+        .order_by(Table.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    result = await db.execute(stmt)
+    tables = result.scalars().all()
+
+    # Batch-load all opponents to avoid N+1 queries
+    opponent_ids: set[str] = set()
+    for table in tables:
+        if table.white_player_id == player_id:
+            if table.black_player_id:
+                opponent_ids.add(table.black_player_id)
+        else:
+            if table.white_player_id:
+                opponent_ids.add(table.white_player_id)
+
+    if opponent_ids:
+        opponents_result = await db.execute(
+            select(Player).where(Player.id.in_(opponent_ids))
+        )
+        opponent_lookup = {p.id: p for p in opponents_result.scalars().all()}
+    else:
+        opponent_lookup = {}
+
+    games: list[GameHistoryItem] = []
+    wins = 0
+    losses = 0
+    abandoned_games = 0
+
+    for table in tables:
+        # Determine player color
+        if table.white_player_id == player_id:
+            player_color = "white"
+            opponent_id = table.black_player_id
+        else:
+            player_color = "black"
+            opponent_id = table.white_player_id
+
+        # Look up opponent nickname from batch-loaded dict
+        if opponent_id:
+            opponent = opponent_lookup.get(opponent_id)
+            opponent_nickname = opponent.nickname if opponent else "Unknown"
+        else:
+            opponent_nickname = "Unknown"
+
+        # Determine result
+        if table.status == "finished":
+            if table.winner_id == player_id:
+                result_str = "win"
+                wins += 1
+            else:
+                result_str = "loss"
+                losses += 1
+            win_type = table.win_type
+            score = table.final_score
+            played_at = table.finished_at or table.created_at
+        else:
+            result_str = "abandoned"
+            abandoned_games += 1
+            win_type = None
+            score = None
+            played_at = table.created_at
+
+        games.append(
+            GameHistoryItem(
+                table_id=table.id,
+                opponent_nickname=opponent_nickname,
+                player_color=player_color,
+                result=result_str,
+                win_type=win_type,
+                score=score,
+                played_at=played_at,
+                table_status=table.status,
+            )
+        )
+
+    total_games = wins + losses
+    win_rate = (wins / total_games * 100) if total_games > 0 else 0.0
+
+    # Look up the currently active season, if any, so the dashboard can show it.
+    active_season_row = await db.execute(
+        select(Season).where(Season.is_active.is_(True)).limit(1)
+    )
+    active_season = active_season_row.scalars().first()
+
+    return DashboardResponse(
+        total_games=total_games,
+        wins=wins,
+        losses=losses,
+        win_rate=win_rate,
+        abandoned_games=abandoned_games,
+        total_count=total_count,
+        games=games,
+        rating=player.rating,
+        rating_games=player.rating_games,
+        challenge_points=getattr(player, "challenge_points", 0) or 0,
+        active_season=(
+            SeasonResponse.model_validate(active_season) if active_season else None
+        ),
+    )
+
+
+# ------------------------------------------------------------------
+# Table endpoints
+# ------------------------------------------------------------------
+
+
+@router.post("/tables", response_model=TableResponse)
+async def create_table(
+    data: TableCreate,
+    current_player: Player = Depends(get_current_player),
+    db: AsyncSession = Depends(get_db),
+) -> Table:
+    """Create a new game table. The creating player waits for an opponent."""
+    table = await game_manager.create_table(db, current_player.id, data.preferred_color, data.match_points, data.is_public, data.time_control, data.is_ranked)
+    await db.refresh(table)
+    # Eagerly load the player relationship for the response
+    if table.white_player_id == current_player.id:
+        table.white_player = current_player
+    elif table.black_player_id == current_player.id:
+        table.black_player = current_player
+    return table
+
+
+@router.get("/tables/{table_id}", response_model=TableResponse)
+async def get_table(
+    table_id: str, db: AsyncSession = Depends(get_db)
+) -> Table:
+    """Retrieve a table by ID, including player details."""
+    table = await db.get(Table, table_id)
+    if not table:
+        raise HTTPException(status_code=404, detail="Table not found")
+    # Eagerly load player relationships for the response
+    if table.white_player_id:
+        table.white_player = await db.get(Player, table.white_player_id)
+    if table.black_player_id:
+        table.black_player = await db.get(Player, table.black_player_id)
+    return table
+
+
+@router.post("/tables/{table_id}/join", response_model=TableResponse)
+async def join_table(
+    table_id: str,
+    data: JoinTableRequest,
+    current_player: Player = Depends(get_current_player),
+    db: AsyncSession = Depends(get_db),
+) -> Table:
+    """Join an existing table as the second player. Starts the game."""
+    try:
+        table = await game_manager.join_table(db, table_id, current_player.id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    # Load relationships for the response
+    if table.white_player_id:
+        table.white_player = await db.get(Player, table.white_player_id)
+    if table.black_player_id:
+        table.black_player = await db.get(Player, table.black_player_id)
+
+    # Notify any WebSocket clients already connected (the first player
+    # is sitting on a "waiting" screen and needs the initial game state).
+    await notify_game_started(table_id)
+
+    return table
+
+
+@router.post("/tables/{table_id}/invite-bot", response_model=TableResponse)
+async def invite_bot(
+    table_id: str,
+    data: InviteBotRequest = InviteBotRequest(),
+    current_player: Player = Depends(get_current_player),
+    db: AsyncSession = Depends(get_db),
+) -> Table:
+    """Invite the bot to join a table as the opponent."""
+    await ensure_bot_player(db)
+    try:
+        table = await game_manager.join_table(db, table_id, BOT_PLAYER_ID)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Store difficulty on the table and in memory
+    table.bot_difficulty = data.difficulty
+    set_bot_difficulty(table_id, data.difficulty)
+
+    # Load relationships for the response
+    if table.white_player_id:
+        table.white_player = await db.get(Player, table.white_player_id)
+    if table.black_player_id:
+        table.black_player = await db.get(Player, table.black_player_id)
+
+    await db.commit()
+
+    # Notify WebSocket clients of game start
+    await notify_game_started(table_id)
+
+    # If the bot goes first, schedule its turn
+    schedule_bot_turn_if_needed(table_id)
+
+    return table
+
+
+# ------------------------------------------------------------------
+# Lobby / matchmaking
+# ------------------------------------------------------------------
+
+
+@router.get("/lobby", response_model=list[LobbyTable])
+async def get_lobby(db: AsyncSession = Depends(get_db)):
+    """Get all public tables waiting for opponents."""
+    result = await db.execute(
+        select(Table).where(
+            Table.is_public == True,  # noqa: E712
+            Table.status == "waiting",
+        ).order_by(Table.created_at.desc()).limit(20)
+    )
+    tables = result.scalars().all()
+
+    # Load creator nicknames
+    creator_ids: set[str] = set()
+    for table in tables:
+        cid = table.white_player_id or table.black_player_id
+        if cid:
+            creator_ids.add(cid)
+
+    if creator_ids:
+        players_result = await db.execute(
+            select(Player).where(Player.id.in_(creator_ids))
+        )
+        player_lookup = {p.id: p for p in players_result.scalars().all()}
+    else:
+        player_lookup = {}
+
+    lobby_tables: list[LobbyTable] = []
+    for table in tables:
+        creator_id = table.white_player_id or table.black_player_id
+        creator = player_lookup.get(creator_id) if creator_id else None
+        # Determine preferred color based on which slot the creator took
+        if table.white_player_id and not table.black_player_id:
+            preferred_color = "white"
+        elif table.black_player_id and not table.white_player_id:
+            preferred_color = "black"
+        else:
+            preferred_color = None
+
+        lobby_tables.append(
+            LobbyTable(
+                id=table.id,
+                creator_nickname=creator.nickname if creator else "Unknown",
+                match_points=table.match_points,
+                preferred_color=preferred_color,
+                created_at=table.created_at,
+                is_ranked=table.is_ranked,
+            )
+        )
+
+    return lobby_tables
+
+
+@router.get("/active-games", response_model=list[ActiveGame])
+async def get_active_games(db: AsyncSession = Depends(get_db)):
+    """Get all public tables with games currently in progress.
+
+    Returns tables with status 'playing' or 'game_over', ordered by most
+    recently created. Includes live spectator counts.
+    """
+    result = await db.execute(
+        select(Table).where(
+            Table.is_public.is_(True),
+            Table.status.in_(["playing", "game_over"]),
+        ).order_by(Table.created_at.desc()).limit(20)
+    )
+    tables = result.scalars().all()
+
+    # Load player nicknames
+    player_ids: set[str] = set()
+    for table in tables:
+        if table.white_player_id:
+            player_ids.add(table.white_player_id)
+        if table.black_player_id:
+            player_ids.add(table.black_player_id)
+
+    if player_ids:
+        players_result = await db.execute(
+            select(Player).where(Player.id.in_(player_ids))
+        )
+        player_lookup = {p.id: p for p in players_result.scalars().all()}
+    else:
+        player_lookup = {}
+
+    active_games: list[ActiveGame] = []
+    for table in tables:
+        white = player_lookup.get(table.white_player_id) if table.white_player_id else None
+        black = player_lookup.get(table.black_player_id) if table.black_player_id else None
+        active_games.append(
+            ActiveGame(
+                id=table.id,
+                white_player_nickname=white.nickname if white else "Unknown",
+                black_player_nickname=black.nickname if black else "Unknown",
+                match_points=table.match_points,
+                white_match_score=table.white_match_score,
+                black_match_score=table.black_match_score,
+                spectator_count=ws_manager.get_spectator_count(table.id),
+                created_at=table.created_at,
+                is_ranked=table.is_ranked,
+            )
+        )
+
+    return active_games
+
+
+@router.post("/quick-match", response_model=TableResponse)
+async def quick_match(
+    current_player: Player = Depends(get_current_player),
+    db: AsyncSession = Depends(get_db),
+):
+    """Join an available public table or create a new one.
+
+    Tries to find an existing waiting public table that wasn't created
+    by the requesting player. If found, joins it. Otherwise, creates a
+    new public table.
+    """
+    # Try to find a waiting public table not created by this player
+    result = await db.execute(
+        select(Table).where(
+            Table.is_public == True,  # noqa: E712
+            Table.status == "waiting",
+            Table.white_player_id != current_player.id,
+            Table.black_player_id != current_player.id,
+        ).order_by(Table.created_at.asc()).limit(1)
+    )
+    existing_table = result.scalars().first()
+
+    if existing_table:
+        # Join the existing table
+        try:
+            table = await game_manager.join_table(db, existing_table.id, current_player.id)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        # Load relationships
+        if table.white_player_id:
+            table.white_player = await db.get(Player, table.white_player_id)
+        if table.black_player_id:
+            table.black_player = await db.get(Player, table.black_player_id)
+        await notify_game_started(table.id)
+        return table
+
+    # No available table found; create a new public one
+    table = await game_manager.create_table(db, current_player.id, is_public=True)
+    await db.refresh(table)
+    if table.white_player_id == current_player.id:
+        table.white_player = current_player
+    elif table.black_player_id == current_player.id:
+        table.black_player = current_player
+    return table
+
+
+# ------------------------------------------------------------------
+# Game history
+# ------------------------------------------------------------------
+
+
+@router.get("/tables/{table_id}/history", response_model=PaginatedMoveHistoryResponse)
+async def get_game_history(
+    table_id: str,
+    limit: int = Query(default=50, le=1000),
+    offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Retrieve the move history for a game, ordered by move number.
+
+    Supports pagination via ``limit`` and ``offset`` query parameters.
+    Returns total record count alongside the page of records.
+    """
+    # Total count of move records for this table
+    count_result = await db.execute(
+        select(func.count(MoveRecord.id))
+        .where(MoveRecord.table_id == table_id)
+    )
+    total = count_result.scalar() or 0
+
+    # Fetch the requested page
+    result = await db.execute(
+        select(MoveRecord)
+        .where(MoveRecord.table_id == table_id)
+        .order_by(MoveRecord.move_number)
+        .limit(limit)
+        .offset(offset)
+    )
+    records = result.scalars().all()
+
+    return PaginatedMoveHistoryResponse(
+        total=total,
+        limit=limit,
+        offset=offset,
+        records=records,
+    )
+
+
+@router.get("/tables/{table_id}/replay", response_model=ReplayResponse)
+async def get_game_replay(
+    table_id: str, db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Retrieve full replay data for a game, including per-move board snapshots.
+
+    Returns the initial board state and all move records with their
+    ``game_state_after`` snapshots, enabling step-by-step game replay.
+    """
+    from app.game_engine import BackgammonEngine
+
+    table = await db.get(Table, table_id)
+    if not table:
+        raise HTTPException(status_code=404, detail="Table not found")
+
+    # Replays are public but must not leak in-progress games.  "waiting" tables
+    # have not started so there is nothing to leak; "game_over"/"finished" are
+    # completed games meant for sharing.  Block "playing".
+    if table.status == "playing":
+        raise HTTPException(
+            status_code=403,
+            detail="Replay is only available for completed games.",
+        )
+
+    # Look up player nicknames
+    white_nickname: str | None = None
+    black_nickname: str | None = None
+    white_player = None
+    black_player = None
+    if table.white_player_id:
+        white_player = await db.get(Player, table.white_player_id)
+        white_nickname = white_player.nickname if white_player else None
+    if table.black_player_id:
+        black_player = await db.get(Player, table.black_player_id)
+        black_nickname = black_player.nickname if black_player else None
+
+    # Determine winner color + nickname (if any)
+    winner_color: str | None = None
+    winner_nickname: str | None = None
+    if table.winner_id:
+        if table.winner_id == table.white_player_id:
+            winner_color = "white"
+            winner_nickname = white_nickname
+        elif table.winner_id == table.black_player_id:
+            winner_color = "black"
+            winner_nickname = black_nickname
+
+    # Build the standard initial board state
+    initial_engine = BackgammonEngine()
+    initial_state = initial_engine.get_state_snapshot()
+
+    # Fetch all move records ordered by move number
+    result = await db.execute(
+        select(MoveRecord)
+        .where(MoveRecord.table_id == table_id)
+        .order_by(MoveRecord.move_number)
+    )
+    records = result.scalars().all()
+
+    # Batch-load player nicknames for move records
+    player_ids = {r.player_id for r in records if r.player_id}
+    if player_ids:
+        players_result = await db.execute(
+            select(Player).where(Player.id.in_(player_ids))
+        )
+        player_lookup = {p.id: p for p in players_result.scalars().all()}
+    else:
+        player_lookup = {}
+
+    moves = [
+        ReplayMoveRecord(
+            move_number=record.move_number,
+            player_nickname=(
+                player_lookup[record.player_id].nickname
+                if record.player_id and record.player_id in player_lookup
+                else None
+            ),
+            dice_roll=record.dice_roll,
+            moves_notation=record.moves_notation,
+            game_state_after=record.game_state_after,
+            created_at=record.created_at,
+        )
+        for record in records
+    ]
+
+    return ReplayResponse(
+        table_id=table_id,
+        status=table.status,
+        white_player_id=table.white_player_id,
+        black_player_id=table.black_player_id,
+        white_player_nickname=white_nickname,
+        black_player_nickname=black_nickname,
+        winner_color=winner_color,
+        winner_nickname=winner_nickname,
+        win_type=table.win_type,
+        final_score=table.final_score,
+        white_match_score=table.white_match_score,
+        black_match_score=table.black_match_score,
+        match_points=table.match_points,
+        initial_state=initial_state,
+        moves=moves,
+    )
+
+
+@router.get("/tables/{table_id}/analysis", response_model=AnalysisResponse)
+async def get_game_analysis(
+    table_id: str,
+    limit: int = Query(100, ge=1, le=500),
+    ply: int = Query(2, ge=0, le=3),
+    force: bool = Query(False),
+    db: AsyncSession = Depends(get_db),
+    current_player: Player = Depends(get_current_player),
+) -> AnalysisResponse:
+    """Return per-move quality analysis for a completed game.
+
+    Compares each move the player actually made against the ML model's
+    best move at that position and assigns a quality label (best, good,
+    inaccuracy, mistake, blunder) based on equity loss.
+
+    Results are cached in the ``game_analyses`` table so subsequent
+    requests return instantly.  The first request for a game can be slow
+    (seconds-to-tens-of-seconds depending on game length).
+
+    The ``ply`` parameter controls the evaluation depth when gnubg is
+    available: 0 (fast neural net), 2 (standard), or 3 (deep, slow).
+    Defaults to 2.
+
+    The ``force`` parameter, when True, clears the cached analysis
+    and recomputes from scratch. Used by the re-analyze flow.
+
+    Policy: only participants (the human white or black player of the
+    table) may view the analysis.  Replays remain public, but move-quality
+    data is skill-profile information we keep private to the two players
+    at the board.  The ``BOT`` seat is excluded — when one side is a bot,
+    only the human opponent qualifies.  Callers without a valid JWT get
+    401; authenticated non-participants get 403.
+    """
+    import asyncio
+
+    from app.game_engine import BackgammonEngine
+    from app.services.analysis_service import compute_analysis
+
+    table = await db.get(Table, table_id)
+    if not table:
+        raise HTTPException(status_code=404, detail="Table not found")
+
+    # Participation gate: the caller must be one of the seated players.
+    # The BOT player id never matches a human's player id, so when one
+    # seat is the bot only the human at the other seat passes this check.
+    participant_ids = {table.white_player_id, table.black_player_id}
+    if current_player.id not in participant_ids:
+        raise HTTPException(
+            status_code=403,
+            detail="Only players who participated in this game may view its analysis.",
+        )
+
+    if table.status == "playing":
+        raise HTTPException(
+            status_code=403,
+            detail="Analysis is only available for completed games.",
+        )
+
+    # --- Count total moves (for display) up front ---
+    total_result = await db.execute(
+        select(func.count(MoveRecord.id)).where(MoveRecord.table_id == table_id)
+    )
+    total_moves = int(total_result.scalar() or 0)
+
+    # --- Check cached analysis ---
+    cached = await db.get(GameAnalysis, table_id)
+
+    # When force=True, clear the existing cache to trigger recomputation.
+    if force and cached is not None:
+        # Don't interrupt an already-running analysis.
+        if cached.status != "running":
+            await db.delete(cached)
+            await db.commit()
+            cached = None
+
+    # If a background analysis is running at the requested ply, return progress.
+    if cached is not None and cached.status == "running" and cached.ply == ply:
+        analyses = list(cached.move_analyses or [])
+        return AnalysisResponse(
+            table_id=table_id,
+            ml_available=False,
+            moves_analysed=len(analyses),
+            total_moves=total_moves,
+            move_analyses=[MoveAnalysis(**a) for a in analyses],
+            analysis_source=cached.analysis_source,
+            analysis_ply=ply,
+            status="running",
+            progress=len(analyses) / total_moves if total_moves > 0 else 0.0,
+        )
+
+    # If a previous analysis failed, report it so frontend can offer retry.
+    if cached is not None and cached.status == "failed" and cached.ply == ply:
+        analyses = list(cached.move_analyses or [])
+        return AnalysisResponse(
+            table_id=table_id,
+            ml_available=False,
+            moves_analysed=len(analyses),
+            total_moves=total_moves,
+            move_analyses=[MoveAnalysis(**a) for a in analyses],
+            analysis_source=cached.analysis_source,
+            analysis_ply=ply,
+            status="failed",
+        )
+
+    # Return completed cached analysis if it covers the requested range and ply.
+    if (
+        cached is not None
+        and cached.status == "complete"
+        and cached.moves_analysed >= min(limit, total_moves)
+        and cached.ply == ply
+    ):
+        analyses = list(cached.move_analyses or [])[:limit]
+        return AnalysisResponse(
+            table_id=table_id,
+            ml_available=bool(cached.ml_available),
+            moves_analysed=len(analyses),
+            total_moves=total_moves,
+            move_analyses=[MoveAnalysis(**a) for a in analyses],
+            analysis_source=cached.analysis_source,
+            analysis_ply=cached.ply,
+            status="complete",
+        )
+
+    # --- Load initial board + records needed for computation ---
+    records_result = await db.execute(
+        select(MoveRecord)
+        .where(MoveRecord.table_id == table_id)
+        .order_by(MoveRecord.move_number)
+    )
+    records = records_result.scalars().all()
+
+    # Batch-load player nicknames for the move players we'll report on.
+    player_ids = {r.player_id for r in records if r.player_id}
+    nickname_map: dict[str, str] = {}
+    if player_ids:
+        players_result = await db.execute(
+            select(Player).where(Player.id.in_(player_ids))
+        )
+        for p in players_result.scalars().all():
+            nickname_map[p.id] = p.nickname
+
+    initial_state = BackgammonEngine().get_state_snapshot()
+
+    # Correct the starting player: a fresh engine defaults to white, but
+    # the first move record tells us who actually went first.
+    if records:
+        first_player_id = records[0].player_id
+        if first_player_id == table.black_player_id:
+            initial_state["current_turn"] = "black"
+
+    record_dicts = [
+        {
+            "player_id": r.player_id,
+            "dice_roll": r.dice_roll,
+            "moves_notation": r.moves_notation,
+            "move_number": r.move_number,
+            "game_state_after": r.game_state_after,
+        }
+        for r in records
+    ]
+
+    if ply >= 3:
+        # === ASYNC PATH: 3-ply runs as a background task with polling ===
+        from app.services.analysis_service import (
+            _running_analyses,
+            run_background_analysis,
+        )
+
+        # Check if a task is already running in-memory.
+        if table_id in _running_analyses and not _running_analyses[table_id].done():
+            analyses = list((cached.move_analyses if cached else None) or [])
+            return AnalysisResponse(
+                table_id=table_id,
+                ml_available=False,
+                moves_analysed=len(analyses),
+                total_moves=total_moves,
+                move_analyses=[MoveAnalysis(**a) for a in analyses],
+                analysis_source=f"GNU Backgammon ({ply}-ply)",
+                analysis_ply=ply,
+                status="running",
+                progress=len(analyses) / total_moves if total_moves > 0 else 0.0,
+            )
+
+        # Create or reset the DB row to "running".
+        if cached is None:
+            cached = GameAnalysis(
+                table_id=table_id,
+                move_analyses=[],
+                ml_available=False,
+                moves_analysed=0,
+                ply=ply,
+                analysis_source=f"GNU Backgammon ({ply}-ply)",
+                status="running",
+            )
+            db.add(cached)
+        else:
+            cached.move_analyses = []
+            cached.moves_analysed = 0
+            cached.ply = ply
+            cached.analysis_source = f"GNU Backgammon ({ply}-ply)"
+            cached.status = "running"
+        await db.commit()
+
+        # Launch background task.
+        task = asyncio.create_task(
+            run_background_analysis(
+                table_id,
+                initial_state,
+                record_dicts,
+                table.white_player_id,
+                table.black_player_id,
+                nickname_map,
+                limit,
+                ply,
+                total_moves,
+            )
+        )
+        _running_analyses[table_id] = task
+
+        return AnalysisResponse(
+            table_id=table_id,
+            ml_available=False,
+            moves_analysed=0,
+            total_moves=total_moves,
+            move_analyses=[],
+            analysis_source=f"GNU Backgammon ({ply}-ply)",
+            analysis_ply=ply,
+            status="running",
+            progress=0.0,
+        )
+
+    # === SYNC PATH: 0-ply and 2-ply (fast enough to block) ===
+    analyses, ml_available, moves_analysed, analysis_source = await asyncio.to_thread(
+        compute_analysis,
+        initial_state,
+        record_dicts,
+        table.white_player_id,
+        table.black_player_id,
+        nickname_map,
+        limit,
+        ply,
+    )
+
+    # --- Cache the result ---
+    if cached is None:
+        cached = GameAnalysis(
+            table_id=table_id,
+            move_analyses=analyses,
+            ml_available=ml_available,
+            moves_analysed=moves_analysed,
+            ply=ply,
+            analysis_source=analysis_source,
+            status="complete",
+        )
+        db.add(cached)
+    else:
+        cached.move_analyses = analyses
+        cached.ml_available = ml_available
+        cached.moves_analysed = moves_analysed
+        cached.ply = ply
+        cached.analysis_source = analysis_source
+        cached.status = "complete"
+    await db.commit()
+
+    return AnalysisResponse(
+        table_id=table_id,
+        ml_available=ml_available,
+        moves_analysed=moves_analysed,
+        total_moves=total_moves,
+        move_analyses=[MoveAnalysis(**a) for a in analyses],
+        analysis_source=analysis_source,
+        analysis_ply=ply,
+        status="complete",
+    )
+
+
+@router.get(
+    "/tables/{table_id}/analysis/deepdive/{move_number}",
+    response_model=DeepDiveResponse,
+)
+async def get_position_deep_dive(
+    table_id: str,
+    move_number: int,
+    db: AsyncSession = Depends(get_db),
+    current_player: Player = Depends(get_current_player),
+) -> DeepDiveResponse:
+    """Run a maximum-depth analysis on a single position.
+
+    Returns full win probabilities, equity values, top candidate moves,
+    and cube decision for the given move in the game. Uses gnubg at
+    3-ply depth for the highest accuracy available.
+    """
+    import asyncio
+    import time
+
+    from app.game_engine import BackgammonEngine, Color
+    from app.services import gnubg_client
+
+    table = await db.get(Table, table_id)
+    if not table:
+        raise HTTPException(status_code=404, detail="Table not found")
+
+    participant_ids = {table.white_player_id, table.black_player_id}
+    if current_player.id not in participant_ids:
+        raise HTTPException(
+            status_code=403,
+            detail="Only players who participated in this game may view its analysis.",
+        )
+
+    # Load the target move and the one before it (for pre-move state).
+    records_result = await db.execute(
+        select(MoveRecord)
+        .where(MoveRecord.table_id == table_id)
+        .where(MoveRecord.move_number.in_([move_number - 1, move_number]))
+        .order_by(MoveRecord.move_number)
+    )
+    records = records_result.scalars().all()
+
+    target_record = None
+    prev_record = None
+    for r in records:
+        if r.move_number == move_number:
+            target_record = r
+        elif r.move_number == move_number - 1:
+            prev_record = r
+
+    if not target_record:
+        raise HTTPException(status_code=404, detail="Move not found")
+
+    player_color = (
+        "white" if target_record.player_id == table.white_player_id else "black"
+    )
+
+    # Get pre-move board state from the previous move's snapshot
+    # (or initial state for move 1).
+    if prev_record and prev_record.game_state_after:
+        pre_move_state = prev_record.game_state_after
+    else:
+        pre_move_state = BackgammonEngine().get_state_snapshot()
+        # Fix starting player if first move was black.
+        if target_record.player_id == table.black_player_id:
+            pre_move_state["current_turn"] = "black"
+
+    # Parse dice from the move record.
+    dice_parts = target_record.dice_roll.split("-")
+    die1, die2 = int(dice_parts[0]), int(dice_parts[1])
+
+    # Build gnubg board payload.
+    turn = Color.WHITE if player_color == "white" else Color.BLACK
+    board = gnubg_client._board_payload(
+        pre_move_state,
+        turn,
+        cube_value=pre_move_state.get("cube_value", 1),
+        cube_owner=(
+            Color.WHITE if pre_move_state.get("cube_owner") == "white"
+            else Color.BLACK if pre_move_state.get("cube_owner") == "black"
+            else None
+        ),
+    )
+
+    start_time = time.monotonic()
+
+    # Run gnubg calls concurrently.
+    eval_result, best_result, cube_result = await asyncio.gather(
+        gnubg_client.evaluate(board, ply=3),
+        gnubg_client.best_move(board, [die1, die2], ply=3),
+        gnubg_client.cube_decision(board, ply=3),
+    )
+
+    elapsed_ms = int((time.monotonic() - start_time) * 1000)
+
+    # Parse evaluation result.
+    win_prob = None
+    win_g_prob = None
+    win_bg_prob = None
+    lose_g_prob = None
+    lose_bg_prob = None
+    cubeless_equity = None
+    cubeful_equity = None
+
+    if eval_result:
+        probs = eval_result.get("probs", {})
+        win_prob = probs.get("win")
+        win_g_prob = probs.get("win_g", probs.get("win_gammon"))
+        win_bg_prob = probs.get("win_bg", probs.get("win_backgammon"))
+        lose_g_prob = probs.get("lose_g", probs.get("lose_gammon"))
+        lose_bg_prob = probs.get("lose_bg", probs.get("lose_backgammon"))
+        cubeless_equity = eval_result.get("equity")
+        cubeful_equity = eval_result.get("cubeful_equity")
+
+    lose_prob = (1.0 - win_prob) if win_prob is not None else None
+
+    # Parse top candidate moves.
+    top_moves: list[MoveCandidate] = []
+    if best_result:
+        candidates = best_result.get("candidates", [])
+        for i, c in enumerate(candidates[:5]):
+            top_moves.append(MoveCandidate(
+                rank=i + 1,
+                notation=c.get("notation", ""),
+                equity=c.get("equity", 0.0),
+                equity_diff=c.get("equity_diff", 0.0),
+                probs=c.get("probs"),
+            ))
+
+    # Parse cube decision.
+    cube_dec = None
+    if cube_result:
+        cube_dec = CubeDecision(
+            action=cube_result.get("action", cube_result.get("recommendation", "")),
+            equity_no_double=cube_result.get("equity_no_double"),
+            equity_double_take=cube_result.get("equity_double_take"),
+            equity_double_drop=cube_result.get("equity_double_drop"),
+        )
+
+    return DeepDiveResponse(
+        table_id=table_id,
+        move_number=move_number,
+        player_color=player_color,
+        dice_roll=target_record.dice_roll,
+        moves_notation=target_record.moves_notation,
+        win_prob=win_prob,
+        win_g_prob=win_g_prob,
+        win_bg_prob=win_bg_prob,
+        lose_prob=lose_prob,
+        lose_g_prob=lose_g_prob,
+        lose_bg_prob=lose_bg_prob,
+        cubeless_equity=cubeless_equity,
+        cubeful_equity=cubeful_equity,
+        top_moves=top_moves,
+        cube_decision=cube_dec,
+        source="gnubg",
+        ply=3,
+        analysis_time_ms=elapsed_ms,
+    )
+
+
+def _notation_to_mat(notation: str, is_black: bool) -> str:
+    """Convert internal move notation to gnubg-compatible MAT format.
+
+    Handles both space-separated moves (``"13/7 8/5"``) and chain notation
+    (``"13/7/4"``).
+
+    Transformations applied:
+    - For Black: mirror point numbers (``25 - point``) so moves are from
+      Black's own perspective.
+    - For both: replace ``bar`` with ``25`` and ``off`` with ``0`` (gnubg
+      uses numeric-only notation).
+
+    Examples (Black):
+        ``"12/15/19"``   → ``"13/10/6"``
+        ``"bar/3"``      → ``"25/22"``
+        ``"22/off"``     → ``"3/0"``
+
+    Examples (White):
+        ``"8/5 6/5"``    → ``"8/5 6/5"``
+        ``"bar/22"``     → ``"25/22"``
+        ``"3/off"``      → ``"3/0"``
+    """
+
+    def _convert_part(part: str) -> str:
+        """Convert a single point label (possibly with hit marker)."""
+        hit_suffix = ""
+        if part.endswith("*"):
+            hit_suffix = "*"
+            part = part[:-1]
+
+        if part == "bar":
+            return "25" + hit_suffix
+        if part == "off":
+            return "0" + hit_suffix
+        if is_black:
+            try:
+                return str(25 - int(part)) + hit_suffix
+            except ValueError:
+                pass
+        return part + hit_suffix
+
+    def _convert_segment(segment: str) -> str:
+        parts = segment.split("/")
+        if len(parts) < 2:
+            return segment
+        return "/".join(_convert_part(p) for p in parts)
+
+    # Handle special non-move notations (cube actions, no-move markers, etc.)
+    if not notation:
+        return notation
+    # "(no moves)" → empty string; gnubg expects just the dice (e.g. "65:")
+    if notation.startswith("("):
+        return ""
+    if "/" not in notation:
+        return notation
+
+    segments = notation.split()
+    return " ".join(_convert_segment(s) for s in segments)
+
+
+@router.get("/tables/{table_id}/export")
+async def export_game(
+    table_id: str, db: AsyncSession = Depends(get_db)
+) -> PlainTextResponse:
+    """Export a completed game in gnubg-compatible .mat format.
+
+    Follows the Jellyfish/gnubg MAT format so the file can be imported
+    directly into GNU Backgammon for analysis::
+
+         5 point match
+
+         Game 1
+         White : 0                          Black : 0
+          1) 31: 8/5 6/5                    42: 24/20 13/11
+          2) 64: 13/7 13/9                  53: 20/15 11/8
+         ...
+              Wins 2 points
+    """
+    table = await db.get(Table, table_id)
+    if not table:
+        raise HTTPException(status_code=404, detail="Table not found")
+
+    white_player = await db.get(Player, table.white_player_id) if table.white_player_id else None
+    black_player = await db.get(Player, table.black_player_id) if table.black_player_id else None
+
+    records_result = await db.execute(
+        select(MoveRecord)
+        .where(MoveRecord.table_id == table_id)
+        .order_by(MoveRecord.move_number)
+    )
+    records = records_result.scalars().all()
+
+    white_name = white_player.nickname if white_player else "White"
+    black_name = black_player.nickname if black_player else "Black"
+    white_id = table.white_player_id
+    black_id = table.black_player_id
+
+    match_points = table.match_points or 0
+
+    # Calculate scores at the START of this game (before this game's
+    # points were added to the match totals).
+    white_score = table.white_match_score or 0
+    black_score = table.black_match_score or 0
+    if table.final_score and table.winner_id:
+        if table.winner_id == table.white_player_id:
+            white_score -= table.final_score
+        elif table.winner_id == table.black_player_id:
+            black_score -= table.final_score
+
+    # In gnubg MAT format, the left column is the player who moved first.
+    # Determine who moved first from the chronological move records.
+    black_moved_first = bool(records) and records[0].player_id == black_id
+
+    # Separate records by player colour while preserving chronological order.
+    white_records = [r for r in records if r.player_id == white_id]
+    black_records = [r for r in records if r.player_id == black_id]
+
+    if black_moved_first:
+        left_name, left_score = black_name, black_score
+        right_name, right_score = white_name, white_score
+        left_records, right_records = black_records, white_records
+        left_is_black, right_is_black = True, False
+    else:
+        left_name, left_score = white_name, white_score
+        right_name, right_score = black_name, black_score
+        left_records, right_records = white_records, black_records
+        left_is_black, right_is_black = False, True
+
+    lines: list[str] = [
+        f" {match_points} point match",
+        "",
+        " Game 1",
+    ]
+
+    # Score line: " Name : Score                      Name : Score"
+    left_header = f"{left_name} : {left_score}"
+    lines.append(f" {left_header:<31}{right_name} : {right_score}")
+
+    max_turns = max(len(left_records), len(right_records)) if records else 0
+    for i in range(max_turns):
+        turn_num = i + 1
+        left_rec = left_records[i] if i < len(left_records) else None
+        right_rec = right_records[i] if i < len(right_records) else None
+
+        left_part = ""
+        if left_rec:
+            notation = _notation_to_mat(left_rec.moves_notation, is_black=left_is_black)
+            if left_rec.dice_roll:
+                dice = left_rec.dice_roll.replace("-", "")
+                left_part = f"{dice}: {notation}" if notation else f"{dice}:"
+            else:
+                left_part = notation
+
+        right_part = ""
+        if right_rec:
+            notation = _notation_to_mat(right_rec.moves_notation, is_black=right_is_black)
+            if right_rec.dice_roll:
+                dice = right_rec.dice_roll.replace("-", "")
+                right_part = f"{dice}: {notation}" if notation else f"{dice}:"
+            else:
+                right_part = notation
+
+        # gnubg format: "%3d) %-27s %s"
+        line = f"{turn_num:3d}) {left_part:<28}{right_part}"
+        lines.append(line.rstrip())
+
+    if table.status == "finished" and table.winner_id:
+        score = table.final_score or 1
+        point_word = "point" if score == 1 else "points"
+        # gnubg places the result indented, aligned with the right column
+        # if Black won (even-indexed final turn) or left-indented if White won.
+        lines.append(f"      Wins {score} {point_word}")
+
+    lines.append("")  # trailing blank line
+    content = "\n".join(lines) + "\n"
+    return PlainTextResponse(
+        content=content,
+        headers={
+            "Content-Disposition": f'attachment; filename="game_{table_id}.mat"',
+        },
+    )
+
+
+# ------------------------------------------------------------------
+# Seasons
+# ------------------------------------------------------------------
+
+
+@router.get("/seasons/active", response_model=Optional[SeasonResponse])
+async def get_active_season(db: AsyncSession = Depends(get_db)):
+    """Return the currently active season, or null if none is active."""
+    result = await db.execute(
+        select(Season).where(Season.is_active.is_(True)).limit(1)
+    )
+    season = result.scalars().first()
+    return season
+
+
+# ------------------------------------------------------------------
+# Leaderboard
+# ------------------------------------------------------------------
+
+
+@router.get("/leaderboard", response_model=LeaderboardResponse)
+async def get_leaderboard(
+    metric: str = Query(default="wins", pattern="^(rating|wins|win_rate)$"),
+    period: str = Query(default="all_time", pattern="^(all_time|month|week)$"),
+    limit: int = Query(default=100, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    viewer_id: Optional[str] = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Return leaderboard entries sorted by the chosen metric.
+
+    metric=rating  – top players by ELO rating (min 5 rated games)
+    metric=wins    – top players by total wins
+    metric=win_rate – top players by win rate (min 10 games for all_time, 3 for
+                      windowed periods since sample size is smaller)
+
+    period=all_time (default) – uses PlayerStats aggregates
+    period=month    – wins/games from Tables.finished_at within the last 30 days
+    period=week     – wins/games from Tables.finished_at within the last 7 days
+
+    ``viewer_id`` is an optional query parameter: when provided, the response
+    includes a ``viewer_entry`` containing that player's leaderboard row even
+    if they're outside the paginated window (useful for self-rank footer).
+
+    Guest and bot accounts are always excluded.
+
+    # Future: a ``friends_only=true`` filter will scope results to the viewer's
+    # friends list once the friends system is implemented.
+    """
+    window_start: Optional[datetime] = None
+    if period == "month":
+        window_start = datetime.now(timezone.utc) - timedelta(days=30)
+    elif period == "week":
+        window_start = datetime.now(timezone.utc) - timedelta(days=7)
+
+    # --- Build the stats subquery ------------------------------------------
+    if window_start is None:
+        # All-time: aggregate from PlayerStats (fast, pre-aggregated path).
+        stats_sq = (
+            select(
+                PlayerStats.player_id,
+                func.sum(PlayerStats.games_won).label("total_wins"),
+                func.sum(PlayerStats.games_played).label("total_games"),
+            )
+            .group_by(PlayerStats.player_id)
+            .subquery()
+        )
+        min_games_win_rate = 10
+    else:
+        # Windowed: aggregate directly from finished Tables.
+        # Each finished table contributes 1 game to each participant and a win
+        # to the winner_id.
+        # Build two UNION ALL rows per table (one for each color), then group.
+        white_rows = select(
+            Table.white_player_id.label("player_id"),
+            case((Table.winner_id == Table.white_player_id, 1), else_=0).label("is_win"),
+        ).where(
+            Table.status == "finished",
+            Table.finished_at.is_not(None),
+            Table.finished_at >= window_start,
+            Table.white_player_id.is_not(None),
+        )
+        black_rows = select(
+            Table.black_player_id.label("player_id"),
+            case((Table.winner_id == Table.black_player_id, 1), else_=0).label("is_win"),
+        ).where(
+            Table.status == "finished",
+            Table.finished_at.is_not(None),
+            Table.finished_at >= window_start,
+            Table.black_player_id.is_not(None),
+        )
+        union_sq = white_rows.union_all(black_rows).subquery()
+        stats_sq = (
+            select(
+                union_sq.c.player_id.label("player_id"),
+                func.sum(union_sq.c.is_win).label("total_wins"),
+                func.count().label("total_games"),
+            )
+            .group_by(union_sq.c.player_id)
+            .subquery()
+        )
+        # Lower threshold for windowed win_rate since sample sizes are smaller.
+        min_games_win_rate = 3
+
+    # For windowed periods, only include players who actually played in the
+    # window (inner-join equivalent via WHERE). For all-time we keep the
+    # existing outer-join behaviour so rating-only players still show up.
+    if window_start is None:
+        base_q = (
+            select(
+                Player.id,
+                Player.nickname,
+                Player.rating,
+                Player.rating_games,
+                func.coalesce(stats_sq.c.total_wins, 0).label("total_wins"),
+                func.coalesce(stats_sq.c.total_games, 0).label("total_games"),
+            )
+            .outerjoin(stats_sq, Player.id == stats_sq.c.player_id)
+            .where(Player.is_guest == False)  # noqa: E712
+            .where(Player.id != BOT_PLAYER_ID)
+        )
+    else:
+        base_q = (
+            select(
+                Player.id,
+                Player.nickname,
+                Player.rating,
+                Player.rating_games,
+                func.coalesce(stats_sq.c.total_wins, 0).label("total_wins"),
+                func.coalesce(stats_sq.c.total_games, 0).label("total_games"),
+            )
+            .join(stats_sq, Player.id == stats_sq.c.player_id)
+            .where(Player.is_guest == False)  # noqa: E712
+            .where(Player.id != BOT_PLAYER_ID)
+        )
+
+    if metric == "rating":
+        q = (
+            base_q
+            .where(Player.rating_games >= 5)
+            .order_by(Player.rating.desc())
+        )
+    elif metric == "wins":
+        q = base_q.order_by(func.coalesce(stats_sq.c.total_wins, 0).desc())
+    else:  # win_rate
+        q = (
+            base_q
+            .where(func.coalesce(stats_sq.c.total_games, 0) >= min_games_win_rate)
+            .order_by(
+                (func.coalesce(stats_sq.c.total_wins, 0) * 1.0
+                 / stats_sq.c.total_games).desc()
+            )
+        )
+
+    # Count total matching rows (before pagination)
+    count_result = await db.execute(select(func.count()).select_from(q.subquery()))
+    total = count_result.scalar() or 0
+
+    # Materialize all matching rows so we can locate viewer_id for a self-rank
+    # footer even if they're outside the [offset, offset+limit) slice. This is
+    # bounded by the leaderboard eligibility filters so stays small in practice.
+    all_result = await db.execute(q)
+    all_rows = all_result.all()
+
+    def _make_entry(index: int, row) -> LeaderboardEntry:
+        total_wins = int(row.total_wins)
+        total_games = int(row.total_games)
+        win_rate = (total_wins / total_games * 100.0) if total_games > 0 else 0.0
+        return LeaderboardEntry(
+            rank=index + 1,
+            player_id=row.id,
+            nickname=row.nickname,
+            rating=row.rating,
+            rating_games=row.rating_games,
+            total_wins=total_wins,
+            total_games=total_games,
+            win_rate=win_rate,
+        )
+
+    page_rows = all_rows[offset : offset + limit]
+    entries = [_make_entry(offset + i, row) for i, row in enumerate(page_rows)]
+
+    viewer_entry: Optional[LeaderboardEntry] = None
+    if viewer_id:
+        for i, row in enumerate(all_rows):
+            if row.id == viewer_id:
+                # Only populate when viewer is NOT in the current page slice
+                # (frontend already highlights the row when in view).
+                if not (offset <= i < offset + limit):
+                    viewer_entry = _make_entry(i, row)
+                break
+
+    return LeaderboardResponse(entries=entries, total=total, viewer_entry=viewer_entry)

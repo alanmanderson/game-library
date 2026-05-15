@@ -1,0 +1,165 @@
+.board-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+
+  /* Default (classic wood) theme tokens. Each `[data-theme=...]` block
+     below overrides these for the selected theme. The SVG child elements
+     read these via `fill: var(--board-*)` rules below. */
+  --board-bg: #3e6b35;
+  --board-bar: #2d1810;
+  --board-bearoff: #2d1810;
+  --point-dark: #5c3d2e;
+  --point-light: #c69c6d;
+
+  /* Checker style tokens — consumed by the radial-gradient stops in the
+     `<defs>` block. Overridden per `[data-checker=...]` below. */
+  --checker-white-0: #ffffff;
+  --checker-white-1: #f0e6d3;
+  --checker-white-2: #d4c4a8;
+  --checker-white-3: #b8a88a;
+  --checker-black-0: #888888;
+  --checker-black-1: #4a4a4a;
+  --checker-black-2: #2b2b2b;
+  --checker-black-3: #1a1a1a;
+}
+
+/* ---- Board themes ---- */
+
+.board-container[data-theme="classic"] {
+  --board-bg: #3e6b35;
+  --board-bar: #2d1810;
+  --board-bearoff: #2d1810;
+  --point-dark: #5c3d2e;
+  --point-light: #c69c6d;
+}
+
+.board-container[data-theme="dark-marble"] {
+  --board-bg: #1f2430;
+  --board-bar: #11141c;
+  --board-bearoff: #11141c;
+  --point-dark: #2d3547;
+  --point-light: #6b7a99;
+}
+
+.board-container[data-theme="green-felt"] {
+  --board-bg: #0f5132;
+  --board-bar: #1a0f0f;
+  --board-bearoff: #1a0f0f;
+  --point-dark: #7a1f1f;
+  --point-light: #e6cfa0;
+}
+
+/* Override the inline `fill` attribute with `!important` — SVG presentation
+   attributes lose to CSS, but only with explicit precedence. */
+.board-svg .board-bg { fill: var(--board-bg) !important; }
+.board-svg .board-bar { fill: var(--board-bar) !important; }
+.board-svg .board-bearoff { fill: var(--board-bearoff) !important; }
+.board-svg .point-tri-dark { fill: var(--point-dark) !important; }
+.board-svg .point-tri-light { fill: var(--point-light) !important; }
+
+/* ---- Checker styles ---- */
+
+.board-container[data-checker="classic"] {
+  --checker-white-0: #ffffff;
+  --checker-white-1: #f0e6d3;
+  --checker-white-2: #d4c4a8;
+  --checker-white-3: #b8a88a;
+  --checker-black-0: #888888;
+  --checker-black-1: #4a4a4a;
+  --checker-black-2: #2b2b2b;
+  --checker-black-3: #1a1a1a;
+}
+
+.board-container[data-checker="marble"] {
+  --checker-white-0: #ffffff;
+  --checker-white-1: #fdfaf2;
+  --checker-white-2: #e6dfd0;
+  --checker-white-3: #b8b0a0;
+  --checker-black-0: #9a8ea6;
+  --checker-black-1: #5c4e6c;
+  --checker-black-2: #3a3042;
+  --checker-black-3: #1e1824;
+}
+
+.board-container[data-checker="metal"] {
+  --checker-white-0: #ffffff;
+  --checker-white-1: #e6eaf0;
+  --checker-white-2: #bac1ce;
+  --checker-white-3: #8a94a8;
+  --checker-black-0: #9aa3b2;
+  --checker-black-1: #626c7c;
+  --checker-black-2: #4a5260;
+  --checker-black-3: #272c36;
+}
+
+.board-svg .checker-white-stop-0 { stop-color: var(--checker-white-0) !important; }
+.board-svg .checker-white-stop-1 { stop-color: var(--checker-white-1) !important; }
+.board-svg .checker-white-stop-2 { stop-color: var(--checker-white-2) !important; }
+.board-svg .checker-white-stop-3 { stop-color: var(--checker-white-3) !important; }
+.board-svg .checker-black-stop-0 { stop-color: var(--checker-black-0) !important; }
+.board-svg .checker-black-stop-1 { stop-color: var(--checker-black-1) !important; }
+.board-svg .checker-black-stop-2 { stop-color: var(--checker-black-2) !important; }
+.board-svg .checker-black-stop-3 { stop-color: var(--checker-black-3) !important; }
+
+.board-svg {
+  width: 100%;
+  max-width: 1000px;
+  height: auto;
+  filter: drop-shadow(0 4px 20px rgba(0, 0, 0, 0.4));
+  border-radius: 8px;
+}
+
+/* Checker transitions */
+.board-svg .checker {
+  transition: transform 0.2s ease;
+}
+
+/* Animated checker sliding from source to destination */
+.board-svg .checker-animating {
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* Ghost checker preview on hover */
+.board-svg .ghost-checker {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+/* Hint highlight pulsing glow */
+.board-svg .hint-highlight {
+  animation: hint-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes hint-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.7; }
+}
+
+/* Clickable areas */
+.board-svg .point-area {
+  cursor: pointer;
+}
+
+.board-svg .point-area:hover {
+  opacity: 0.9;
+}
+
+.board-svg .bar-area {
+  cursor: pointer;
+}
+
+.board-svg .bearoff-area {
+  cursor: pointer;
+}
+
+/* ---- Responsive: Mobile ---- */
+
+@media (max-width: 600px) {
+  .board-svg {
+    filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.3));
+    border-radius: 4px;
+  }
+}

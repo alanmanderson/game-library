@@ -1,0 +1,176 @@
+.dice-container {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+}
+
+.die {
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+/* Dice rolling tumble animation */
+@keyframes dice-tumble {
+  0% { transform: scale(0.3) rotateX(0deg) rotateY(0deg); opacity: 0; }
+  10% { opacity: 1; }
+  25% { transform: scale(1.15) rotateX(180deg) rotateY(90deg); }
+  50% { transform: scale(0.95) rotateX(360deg) rotateY(180deg); }
+  75% { transform: scale(1.08) rotateX(540deg) rotateY(270deg); }
+  100% { transform: scale(1) rotateX(720deg) rotateY(360deg); }
+}
+
+.die.rolling {
+  animation: dice-tumble 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.die-white {
+  background: #f5f0e1;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.die-black {
+  background: #1a1a1a;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+.die.used {
+  opacity: 0.3;
+  transform: scale(0.9);
+}
+
+.die-dots {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 2px;
+  width: 36px;
+  height: 36px;
+  padding: 2px;
+}
+
+.die-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: transparent;
+  align-self: center;
+  justify-self: center;
+}
+
+.die-white .die-dot.filled {
+  background: #2c1810;
+}
+
+.die-black .die-dot.filled {
+  background: #f0ebe0;
+}
+
+.dice-separator {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+/* Swappable dice: clicking swaps the priority order */
+.dice-container.dice-swappable {
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 0.15s ease;
+}
+
+.dice-container.dice-swappable:hover {
+  background: rgba(212, 168, 67, 0.12);
+}
+
+.dice-container.dice-swappable:hover .die:not(.used) {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+/* Compact dice when inside board overlay */
+.board-overlay .dice-container {
+  padding: 0.15rem;
+  gap: 0.5rem;
+}
+
+.board-overlay .die {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+}
+
+.board-overlay .die-dots {
+  width: 28px;
+  height: 28px;
+}
+
+.board-overlay .die-dot {
+  width: 6px;
+  height: 6px;
+}
+
+/* ---- Responsive: Tablet ---- */
+
+@media (max-width: 900px) {
+  .die {
+    width: 46px;
+    height: 46px;
+  }
+
+  .die-dots {
+    width: 32px;
+    height: 32px;
+  }
+
+  .die-dot {
+    width: 7px;
+    height: 7px;
+  }
+}
+
+/* ---- Responsive: Mobile ---- */
+
+@media (max-width: 600px) {
+  .dice-container {
+    gap: 0.6rem;
+    padding: 0.35rem;
+  }
+
+  .die {
+    width: 38px;
+    height: 38px;
+    border-radius: 6px;
+  }
+
+  .die-dots {
+    width: 26px;
+    height: 26px;
+  }
+
+  .die-dot {
+    width: 6px;
+    height: 6px;
+  }
+
+  .board-overlay .die {
+    width: 32px;
+    height: 32px;
+    border-radius: 5px;
+  }
+
+  .board-overlay .die-dots {
+    width: 22px;
+    height: 22px;
+  }
+
+  .board-overlay .die-dot {
+    width: 5px;
+    height: 5px;
+  }
+}

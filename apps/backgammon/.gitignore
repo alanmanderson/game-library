@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+
+# Node
+node_modules/
+dist/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+
+# Env
+.env
+
+# Database files
+*.db
+
+# Claude Code (local config)
+.mcp.json
+
+# Screenshots
+screenshots/
+
+# Vite
+tsconfig.tsbuildinfo
+infra/terraform.tfvars

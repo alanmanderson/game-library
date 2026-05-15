@@ -1,0 +1,229 @@
+.lobby {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  padding: 2rem;
+  gap: 1.5rem;
+  width: 100%;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.lobby-header {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 1rem;
+}
+
+.lobby-header h2 {
+  flex: 1;
+  text-align: center;
+  color: var(--accent);
+  margin: 0;
+}
+
+.lobby-back-btn {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.85rem;
+  background: var(--bg-secondary);
+  border: none;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lobby-back-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary, var(--bg-secondary));
+}
+
+.lobby-header-spacer {
+  width: 52px; /* match back button width for centering */
+}
+
+.lobby-actions {
+  display: flex;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.lobby-quick-match-btn,
+.lobby-create-btn {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lobby-quick-match-btn {
+  background: var(--accent);
+  color: var(--bg-primary);
+}
+
+.lobby-quick-match-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.lobby-create-btn {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.lobby-create-btn:hover:not(:disabled) {
+  background: var(--bg-tertiary, var(--bg-secondary));
+}
+
+.lobby-quick-match-btn:disabled,
+.lobby-create-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.lobby-error {
+  color: var(--danger);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.lobby-table-list {
+  width: 100%;
+}
+
+.lobby-table-list h3 {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  margin-bottom: 0.75rem;
+}
+
+.lobby-loading,
+.lobby-empty {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-style: italic;
+  text-align: center;
+  padding: 1.5rem 0;
+}
+
+.lobby-table-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  margin-bottom: 0.5rem;
+  transition: background 0.15s;
+}
+
+.lobby-table-item:hover {
+  background: var(--bg-tertiary, var(--bg-secondary));
+}
+
+.lobby-table-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.lobby-table-creator {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.lobby-table-details {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.lobby-table-time {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+.lobby-join-btn {
+  padding: 0.45rem 1rem;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--bg-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lobby-join-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.lobby-join-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.lobby-watch-btn {
+  padding: 0.45rem 1rem;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lobby-watch-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--bg-primary);
+}
+
+.lobby-watch-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.lobby-active-games {
+  margin-top: 0.5rem;
+}
+
+.lobby-spectator-count {
+  color: var(--accent);
+  font-size: 0.75rem;
+}
+
+.lobby-casual-badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--text-secondary);
+  border-radius: 999px;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+/* Embedded mode (inside tab panel) */
+
+.lobby--embedded {
+  padding: 0;
+  max-width: none;
+  align-items: stretch;
+}
+
+.lobby--embedded .lobby-table-item {
+  background: var(--bg-primary, #1a1a2e);
+}

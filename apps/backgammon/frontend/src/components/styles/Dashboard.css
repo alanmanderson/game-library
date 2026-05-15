@@ -1,0 +1,266 @@
+.dashboard {
+  width: 100%;
+}
+
+/* ------------------------------------------------------------------
+   Summary stat cards – mirrors .stats-overview from Statistics.css
+   ------------------------------------------------------------------ */
+
+.dashboard-overview {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+/* Re-use .stat-card / .stat-value / .stat-label from Statistics.css.
+   Only the color overrides below are dashboard-specific. */
+
+.dashboard-rating {
+  color: #ffc107;
+}
+
+.dashboard-wins {
+  color: #4caf50;
+}
+
+.dashboard-losses {
+  color: var(--danger);
+}
+
+.dashboard-abandoned {
+  color: #ff9800;
+}
+
+/* ------------------------------------------------------------------
+   Tab switcher (Game History / Advanced Stats)
+   ------------------------------------------------------------------ */
+
+.dashboard-tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 1rem;
+}
+
+.dashboard-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 0.6rem 1rem;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.dashboard-tab:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.dashboard-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* ------------------------------------------------------------------
+   Game history table – extends .opponent-table from Statistics.css
+   ------------------------------------------------------------------ */
+
+.dashboard-table th,
+.dashboard-table td {
+  text-align: center;
+}
+
+.dashboard-table th:nth-child(1),
+.dashboard-table td:nth-child(1),
+.dashboard-table th:nth-child(2),
+.dashboard-table td:nth-child(2) {
+  text-align: left;
+}
+
+/* Color indicator (small circle for white / black) */
+
+.color-indicator {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+.color-white {
+  background: #f0f0f0;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.color-black {
+  background: #333;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* Result badges */
+
+.result-badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.result-win {
+  background: rgba(76, 175, 80, 0.15);
+  color: #4caf50;
+}
+
+.result-loss {
+  background: rgba(244, 67, 54, 0.15);
+  color: var(--danger);
+}
+
+.result-abandoned {
+  background: rgba(255, 152, 0, 0.15);
+  color: #ff9800;
+}
+
+.result-resume {
+  background: rgba(33, 150, 243, 0.15);
+  color: #2196f3;
+  cursor: pointer;
+}
+
+.resumable-row {
+  cursor: pointer;
+  border-left: 3px solid #2196f3;
+}
+
+.resumable-row:hover,
+.resumable-row:active {
+  background: rgba(33, 150, 243, 0.08);
+}
+
+/* Replay button inside the history table */
+.replay-link-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #aaa;
+  padding: 0.2rem 0.55rem;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.replay-link-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+/* Export download button */
+
+.export-btn {
+  background: none;
+  border: 1px solid var(--text-secondary, #888);
+  border-radius: 4px;
+  color: var(--text-secondary, #888);
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 0.2rem 0.5rem;
+}
+
+.export-btn:hover {
+  background: rgba(0, 0, 0, 0.07);
+  border-color: var(--text-primary, #333);
+  color: var(--text-primary, #333);
+}
+
+/* Loading / empty states */
+
+.dashboard-loading,
+.dashboard-empty {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 1rem;
+  font-style: italic;
+}
+
+/* ---- Responsive: Tablet ---- */
+
+@media (max-width: 900px) {
+  .dashboard-overview {
+    gap: 0.75rem;
+  }
+
+  .dashboard-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ---- Responsive: Mobile ---- */
+
+@media (max-width: 600px) {
+  .dashboard-overview {
+    gap: 0.5rem;
+  }
+
+  .dashboard-table th,
+  .dashboard-table td {
+    font-size: 0.8rem;
+    padding: 0.4rem 0.5rem;
+  }
+
+  .result-badge {
+    font-size: 0.7rem;
+    padding: 0.15rem 0.45rem;
+  }
+
+  .color-indicator {
+    width: 12px;
+    height: 12px;
+  }
+}
+
+.dashboard-season-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  margin-bottom: 1rem;
+}
+
+.dashboard-season-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.dashboard-season-name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.dashboard-tier-badge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.4rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  text-transform: uppercase;
+  vertical-align: middle;
+}

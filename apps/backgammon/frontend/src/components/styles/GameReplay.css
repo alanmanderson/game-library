@@ -1,0 +1,1106 @@
+/* ── Game Replay ──────────────────────────────────────────────────────────── */
+
+.replay-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem 1rem;
+  min-height: 100vh;
+  background: var(--bg, #1a1a2e);
+  color: #eee;
+}
+
+/* Header */
+.replay-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  max-width: 860px;
+}
+
+.replay-back-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #ccc;
+  padding: 0.4rem 0.85rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.15s, color 0.15s;
+}
+
+.replay-back-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.replay-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #f5e6c8;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Share link button */
+.replay-share-btn {
+  background: var(--accent, #d4a843);
+  border: 1px solid var(--accent, #d4a843);
+  color: var(--bg-primary, #1a1a2e);
+  padding: 0.45rem 0.9rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
+  white-space: nowrap;
+}
+
+.replay-share-btn:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.replay-share-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.replay-share-btn--copied {
+  background: var(--success, #2ecc71);
+  border-color: var(--success, #2ecc71);
+  color: var(--bg-primary, #1a1a2e);
+}
+
+/* Embed mode: tighten padding, lose extra chrome */
+.replay-page--embed {
+  padding: 0.5rem;
+  min-height: auto;
+}
+
+.replay-page--embed .replay-counter {
+  font-size: 0.85rem;
+}
+
+@media (max-width: 768px) {
+  .replay-header {
+    flex-wrap: wrap;
+  }
+  .replay-share-btn {
+    font-size: 0.85rem;
+    padding: 0.4rem 0.7rem;
+  }
+}
+
+/* Move counter */
+.replay-counter {
+  font-size: 1rem;
+  color: #aaa;
+}
+
+.replay-counter strong {
+  color: #f5e6c8;
+}
+
+/* Board wrapper */
+.replay-board-wrapper {
+  position: relative;
+  width: 100%;
+  max-width: 860px;
+  pointer-events: none; /* read-only */
+}
+
+/* Dice overlay — sits in the horizontal band between the top and bottom
+   point triangles on the left half of the board, mirroring the analysis
+   pill on the right. The board's triangles occupy ~42% of the height from
+   each edge, leaving a ~16% central strip where these overlays can live
+   without covering any points or checkers. */
+.replay-dice-overlay {
+  position: absolute;
+  top: 50%;
+  left: 25%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Engine analysis indicator — placed in the centre of the right half of
+   the board, between the points, mirroring the dice overlay on the left. */
+.replay-board-analysis {
+  position: absolute;
+  top: 50%;
+  left: 75%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 10px;
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.replay-board-analysis-quality {
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+}
+
+.replay-board-analysis-prob {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary, #9a9ab0);
+}
+
+.replay-board-analysis--best { color: #2ecc71; border-color: rgba(46, 204, 113, 0.5); }
+.replay-board-analysis--good { color: #78c8ff; border-color: rgba(120, 200, 255, 0.5); }
+.replay-board-analysis--inaccuracy { color: #f1c40f; border-color: rgba(241, 196, 15, 0.5); }
+.replay-board-analysis--mistake { color: #e67e22; border-color: rgba(230, 126, 34, 0.5); }
+.replay-board-analysis--blunder { color: #e74c3c; border-color: rgba(231, 76, 60, 0.55); }
+
+@media (max-width: 768px) {
+  .replay-board-analysis {
+    padding: 0.3rem 0.55rem;
+  }
+  .replay-board-analysis-quality { font-size: 0.8rem; }
+  .replay-board-analysis-prob { font-size: 0.7rem; }
+}
+
+/* Move info bar */
+.replay-move-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.95rem;
+  min-height: 2rem;
+}
+
+.replay-player-badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.replay-player-white {
+  background: #f0e6d3;
+  color: #2a1a0e;
+}
+
+.replay-player-black {
+  background: #2b2b2b;
+  color: #eee;
+  border: 1px solid #555;
+}
+
+.replay-notation {
+  color: #ccc;
+  font-family: monospace;
+}
+
+.replay-notation-best {
+  color: #e74c3c;
+  font-family: monospace;
+  font-weight: 600;
+}
+
+.replay-notation-empty {
+  color: #888;
+  font-style: italic;
+}
+
+/* Navigation controls */
+.replay-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.replay-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #eee;
+  width: 2.8rem;
+  height: 2.8rem;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.replay-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.replay-btn:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.replay-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.replay-btn-play {
+  width: 3.2rem;
+  height: 3.2rem;
+  font-size: 1.3rem;
+  background: rgba(76, 175, 80, 0.2);
+  border-color: rgba(76, 175, 80, 0.5);
+}
+
+.replay-btn-play:hover:not(:disabled) {
+  background: rgba(76, 175, 80, 0.35);
+}
+
+/* Speed control */
+.replay-speed {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  color: #aaa;
+}
+
+.replay-speed-label {
+  color: #888;
+}
+
+.replay-speed-slider {
+  width: 120px;
+  accent-color: #4caf50;
+}
+
+.replay-speed-hint {
+  min-width: 3.5rem;
+  color: #aaa;
+}
+
+/* Loading / error states */
+.replay-loading,
+.replay-error {
+  margin-top: 4rem;
+  font-size: 1.1rem;
+  color: #aaa;
+  text-align: center;
+}
+
+.replay-error {
+  color: var(--danger, #e74c3c);
+}
+
+/* ── Analysis panel ──────────────────────────────────────────────────── */
+
+.replay-analysis-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.replay-analysis-toggle {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--text-primary, #e8e8e8);
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.replay-analysis-toggle:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.replay-analysis-toggle--open {
+  border-color: var(--accent, #d4a843);
+  color: var(--accent, #d4a843);
+}
+
+.replay-ply-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.replay-ply-label {
+  font-size: 0.82rem;
+  color: var(--text-secondary, #9a9ab0);
+  margin-right: 0.2rem;
+}
+
+.replay-ply-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text-secondary, #9a9ab0);
+  padding: 0.3rem 0.6rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.replay-ply-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: var(--text-primary, #e8e8e8);
+}
+
+.replay-ply-btn--active {
+  background: rgba(212, 168, 67, 0.15);
+  border-color: var(--accent, #d4a843);
+  color: var(--accent, #d4a843);
+}
+
+.replay-ply-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.replay-analysis {
+  width: 100%;
+  max-width: 860px;
+  background: var(--bg-secondary, #22223a);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.replay-analysis-status {
+  text-align: center;
+  padding: 1rem;
+  color: var(--text-secondary, #9a9ab0);
+  font-size: 0.95rem;
+}
+
+.replay-analysis-status--error {
+  color: var(--danger, #e74c3c);
+}
+
+.replay-analysis-progress-bar {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  margin: 0.5rem 0;
+  overflow: hidden;
+}
+
+.replay-analysis-progress-fill {
+  height: 100%;
+  background: var(--accent, #d4a843);
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+.replay-analysis-progress-detail {
+  font-size: 0.82rem;
+  color: var(--text-secondary, #9a9ab0);
+}
+
+.replay-analysis-retry-btn {
+  background: transparent;
+  border: 1px solid var(--danger, #e74c3c);
+  color: var(--danger, #e74c3c);
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  margin-left: 0.5rem;
+  transition: background 0.15s ease;
+}
+
+.replay-analysis-retry-btn:hover {
+  background: rgba(231, 76, 60, 0.15);
+}
+
+.replay-analysis-banner {
+  background: rgba(212, 168, 67, 0.1);
+  border: 1px solid rgba(212, 168, 67, 0.3);
+  color: var(--accent, #d4a843);
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.replay-analysis-banner--source {
+  background: rgba(46, 204, 113, 0.08);
+  border-color: rgba(46, 204, 113, 0.25);
+  color: var(--success, #2ecc71);
+  font-weight: 500;
+}
+
+/* Game summary */
+.replay-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.replay-summary-player {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.6rem 0.75rem;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+}
+
+.replay-summary-stat {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+}
+
+.replay-summary-label {
+  color: var(--text-secondary, #9a9ab0);
+}
+
+.replay-summary-value {
+  font-weight: 600;
+  font-family: monospace;
+  color: var(--text-primary, #e8e8e8);
+}
+
+.replay-summary-qualities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.5rem;
+  margin-top: 0.15rem;
+}
+
+.replay-summary-quality {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+@media (max-width: 480px) {
+  .replay-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.replay-analysis-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.replay-analysis-heading {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-primary, #e8e8e8);
+  letter-spacing: 0.02em;
+}
+
+/* Quality badge colors. */
+.replay-quality {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.replay-quality--best { background: rgba(46, 204, 113, 0.18); color: #2ecc71; }
+.replay-quality--good { background: rgba(120, 200, 255, 0.15); color: #78c8ff; }
+.replay-quality--inaccuracy { background: rgba(241, 196, 15, 0.18); color: #f1c40f; }
+.replay-quality--mistake { background: rgba(230, 126, 34, 0.18); color: #e67e22; }
+.replay-quality--blunder { background: rgba(231, 76, 60, 0.2); color: #e74c3c; }
+
+/* Key-moments list. */
+.replay-key-moments {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.replay-key-moment {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: inherit;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.9rem;
+  transition: background 0.15s ease;
+}
+
+.replay-key-moment:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.replay-key-moment-move {
+  color: var(--text-secondary, #9a9ab0);
+}
+
+.replay-key-moment-loss {
+  color: var(--danger, #e74c3c);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* Move list. */
+.replay-move-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.replay-move-item {
+  border-radius: 6px;
+}
+
+.replay-move-item--active {
+  background: rgba(212, 168, 67, 0.12);
+  outline: 1px solid rgba(212, 168, 67, 0.35);
+}
+
+.replay-move-item-btn {
+  display: grid;
+  grid-template-columns: 2rem auto auto 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: inherit;
+  padding: 0.35rem 0.5rem;
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.85rem;
+}
+
+.replay-move-item-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+}
+
+.replay-move-item-num {
+  color: var(--text-secondary, #9a9ab0);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.replay-move-item-player {
+  color: var(--text-secondary, #9a9ab0);
+  font-variant-numeric: tabular-nums;
+}
+
+.replay-move-item-notation {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text-primary, #e8e8e8);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.replay-move-item-best {
+  color: var(--text-secondary, #9a9ab0);
+  font-size: 0.78rem;
+  font-style: italic;
+}
+
+@media (max-width: 768px) {
+  .replay-move-item-btn {
+    grid-template-columns: 1.8rem auto 1fr;
+    row-gap: 0.15rem;
+  }
+  .replay-move-item-player,
+  .replay-move-item-best {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Small one-line attribution rendered under the "Move list" heading when the
+   analysis came from gnubg. Quieter than a banner so it doesn't compete with
+   "Key moments"; the ML-unavailable banner stays prominent because it signals
+   degraded service. */
+.replay-analysis-attribution {
+  margin: -0.25rem 0 0.25rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary, #9a9ab0);
+  cursor: help;
+}
+
+/* Per-move win-probability bar (chosen vs best) below each move row. */
+.replay-move-probs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.75rem;
+  padding: 0.25rem 0.5rem 0.4rem 2.6rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary, #9a9ab0);
+}
+
+.replay-move-probs-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.replay-move-probs-label {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary, #e8e8e8);
+  padding: 0.08rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 600;
+}
+
+.replay-move-probs-label--best {
+  background: rgba(212, 168, 67, 0.18);
+  color: var(--accent, #d4a843);
+}
+
+.replay-move-probs-notation {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text-primary, #e8e8e8);
+}
+
+.replay-move-probs-pct {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.replay-move-probs-pct--chosen {
+  color: var(--text-primary, #e8e8e8);
+}
+
+.replay-move-probs-pct--best {
+  color: var(--accent, #d4a843);
+}
+
+.replay-move-probs-delta {
+  color: var(--danger, #e74c3c);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.replay-move-probs-toggle {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--text-secondary, #9a9ab0);
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.72rem;
+  line-height: 1;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.replay-move-probs-toggle:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary, #e8e8e8);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.replay-move-probs-toggle--open {
+  border-color: var(--accent, #d4a843);
+  color: var(--accent, #d4a843);
+}
+
+/* Gammon/backgammon probability breakdown grid. */
+.replay-move-probs-breakdown {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 0.2rem 1rem;
+  margin: 0.25rem 0.5rem 0.5rem 2.6rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  font-size: 0.78rem;
+}
+
+.replay-move-probs-breakdown-header,
+.replay-move-probs-breakdown-row {
+  display: contents;
+}
+
+.replay-move-probs-breakdown-header > span {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary, #9a9ab0);
+  font-weight: 600;
+  text-align: right;
+}
+
+.replay-move-probs-breakdown-header > span:first-child {
+  text-align: left;
+}
+
+.replay-move-probs-breakdown-label {
+  color: var(--text-secondary, #9a9ab0);
+}
+
+.replay-move-probs-breakdown-value {
+  color: var(--text-primary, #e8e8e8);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+@media (max-width: 768px) {
+  .replay-move-probs {
+    padding-left: 0.5rem;
+  }
+  .replay-move-probs-toggle {
+    margin-left: 0;
+  }
+  .replay-move-probs-breakdown {
+    margin-left: 0.5rem;
+  }
+}
+
+/* ── Top Moves Panel ──────────────────────────────────────────────────── */
+
+.replay-top-moves {
+  width: 100%;
+  max-width: 600px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.replay-top-moves-header {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary, #9a9ab0);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.replay-top-moves-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.replay-top-moves-th {
+  padding: 0.4rem 0.75rem;
+  text-align: left;
+  font-weight: 500;
+  font-size: 0.75rem;
+  color: var(--text-secondary, #9a9ab0);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.replay-top-moves-th--rank { width: 2rem; text-align: center; }
+.replay-top-moves-th--equity,
+.replay-top-moves-th--delta { text-align: right; width: 5.5rem; }
+
+.replay-top-moves-row {
+  transition: background 0.12s ease;
+}
+
+.replay-top-moves-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.replay-top-moves-row--selected {
+  background: rgba(212, 168, 67, 0.15);
+}
+
+.replay-top-moves-row--selected:hover {
+  background: rgba(212, 168, 67, 0.2);
+}
+
+.replay-top-moves-row--best .replay-top-moves-td--rank {
+  color: var(--success, #2ecc71);
+  font-weight: 700;
+}
+
+.replay-top-moves-row--chosen {
+  border-left: 3px solid var(--accent, #d4a843);
+}
+
+.replay-top-moves-td {
+  padding: 0.45rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: var(--text-primary, #e8e8e8);
+}
+
+.replay-top-moves-td--rank {
+  text-align: center;
+  font-weight: 600;
+  color: var(--text-secondary, #9a9ab0);
+}
+
+.replay-top-moves-td--notation {
+  font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+}
+
+.replay-top-moves-td--equity,
+.replay-top-moves-td--delta {
+  text-align: right;
+  font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+  font-size: 0.8rem;
+}
+
+.replay-top-moves-td--warn {
+  color: #e6a23c;
+}
+
+.replay-top-moves-td--bad {
+  color: var(--danger, #e74c3c);
+}
+
+.replay-top-moves-played {
+  display: inline-block;
+  margin-left: 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--accent, #d4a843);
+  font-family: inherit;
+}
+
+/* Mobile: collapse by default */
+@media (max-width: 768px) {
+  .replay-top-moves {
+    max-width: 100%;
+  }
+  .replay-top-moves-th--equity,
+  .replay-top-moves-td--equity {
+    display: none;
+  }
+}
+
+/* ── Re-analyze button ─────────────────────────────────────────────────── */
+
+.replay-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.replay-reanalyze-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(212, 168, 67, 0.35);
+  background: rgba(212, 168, 67, 0.06);
+  color: var(--accent, #d4a843);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  white-space: nowrap;
+}
+
+.replay-reanalyze-btn:hover:not(:disabled) {
+  background: rgba(212, 168, 67, 0.14);
+  border-color: var(--accent, #d4a843);
+}
+
+.replay-reanalyze-btn--running {
+  opacity: 0.85;
+  cursor: default;
+}
+
+.replay-reanalyze-spin {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: replay-spin 0.9s linear infinite;
+}
+
+@keyframes replay-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Freshness banner ──────────────────────────────────────────────────── */
+
+.replay-freshness {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: linear-gradient(90deg, rgba(212, 168, 67, 0.08), transparent 80%);
+  border: 1px solid rgba(212, 168, 67, 0.25);
+  border-radius: 6px;
+  font-size: 0.78rem;
+  color: var(--text-secondary, #9a9ab0);
+  width: 100%;
+  max-width: 860px;
+}
+
+.replay-freshness strong {
+  color: var(--accent, #d4a843);
+}
+
+/* ── Re-analysis progress card ─────────────────────────────────────────── */
+
+.replay-progress-card {
+  width: 100%;
+  max-width: 860px;
+  background: var(--bg-secondary, #22223a);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.replay-progress-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.replay-progress-title {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-primary, #e8e8e8);
+}
+
+.replay-progress-caption {
+  font-size: 0.78rem;
+  color: var(--text-secondary, #9a9ab0);
+}
+
+.replay-progress-pct {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 1.6rem;
+  color: var(--accent, #d4a843);
+  font-feature-settings: "tnum";
+}
+
+.replay-progress-track {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.replay-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent, #d4a843), #f0d078);
+  border-radius: 3px;
+  box-shadow: 0 0 10px rgba(212, 168, 67, 0.45);
+  transition: width 0.5s ease;
+}
+
+.replay-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--text-secondary, #9a9ab0);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-feature-settings: "tnum";
+}
+
+.replay-progress-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: linear-gradient(90deg, rgba(212, 168, 67, 0.08), transparent 80%);
+  border: 1px solid rgba(212, 168, 67, 0.25);
+  border-radius: 6px;
+  font-size: 0.75rem;
+  color: var(--text-secondary, #9a9ab0);
+}
+
+.replay-progress-note strong {
+  color: var(--accent, #d4a843);
+}
+
+/* ── Deep-dive trigger button ──────────────────────────────────────────── */
+
+.replay-deepdive-trigger {
+  display: flex;
+  justify-content: center;
+}
+
+.replay-deepdive-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary, #9a9ab0);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.replay-deepdive-btn:hover:not(:disabled) {
+  color: var(--accent, #d4a843);
+  border-color: var(--accent, #d4a843);
+  background: rgba(212, 168, 67, 0.06);
+}
+
+.replay-deepdive-btn--active {
+  color: var(--accent, #d4a843);
+  border-color: rgba(212, 168, 67, 0.35);
+  background: rgba(212, 168, 67, 0.1);
+}
+
+.replay-deepdive-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

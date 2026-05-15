@@ -1,0 +1,149 @@
+.move-history-drawer {
+  width: 100%;
+  max-width: 500px;
+}
+
+.drawer-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.drawer-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.drawer-toggle.open {
+  border-radius: 6px 6px 0 0;
+}
+
+.drawer-arrow {
+  font-size: 0.7rem;
+}
+
+.move-count {
+  margin-left: auto;
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+.move-history {
+  max-height: 200px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  background: var(--bg-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+}
+
+.move-history-entry {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  padding: 0.2rem 0.4rem;
+  border-radius: 3px;
+}
+
+.move-history-entry:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.bot-strategy-tag {
+  margin-left: 0.4rem;
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+  opacity: 0.5;
+  font-style: italic;
+}
+
+/* Cube action events (Doubles, Takes, Drops) */
+.move-history-event {
+  color: var(--accent);
+  font-style: italic;
+  padding-left: 0.75rem;
+  opacity: 0.9;
+}
+
+/* Game result line (e.g. "White wins 2 pts (gammon)") */
+.move-history-result {
+  color: var(--success);
+  font-weight: 600;
+  text-align: center;
+  padding: 0.3rem 0.4rem;
+  margin-top: 0.15rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.move-history-empty {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-style: italic;
+  text-align: center;
+  padding: 0.5rem;
+}
+
+.load-more-btn {
+  margin-top: 0.25rem;
+  padding: 0.35rem 0.75rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  align-self: center;
+}
+
+.load-more-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.load-more-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---- Responsive: Tablet ---- */
+
+@media (max-width: 900px) {
+  .move-history-drawer {
+    max-width: 100%;
+  }
+}
+
+/* ---- Responsive: Mobile ---- */
+
+@media (max-width: 600px) {
+  .move-history-drawer {
+    max-width: 100%;
+  }
+
+  .drawer-toggle {
+    font-size: 0.8rem;
+    padding: 0.4rem 0.6rem;
+  }
+
+  .move-history {
+    max-height: 150px;
+  }
+
+  .move-history-entry {
+    font-size: 0.75rem;
+  }
+}

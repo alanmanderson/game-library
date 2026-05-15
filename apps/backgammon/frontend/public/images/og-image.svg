@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <rect width="1200" height="630" fill="#1a1a2e"/>
+  <rect x="80" y="215" width="200" height="200" rx="30" fill="#1a1a2e" stroke="#d4a843" stroke-width="8"/>
+  <circle cx="130" cy="265" r="15" fill="#d4a843"/>
+  <circle cx="230" cy="265" r="15" fill="#d4a843"/>
+  <circle cx="130" cy="315" r="15" fill="#d4a843"/>
+  <circle cx="230" cy="315" r="15" fill="#d4a843"/>
+  <circle cx="130" cy="365" r="15" fill="#d4a843"/>
+  <circle cx="230" cy="365" r="15" fill="#d4a843"/>
+  <text x="340" y="340" font-family="Arial, sans-serif" font-size="96" font-weight="bold" fill="#d4a843">GammonHub</text>
+  <text x="340" y="420" font-family="Arial, sans-serif" font-size="36" fill="#9a9ab0">Play backgammon online — free, no download required</text>
+</svg>

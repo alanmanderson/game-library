@@ -1,0 +1,164 @@
+/**
+ * Root application component.
+ *
+ * Sets up client-side routing and manages player identity persistence.
+ * Supports JWT-based authentication with register/login, Google OAuth,
+ * and guest mode. On mount, validates any existing token with /api/auth/me.
+ */
+
+import { useState, useEffect, useCallback } from "react";
+import { Routes, Route, useLocation } from "react-router-dom";
+import type { Player } from "./types/game";
+import { getMe, getStoredToken, clearStoredToken, logout } from "./services/api";
+import { STORAGE_KEY } from "./constants";
+import Home from "./components/Home";
+import Game from "./components/Game";
+import GameReplay from "./components/GameReplay";
+import Spectator from "./components/Spectator";
+import AuthModal from "./components/AuthModal";
+import { TournamentList, TournamentDetail } from "./components/Tournament";
+import { lazy, Suspense } from "react";
+
+const Analysis = lazy(() => import("./components/Analysis"));
+
+function App() {
+  const [player, setPlayer] = useState<Player | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // On mount, try to restore the player from the JWT token
+  useEffect(() => {
+    let cancelled = false;
+
+    async function restore() {
+      try {
+        const token = getStoredToken();
+        if (!token) {
+          setLoading(false);
+          return;
+        }
+
+        // Validate the token with the backend
+        const verified = await getMe();
+        if (!cancelled) {
+          setPlayer(verified);
+          // Update localStorage player cache
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(verified));
+        }
+      } catch {
+        // Token invalid or expired; clear and re-prompt
+        clearStoredToken();
+        localStorage.removeItem(STORAGE_KEY);
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    restore();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleAuthenticated = (newPlayer: Player) => {
+    setPlayer(newPlayer);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(newPlayer));
+  };
+
+  const handleSignOut = useCallback(async () => {
+    await logout(); // clears token + localStorage + Google disableAutoSelect
+    setPlayer(null);
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="app">
+        <div className="landing">
+          <p>Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Public replay URLs must be viewable without signing in.  The replay route
+  // can also be embedded (?embed=1) so we suppress the auth modal there too.
+  return (
+    <div className="app">
+      <AppChrome player={player} onAuthenticated={handleAuthenticated} />
+
+      <Routes>
+        <Route
+          path="/"
+          element={
+            player ? (
+              <Home player={player} onPlayerUpdate={handleAuthenticated} onSignOut={handleSignOut} />
+            ) : (
+              <div className="landing">
+                <h1>GammonHub</h1>
+                <p>Please sign in or continue as a guest to play.</p>
+              </div>
+            )
+          }
+        />
+        <Route path="/game/:tableId" element={<Game key={player?.id} />} />
+        <Route path="/replay/:tableId" element={<GameReplay />} />
+        <Route
+          path="/tournament"
+          element={
+            player ? (
+              <TournamentList player={player} />
+            ) : (
+              <div className="landing">
+                <h1>GammonHub</h1>
+                <p>Please sign in to view tournaments.</p>
+              </div>
+            )
+          }
+        />
+        <Route
+          path="/tournament/:tournamentId"
+          element={
+            player ? (
+              <TournamentDetail player={player} />
+            ) : (
+              <div className="landing">
+                <h1>GammonHub</h1>
+                <p>Please sign in to view this tournament.</p>
+              </div>
+            )
+          }
+        />
+        <Route
+          path="/analysis/:sessionId"
+          element={
+            <Suspense fallback={<div className="landing"><p>Loading...</p></div>}>
+              <Analysis />
+            </Suspense>
+          }
+        />
+        <Route path="/spectate/:tableId" element={<Spectator />} />
+      </Routes>
+    </div>
+  );
+}
+
+/**
+ * Renders the AuthModal unless the current route is a public replay URL.
+ * Lives inside the Router so that `useLocation` works.
+ */
+function AppChrome({
+  player,
+  onAuthenticated,
+}: {
+  player: Player | null;
+  onAuthenticated: (p: Player) => void;
+}) {
+  const location = useLocation();
+  const isPublicReplay = location.pathname.startsWith("/replay/");
+  if (player || isPublicReplay) return null;
+  return <AuthModal onAuthenticated={onAuthenticated} />;
+}
+
+export default App;

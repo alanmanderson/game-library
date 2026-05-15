@@ -1,0 +1,30 @@
+{
+  "model_architecture": {
+    "input_size": 198,
+    "hidden_size": 80,
+    "output_size": 5,
+    "num_layers": 3,
+    "activation": "sigmoid",
+    "total_parameters": 22805
+  },
+  "training_config": {
+    "algorithm": "TD(lambda)",
+    "num_games": 5000,
+    "alpha": 0.001,
+    "lambda": 0.7,
+    "initial_exploration": 0.15,
+    "exploration_decay": 0.9999
+  },
+  "training_stats": {
+    "games_played": 5000,
+    "white_win_rate": 0.502,
+    "gammon_rate": 0.3462,
+    "avg_game_length": 74.37080000000013
+  },
+  "evaluation": {
+    "neural_vs_random_pct": 98.75,
+    "neural_vs_heuristic_pct": 73.25,
+    "random_vs_heuristic_pct": 1.5
+  },
+  "model_path": "models/backgammon_model_final.pt"
+}

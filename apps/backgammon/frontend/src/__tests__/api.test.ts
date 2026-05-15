@@ -1,0 +1,372 @@
+/**
+ * Tests for the frontend REST API service.
+ *
+ * Each function in ``services/api.ts`` is exercised with a mocked ``fetch``
+ * so that no real network traffic is generated.  Both success and error paths
+ * are covered.
+ */
+
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import {
+  createPlayer,
+  getPlayer,
+  getPlayerStats,
+  createTable,
+  joinTable,
+  getTable,
+  getGameHistory,
+  getReplay,
+  exportGame,
+} from "../services/api";
+
+// Allow assigning to global.fetch in tests
+declare const global: typeof globalThis;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Build a minimal Response-like object that the ``request`` wrapper expects. */
+function mockOk(body: unknown) {
+  return {
+    ok: true,
+    json: () => Promise.resolve(body),
+  } as Response;
+}
+
+function mockError(status: number, detail: string) {
+  return {
+    ok: false,
+    status,
+    json: () => Promise.resolve({ detail }),
+  } as unknown as Response;
+}
+
+// ---------------------------------------------------------------------------
+// Setup
+// ---------------------------------------------------------------------------
+
+beforeEach(() => {
+  vi.restoreAllMocks();
+});
+
+// ---------------------------------------------------------------------------
+// createPlayer
+// ---------------------------------------------------------------------------
+
+describe("createPlayer", () => {
+  it("sends a POST request with the nickname", async () => {
+    const mockPlayer = {
+      id: "abc-123",
+      nickname: "Alice",
+      created_at: "2025-01-01T00:00:00",
+    };
+    global.fetch = vi.fn().mockResolvedValue(mockOk(mockPlayer));
+
+    const result = await createPlayer("Alice");
+
+    expect(result).toEqual(mockPlayer);
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/players"),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ nickname: "Alice" }),
+      }),
+    );
+  });
+
+  it("throws on server error", async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValue(mockError(500, "Internal server error"));
+
+    await expect(createPlayer("Bad")).rejects.toThrow("Internal server error");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getPlayer
+// ---------------------------------------------------------------------------
+
+describe("getPlayer", () => {
+  it("sends a GET request with the player ID in the URL", async () => {
+    const mockPlayer = {
+      id: "abc-123",
+      nickname: "Alice",
+      created_at: "2025-01-01T00:00:00",
+    };
+    global.fetch = vi.fn().mockResolvedValue(mockOk(mockPlayer));
+
+    const result = await getPlayer("abc-123");
+
+    expect(result).toEqual(mockPlayer);
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/players/abc-123"),
+      expect.any(Object),
+    );
+  });
+
+  it("throws 'Not found' when the player does not exist", async () => {
+    global.fetch = vi.fn().mockResolvedValue(mockError(404, "Not found"));
+
+    await expect(getPlayer("no-such-id")).rejects.toThrow("Not found");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getPlayerStats
+// ---------------------------------------------------------------------------
+
+describe("getPlayerStats", () => {
+  it("fetches stats for the given player ID", async () => {
+    const mockStats = {
+      total_games: 5,
+      total_wins: 3,
+      total_losses: 2,
+      win_rate: 60.0,
+      per_opponent: [],
+    };
+    global.fetch = vi.fn().mockResolvedValue(mockOk(mockStats));
+
+    const result = await getPlayerStats("player-42");
+
+    expect(result).toEqual(mockStats);
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/players/player-42/stats"),
+      expect.any(Object),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// createTable
+// ---------------------------------------------------------------------------
+
+describe("createTable", () => {
+  it("sends a POST with player_id in the body", async () => {
+    const mockTable = {
+      id: "ABCD12",
+      status: "waiting",
+      white_player: { id: "p1", nickname: "Alice", created_at: "" },
+      black_player: null,
+      created_at: "2025-01-01T00:00:00",
+    };
+    global.fetch = vi.fn().mockResolvedValue(mockOk(mockTable));
+
+    const result = await createTable("p1");
+
+    expect(result).toEqual(mockTable);
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/tables"),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ player_id: "p1", preferred_color: null, match_points: 5, is_public: false, time_control: "unlimited", is_ranked: true }),
+      }),
+    );
+  });
+
+  it("throws when the player ID is invalid", async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValue(mockError(404, "Player not found"));
+
+    await expect(createTable("bad-id")).rejects.toThrow("Player not found");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// joinTable
+// ---------------------------------------------------------------------------
+
+describe("joinTable", () => {
+  it("sends a POST to the join endpoint with player_id", async () => {
+    const mockTable = {
+      id: "ABCD12",
+      status: "playing",
+      white_player: { id: "p1", nickname: "Alice", created_at: "" },
+      black_player: { id: "p2", nickname: "Bob", created_at: "" },
+      created_at: "2025-01-01T00:00:00",
+    };
+    global.fetch = vi.fn().mockResolvedValue(mockOk(mockTable));
+
+    const result = await joinTable("ABCD12", "p2");
+
+    expect(result).toEqual(mockTable);
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/tables/ABCD12/join"),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ player_id: "p2" }),
+      }),
+    );
+  });
+
+  it("throws when trying to join own table", async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValue(mockError(400, "Cannot join your own table"));
+
+    await expect(joinTable("ABCD12", "p1")).rejects.toThrow(
+      "Cannot join your own table",
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getTable
+// ---------------------------------------------------------------------------
+
+describe("getTable", () => {
+  it("fetches a table by ID", async () => {
+    const mockTable = {
+      id: "ABCD12",
+      status: "waiting",
+      white_player: null,
+      black_player: null,
+      created_at: "2025-01-01T00:00:00",
+    };
+    global.fetch = vi.fn().mockResolvedValue(mockOk(mockTable));
+
+    const result = await getTable("ABCD12");
+
+    expect(result).toEqual(mockTable);
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/tables/ABCD12"),
+      expect.any(Object),
+    );
+  });
+
+  it("throws when table is not found", async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValue(mockError(404, "Table not found"));
+
+    await expect(getTable("ZZZZZZ")).rejects.toThrow("Table not found");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getGameHistory
+// ---------------------------------------------------------------------------
+
+describe("getGameHistory", () => {
+  it("fetches paginated move history for a table", async () => {
+    const mockResponse = {
+      total: 1,
+      limit: 50,
+      offset: 0,
+      records: [
+        {
+          move_number: 1,
+          dice_roll: "3-1",
+          moves_notation: "8/5 6/5",
+          created_at: "2025-01-01T00:00:00",
+        },
+      ],
+    };
+    global.fetch = vi.fn().mockResolvedValue(mockOk(mockResponse));
+
+    const result = await getGameHistory("ABCD12");
+
+    expect(result).toEqual(mockResponse);
+    expect(result.total).toBe(1);
+    expect(result.records).toHaveLength(1);
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/tables/ABCD12/history?limit=1000&offset=0"),
+      expect.any(Object),
+    );
+  });
+
+  it("returns empty records when no history exists", async () => {
+    const mockResponse = { total: 0, limit: 50, offset: 0, records: [] };
+    global.fetch = vi.fn().mockResolvedValue(mockOk(mockResponse));
+
+    const result = await getGameHistory("NEW123");
+    expect(result.total).toBe(0);
+    expect(result.records).toEqual([]);
+  });
+
+  it("passes custom limit and offset parameters", async () => {
+    const mockResponse = { total: 100, limit: 10, offset: 20, records: [] };
+    global.fetch = vi.fn().mockResolvedValue(mockOk(mockResponse));
+
+    const result = await getGameHistory("TBL123", 10, 20);
+    expect(result.limit).toBe(10);
+    expect(result.offset).toBe(20);
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/tables/TBL123/history?limit=10&offset=20"),
+      expect.any(Object),
+    );
+  });
+
+  it("handles unknown error gracefully", async () => {
+    // Simulate a response where json() itself fails
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 502,
+      json: () => Promise.reject(new Error("bad json")),
+    } as unknown as Response);
+
+    await expect(getGameHistory("BAD")).rejects.toThrow("Unknown error");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getReplay
+// ---------------------------------------------------------------------------
+
+describe("getReplay", () => {
+  it("fetches replay data for a table", async () => {
+    const mockReplay = {
+      table_id: "ABCD12",
+      white_player_nickname: "Alice",
+      black_player_nickname: "Bob",
+      initial_state: { points: new Array(26).fill(0), bar_white: 0, bar_black: 0, off_white: 0, off_black: 0 },
+      moves: [],
+    };
+    global.fetch = vi.fn().mockResolvedValue(mockOk(mockReplay));
+
+    const result = await getReplay("ABCD12");
+
+    expect(result).toEqual(mockReplay);
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/tables/ABCD12/replay"),
+      expect.any(Object),
+    );
+  });
+
+  it("throws when the table is not found", async () => {
+    global.fetch = vi.fn().mockResolvedValue(mockError(404, "Table not found"));
+    await expect(getReplay("ZZZZZZ")).rejects.toThrow("Table not found");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// exportGame
+// ---------------------------------------------------------------------------
+
+describe("exportGame", () => {
+  it("returns the plain-text content from the export endpoint", async () => {
+    const mockContent = "Player 1: Alice\nPlayer 2: Bob\nMatch to 5 points\n";
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve(mockContent),
+    } as unknown as Response);
+
+    const result = await exportGame("ABCD1234");
+
+    expect(result).toBe(mockContent);
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/tables/ABCD1234/export"),
+      expect.any(Object),
+    );
+  });
+
+  it("throws when the server returns an error", async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      mockError(404, "Table not found"),
+    );
+
+    await expect(exportGame("ZZZZZZZZ")).rejects.toThrow("Table not found");
+  });
+});

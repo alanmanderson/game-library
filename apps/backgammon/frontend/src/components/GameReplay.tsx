@@ -1,0 +1,1432 @@
+/**
+ * GameReplay component – step-by-step replay of a completed backgammon game.
+ *
+ * Fetches replay data (initial state + per-move board snapshots) from the
+ * backend and lets the user navigate forward/backward through the moves,
+ * or watch the game play out automatically.
+ *
+ * Public sharing: the route is accessible without authentication.  A
+ * "Copy Share Link" button puts the canonical replay URL on the clipboard,
+ * and an ?embed=1 query param hides chrome (header + back button) so the
+ * viewer can be embedded on external sites.
+ */
+
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import type {
+  AnalysisData,
+  DeepDiveResult,
+  GameState,
+  MoveAnalysis,
+  MoveProbs,
+  MoveQuality,
+  ReplayData,
+  ReplayMoveRecord,
+} from "../types/game";
+import { getAnalysis, getPositionDeepDive, getReplay } from "../services/api";
+import Board from "./Board";
+import Dice from "./Dice";
+import ReanalyzeModal from "./ReanalyzeModal";
+import DeepDivePanel from "./DeepDivePanel";
+import { STORAGE_KEY } from "../constants";
+import { parseMovesNotationRaw, notationToPlayerPerspective } from "../utils/notation";
+import "./styles/GameReplay.css";
+
+/** Read the logged-in player from localStorage, if present. */
+function readStoredPlayerId(): string | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return typeof parsed?.id === "string" ? parsed.id : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Display label for each move-quality level.
+ *
+ * Covers both the ML-native labels (`best`, `good`, `inaccuracy`, `mistake`,
+ * `blunder`) and the GNU Backgammon native labels (`very_good`, `doubtful`,
+ * `bad`, `very_bad`).
+ */
+const QUALITY_LABEL: Record<MoveQuality, string> = {
+  best: "Best",
+  good: "Good",
+  inaccuracy: "Inaccuracy",
+  mistake: "Mistake",
+  blunder: "Blunder",
+  very_good: "Very good",
+  doubtful: "Doubtful",
+  bad: "Bad",
+  very_bad: "Very bad",
+};
+
+/**
+ * Map every quality label to an existing CSS colour class.
+ *
+ * gnubg-native labels reuse the closest matching ML colour: `very_good` → best,
+ * `doubtful` → inaccuracy, `bad` → mistake, `very_bad` → blunder. This keeps
+ * the palette tight and avoids inventing new colours for conceptually similar
+ * buckets.
+ */
+const QUALITY_CSS_CLASS: Record<MoveQuality, string> = {
+  best: "best",
+  good: "good",
+  inaccuracy: "inaccuracy",
+  mistake: "mistake",
+  blunder: "blunder",
+  very_good: "best",
+  doubtful: "inaccuracy",
+  bad: "mistake",
+  very_bad: "blunder",
+};
+
+/** Format a 0..1 probability as a percentage with one decimal place. */
+function formatPct(p: number | null | undefined): string | null {
+  if (p === null || p === undefined || Number.isNaN(p)) return null;
+  const clamped = Math.max(0, Math.min(1, p));
+  return `${(clamped * 100).toFixed(1)}%`;
+}
+
+/** Parse a dice_roll string like "3-5" into { die1, die2 }. */
+function parseDiceRoll(diceRoll: string): { die1: number; die2: number } | null {
+  const parts = diceRoll.split("-");
+  if (parts.length !== 2) return null;
+  const die1 = parseInt(parts[0], 10);
+  const die2 = parseInt(parts[1], 10);
+  if (isNaN(die1) || isNaN(die2)) return null;
+  return { die1, die2 };
+}
+
+/** Build a display-ready GameState for replay by filling in missing fields. */
+function buildReplayState(state: GameState, move: ReplayMoveRecord | null): GameState {
+  const dice = move ? parseDiceRoll(move.dice_roll) : null;
+  return {
+    ...state,
+    valid_moves: [],
+    dice: dice ?? null,
+    remaining_dice: [],
+  };
+}
+
+/** Build a one-line description of the result for OG/description tags. */
+function buildReplayDescription(data: ReplayData): string {
+  const white = data.white_player_nickname ?? "White";
+  const black = data.black_player_nickname ?? "Black";
+  if (data.winner_nickname && data.win_type) {
+    const loser =
+      data.winner_color === "white" ? black : data.winner_color === "black" ? white : "opponent";
+    const typeLabel =
+      data.win_type === "backgammon"
+        ? "backgammon"
+        : data.win_type === "gammon"
+          ? "gammon"
+          : "win";
+    const score =
+      data.white_match_score != null && data.black_match_score != null
+        ? ` (${data.white_match_score}-${data.black_match_score})`
+        : "";
+    return `${data.winner_nickname} defeated ${loser} by ${typeLabel}${score}.`;
+  }
+  return `A backgammon match between ${white} and ${black}.`;
+}
+
+/** Set (or update) a meta tag in document.head. */
+function setMeta(selector: string, attrs: Record<string, string>) {
+  let el = document.head.querySelector<HTMLMetaElement>(selector);
+  if (!el) {
+    el = document.createElement("meta");
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k !== "content") el.setAttribute(k, v);
+    }
+    document.head.appendChild(el);
+  }
+  if (attrs.content !== undefined) {
+    el.setAttribute("content", attrs.content);
+  }
+}
+
+/**
+ * Compact grid showing the win / gammon / backgammon probability breakdown
+ * for the chosen move and the engine's best move.
+ */
+function MoveProbsBreakdown({
+  chosen,
+  best,
+}: {
+  chosen: MoveProbs | null;
+  best: MoveProbs | null;
+}) {
+  const rows: { key: keyof MoveProbs; label: string }[] = [
+    { key: "win", label: "Win" },
+    { key: "win_g", label: "Win (gammon)" },
+    { key: "lose_g", label: "Lose (gammon)" },
+    { key: "win_bg", label: "Win (bg)" },
+    { key: "lose_bg", label: "Lose (bg)" },
+  ];
+  return (
+    <div className="replay-move-probs-breakdown" role="table">
+      <div className="replay-move-probs-breakdown-header" role="row">
+        <span role="columnheader" />
+        <span role="columnheader">Chosen</span>
+        <span role="columnheader">Best</span>
+      </div>
+      {rows.map(({ key, label }) => {
+        const c = formatPct(chosen?.[key]);
+        const b = formatPct(best?.[key]);
+        return (
+          <div
+            key={key}
+            className="replay-move-probs-breakdown-row"
+            role="row"
+          >
+            <span role="rowheader" className="replay-move-probs-breakdown-label">
+              {label}
+            </span>
+            <span role="cell" className="replay-move-probs-breakdown-value">
+              {c ?? "—"}
+            </span>
+            <span role="cell" className="replay-move-probs-breakdown-value">
+              {b ?? "—"}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function GameReplay() {
+  const { tableId } = useParams<{ tableId: string }>();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const embed = searchParams.get("embed") === "1";
+
+  const [replayData, setReplayData] = useState<ReplayData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  // Current position in the replay (0 = initial state, N = after move N)
+  const [moveIndex, setMoveIndex] = useState(0);
+
+  // Auto-play state
+  const [autoPlaying, setAutoPlaying] = useState(false);
+  const [playSpeed, setPlaySpeed] = useState(1500); // ms between moves
+  const autoPlayRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Analysis panel state
+  const [analysisOpen, setAnalysisOpen] = useState(false);
+  const [analysis, setAnalysis] = useState<AnalysisData | null>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  /** Polling interval for background 3-ply analysis. */
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** Move numbers whose details panel (gammon/bg breakdown) is expanded. */
+  const [expandedMoves, setExpandedMoves] = useState<Set<number>>(new Set());
+  /** Index into currentAnalysis.top_moves of the candidate being previewed. */
+  const [selectedCandidate, setSelectedCandidate] = useState<number | null>(null);
+  /** gnubg evaluation depth: 0 (fast), 2 (standard), 3 (deep/slow). */
+  const [analysisPly, setAnalysisPly] = useState<0 | 2 | 3>(2);
+
+  // Re-analyze modal state
+  const [showReanalyzeModal, setShowReanalyzeModal] = useState(false);
+
+  // Deep-dive state
+  const [deepDiveData, setDeepDiveData] = useState<DeepDiveResult | null>(null);
+  const [deepDiveLoading, setDeepDiveLoading] = useState(false);
+  const [deepDiveMoveNumber, setDeepDiveMoveNumber] = useState<number | null>(null);
+
+  // Speed slider constants: the slider is inverted so right = faster.
+  // Slider range is [SPEED_SLIDER_MIN, SPEED_SLIDER_MAX]; actual delay = SPEED_OFFSET - sliderValue.
+  const SPEED_MIN_MS = 300;
+  const SPEED_MAX_MS = 3000;
+  const SPEED_OFFSET = SPEED_MIN_MS + SPEED_MAX_MS; // 3300
+
+  useEffect(() => {
+    if (!tableId) return;
+    let cancelled = false;
+
+    async function fetchReplay() {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await getReplay(tableId!);
+        if (!cancelled) {
+          setReplayData(data);
+          setMoveIndex(0);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load replay.");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    fetchReplay();
+    return () => {
+      cancelled = true;
+    };
+  }, [tableId]);
+
+  // Populate document.title and OG/Twitter meta tags once the replay is loaded.
+  // Note: this is a client-side SPA so headless crawlers that don't run JS
+  // won't see these tags.  Slack/iMessage/Discord do execute JS previews for
+  // many links, so this gives a best-effort preview for the common case.
+  useEffect(() => {
+    if (!replayData) return;
+    const title = `Backgammon replay: ${replayData.white_player_nickname ?? "White"} vs ${replayData.black_player_nickname ?? "Black"}`;
+    const description = buildReplayDescription(replayData);
+    const url =
+      typeof window !== "undefined" ? `${window.location.origin}/replay/${replayData.table_id}` : "";
+
+    const previousTitle = document.title;
+    document.title = title;
+
+    setMeta('meta[property="og:title"]', { property: "og:title", content: title });
+    setMeta('meta[property="og:description"]', { property: "og:description", content: description });
+    setMeta('meta[property="og:type"]', { property: "og:type", content: "website" });
+    if (url) {
+      setMeta('meta[property="og:url"]', { property: "og:url", content: url });
+    }
+    setMeta('meta[name="description"]', { name: "description", content: description });
+    setMeta('meta[name="twitter:card"]', { name: "twitter:card", content: "summary" });
+    setMeta('meta[name="twitter:title"]', { name: "twitter:title", content: title });
+    setMeta('meta[name="twitter:description"]', { name: "twitter:description", content: description });
+
+    return () => {
+      document.title = previousTitle;
+    };
+  }, [replayData]);
+
+  // Stop auto-play and analysis polling when the component unmounts
+  useEffect(() => {
+    return () => {
+      if (autoPlayRef.current) clearInterval(autoPlayRef.current);
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    };
+  }, []);
+
+  const totalMoves = replayData ? replayData.moves.length : 0;
+
+  const goTo = useCallback(
+    (index: number) => {
+      const clamped = Math.max(0, Math.min(index, totalMoves));
+      setMoveIndex(clamped);
+    },
+    [totalMoves],
+  );
+
+  const stopAutoPlay = useCallback(() => {
+    if (autoPlayRef.current) {
+      clearInterval(autoPlayRef.current);
+      autoPlayRef.current = null;
+    }
+    setAutoPlaying(false);
+  }, []);
+
+  const startAutoPlay = useCallback(() => {
+    if (autoPlayRef.current) clearInterval(autoPlayRef.current);
+    setAutoPlaying(true);
+    autoPlayRef.current = setInterval(() => {
+      setMoveIndex((prev) => {
+        const next = prev + 1;
+        if (next >= totalMoves) {
+          stopAutoPlay();
+          return totalMoves;
+        }
+        return next;
+      });
+    }, playSpeed);
+  }, [playSpeed, totalMoves, stopAutoPlay]);
+
+  // Restart timer when speed changes while auto-playing
+  useEffect(() => {
+    if (autoPlaying) {
+      startAutoPlay();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playSpeed]);
+
+  // Stop auto-play when reaching the end
+  useEffect(() => {
+    if (autoPlaying && moveIndex >= totalMoves) {
+      stopAutoPlay();
+    }
+  }, [autoPlaying, moveIndex, totalMoves, stopAutoPlay]);
+
+  // Reset selected candidate when the viewed move changes.
+  useEffect(() => setSelectedCandidate(null), [moveIndex]);
+
+  // Arrow-key navigation: left = previous move, right = next move.
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        stopAutoPlay();
+        goTo(moveIndex - 1);
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        stopAutoPlay();
+        goTo(moveIndex + 1);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [moveIndex, goTo, stopAutoPlay]);
+
+  /** Stop any active analysis poll. */
+  const stopPolling = useCallback(() => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+  }, []);
+
+  /** Start 60-second polling for background analysis progress. */
+  const startPolling = useCallback((ply: number) => {
+    stopPolling();
+    pollIntervalRef.current = setInterval(async () => {
+      if (!tableId) return;
+      try {
+        const updated = await getAnalysis(tableId, 100, ply);
+        setAnalysis(updated);
+        if (updated.status !== "running") {
+          stopPolling();
+          setAnalysisLoading(false);
+        }
+      } catch {
+        // Don't stop polling on transient network errors
+      }
+    }, 60_000);
+  }, [tableId, stopPolling]);
+
+  const fetchAnalysis = useCallback(async (ply: number, force = false) => {
+    if (!tableId) return;
+    if (!force && analysis && (analysis.analysis_ply ?? 2) === ply
+        && analysis.status !== "failed") return;
+    setAnalysisLoading(true);
+    setAnalysisError(null);
+    stopPolling();
+    try {
+      const data = await getAnalysis(tableId, 100, ply);
+      setAnalysis(data);
+      if (data.status === "running") {
+        // Keep loading state and start polling every 60s
+        startPolling(ply);
+      } else {
+        setAnalysisLoading(false);
+      }
+    } catch (err) {
+      setAnalysisError(
+        err instanceof Error ? err.message : "Failed to load analysis.",
+      );
+      setAnalysisLoading(false);
+    }
+  }, [analysis, tableId, stopPolling, startPolling]);
+
+  // Fetch analysis as soon as the replay loads so the on-board quality
+  // indicator is available without requiring the user to open the panel.
+  useEffect(() => {
+    if (!replayData) return;
+    fetchAnalysis(analysisPly);
+  }, [replayData]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-fetch when ply changes.
+  const handlePlyChange = useCallback((newPly: 0 | 2 | 3) => {
+    stopPolling();
+    setAnalysisPly(newPly);
+    setAnalysis(null);
+    fetchAnalysis(newPly, true);
+  }, [fetchAnalysis, stopPolling]);
+
+  const handleToggleAnalysis = useCallback(async () => {
+    const next = !analysisOpen;
+    setAnalysisOpen(next);
+    if (next) await fetchAnalysis(analysisPly);
+  }, [analysisOpen, fetchAnalysis, analysisPly]);
+
+  /** Re-analyze with force flag. */
+  const handleReanalyze = useCallback(async (ply: 0 | 2 | 3) => {
+    setShowReanalyzeModal(false);
+    stopPolling();
+    setAnalysisPly(ply);
+    setAnalysis(null);
+    setAnalysisLoading(true);
+    setAnalysisError(null);
+    setAnalysisOpen(true);
+    try {
+      const data = await getAnalysis(tableId!, 100, ply, true);
+      setAnalysis(data);
+      if (data.status === "running") {
+        startPolling(ply);
+      } else {
+        setAnalysisLoading(false);
+      }
+    } catch (err) {
+      setAnalysisError(
+        err instanceof Error ? err.message : "Failed to start re-analysis.",
+      );
+      setAnalysisLoading(false);
+    }
+  }, [tableId, stopPolling, startPolling]);
+
+  /** Deep-dive: fetch maximum-depth analysis for a single position. */
+  const handleDeepDive = useCallback(async (moveNumber: number) => {
+    if (!tableId) return;
+    // Toggle off if clicking the same move.
+    if (deepDiveMoveNumber === moveNumber && deepDiveData) {
+      setDeepDiveData(null);
+      setDeepDiveMoveNumber(null);
+      return;
+    }
+    setDeepDiveMoveNumber(moveNumber);
+    setDeepDiveLoading(true);
+    setDeepDiveData(null);
+    try {
+      const data = await getPositionDeepDive(tableId, moveNumber);
+      setDeepDiveData(data);
+    } catch {
+      setDeepDiveData(null);
+    } finally {
+      setDeepDiveLoading(false);
+    }
+  }, [tableId, deepDiveMoveNumber, deepDiveData]);
+
+  /** Close deep-dive panel. */
+  const handleCloseDeepDive = useCallback(() => {
+    setDeepDiveData(null);
+    setDeepDiveMoveNumber(null);
+  }, []);
+
+  /** Top-3 key moments: moves with the largest equity_loss. */
+  const keyMoments = useMemo<MoveAnalysis[]>(() => {
+    if (!analysis) return [];
+    return [...analysis.move_analyses]
+      .sort((a, b) => b.equity_loss - a.equity_loss)
+      .slice(0, 3)
+      .filter((m) => m.equity_loss > 0);
+  }, [analysis]);
+
+  /**
+   * Source label for the analysis banner. We consider the analysis to be
+   * "gnubg-sourced" if any move row declares it — mixed responses fall back
+   * to the existing behaviour (ml_available banner only).
+   */
+  const analysisSource = useMemo<"gnubg" | "ml" | "heuristic" | null>(() => {
+    if (!analysis) return null;
+    for (const m of analysis.move_analyses) {
+      if (m.source === "gnubg") return "gnubg";
+    }
+    // Fall back to the first non-null source we see.
+    for (const m of analysis.move_analyses) {
+      if (m.source) return m.source;
+    }
+    return null;
+  }, [analysis]);
+
+  /** Per-player summary: quality distribution + error rate. */
+  const playerSummaries = useMemo(() => {
+    if (!analysis) return null;
+    const colors = ["white", "black"] as const;
+    const summaries: Record<
+      string,
+      {
+        nickname: string;
+        totalMoves: number;
+        totalEquityLoss: number;
+        qualityCounts: Record<string, number>;
+      }
+    > = {};
+    for (const c of colors) {
+      summaries[c] = {
+        nickname: c === "white"
+          ? (replayData?.white_player_nickname ?? "White")
+          : (replayData?.black_player_nickname ?? "Black"),
+        totalMoves: 0,
+        totalEquityLoss: 0,
+        qualityCounts: {},
+      };
+    }
+    for (const m of analysis.move_analyses) {
+      const s = summaries[m.player_color];
+      if (!s) continue;
+      s.totalMoves++;
+      s.totalEquityLoss += m.equity_loss;
+      const label = QUALITY_LABEL[m.quality] ?? m.quality;
+      s.qualityCounts[label] = (s.qualityCounts[label] ?? 0) + 1;
+    }
+    return summaries;
+  }, [analysis, replayData]);
+
+  // Orient the board to the logged-in player's perspective when they were
+  // one of the two seats. Fall back to white for spectators/unauthed viewers.
+  const storedPlayerId = useMemo(() => readStoredPlayerId(), []);
+  const viewColor: "white" | "black" =
+    storedPlayerId && replayData?.black_player_id === storedPlayerId
+      ? "black"
+      : "white";
+
+  // Analysis entry for the move we just reached (moveIndex === move_number).
+  const currentAnalysis = useMemo<MoveAnalysis | null>(() => {
+    if (!analysis || moveIndex === 0) return null;
+    return (
+      analysis.move_analyses.find((m) => m.move_number === moveIndex) ?? null
+    );
+  }, [analysis, moveIndex]);
+
+  const currentWinPct = currentAnalysis
+    ? formatPct(
+        currentAnalysis.chosen_win_prob ?? currentAnalysis.chosen_probs?.win,
+      )
+    : null;
+
+  // Pre-compute best-move arrows (must be a hook, so placed before early returns).
+  // Arrows that exactly match a chosen-move arrow are filtered to prevent overlap.
+  const bestMoveArrowsComputed = useMemo(() => {
+    if (
+      !currentAnalysis ||
+      !currentAnalysis.best_move_notation ||
+      currentAnalysis.quality === "best" ||
+      currentAnalysis.quality === "very_good"
+    )
+      return undefined;
+    const best = parseMovesNotationRaw(currentAnalysis.best_move_notation);
+    // We need the chosen notation from the current move.
+    const chosenNotation =
+      replayData && moveIndex > 0
+        ? replayData.moves[moveIndex - 1]?.moves_notation
+        : null;
+    if (!chosenNotation) return best;
+    const chosen = parseMovesNotationRaw(chosenNotation);
+    const chosenKeys = new Set(chosen.map((a) => `${a.from}/${a.to}`));
+    const filtered = best.filter((a) => !chosenKeys.has(`${a.from}/${a.to}`));
+    return filtered.length > 0 ? filtered : undefined;
+  }, [currentAnalysis, replayData, moveIndex]);
+
+  const toggleMoveDetails = useCallback((moveNumber: number) => {
+    setExpandedMoves((prev) => {
+      const next = new Set(prev);
+      if (next.has(moveNumber)) next.delete(moveNumber);
+      else next.add(moveNumber);
+      return next;
+    });
+  }, []);
+
+  const handleCopyShareLink = useCallback(async () => {
+    if (!tableId) return;
+    const shareUrl = `${window.location.origin}/replay/${tableId}`;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+      } else {
+        // Fallback for older browsers / insecure contexts
+        const textarea = document.createElement("textarea");
+        textarea.value = shareUrl;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  }, [tableId]);
+
+  if (loading) {
+    return (
+      <div className={`replay-page${embed ? " replay-page--embed" : ""}`}>
+        <div className="replay-loading">Loading replay…</div>
+      </div>
+    );
+  }
+
+  if (error || !replayData) {
+    return (
+      <div className={`replay-page${embed ? " replay-page--embed" : ""}`}>
+        <div className="replay-error">{error ?? "Replay not available."}</div>
+        {!embed && (
+          <button className="replay-back-btn" onClick={() => navigate(-1)}>
+            ← Back
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // Determine current board state
+  const currentMove: ReplayMoveRecord | null =
+    moveIndex > 0 ? replayData.moves[moveIndex - 1] : null;
+
+  const rawState: GameState =
+    moveIndex === 0
+      ? replayData.initial_state
+      : (currentMove?.game_state_after ?? replayData.initial_state);
+
+  const displayState = buildReplayState(rawState, currentMove);
+
+  // Determine the color whose turn it was for this move (who just moved)
+  const movedBy = currentMove?.player_nickname ?? null;
+  const movedByColor =
+    currentMove && replayData.white_player_nickname === currentMove.player_nickname
+      ? "white"
+      : "black";
+
+  const cubeValue = displayState.cube_value ?? 1;
+  const cubeOwner = displayState.cube_owner ?? null;
+
+  // Yellow arrows showing the actual move — one arrow per die use.
+  const moveArrows = currentMove
+    ? parseMovesNotationRaw(currentMove.moves_notation)
+    : undefined;
+
+  const bestMoveArrows = bestMoveArrowsComputed;
+
+  // When a candidate row is selected in the top-moves panel, show that
+  // candidate's arrows instead of the chosen/best move arrows.
+  const displayMoveArrows = (() => {
+    if (selectedCandidate !== null && currentAnalysis?.top_moves) {
+      const candidate = currentAnalysis.top_moves[selectedCandidate];
+      if (candidate) {
+        return parseMovesNotationRaw(candidate.notation);
+      }
+    }
+    return moveArrows;
+  })();
+
+  const displayBestMoveArrows = selectedCandidate !== null ? undefined : bestMoveArrows;
+
+  // Dice to show on the board: parsed from the current move record. For moves
+  // other than the very first, both dice belong to the same player; for move
+  // 1 we reconstruct the opening roll so each die is coloured by who rolled
+  // it. The first mover always rolled the higher value, so we can infer both
+  // players' rolls from the dice and the first mover's colour.
+  const replayDice = displayState.dice;
+  const openingRoll =
+    moveIndex === 1 && replayDice && replayDice.die1 !== replayDice.die2
+      ? {
+          white:
+            movedByColor === "white"
+              ? Math.max(replayDice.die1, replayDice.die2)
+              : Math.min(replayDice.die1, replayDice.die2),
+          black:
+            movedByColor === "black"
+              ? Math.max(replayDice.die1, replayDice.die2)
+              : Math.min(replayDice.die1, replayDice.die2),
+        }
+      : null;
+  const remainingDiceForDisplay = replayDice
+    ? replayDice.die1 === replayDice.die2
+      ? [replayDice.die1, replayDice.die1, replayDice.die1, replayDice.die1]
+      : [replayDice.die1, replayDice.die2]
+    : [];
+
+  return (
+    <div className={`replay-page${embed ? " replay-page--embed" : ""}`}>
+      {/* Header (hidden in embed mode) */}
+      {!embed && (
+        <div className="replay-header">
+          <button className="replay-back-btn" onClick={() => navigate(-1)}>
+            ← Back
+          </button>
+          <h2 className="replay-title">
+            {replayData.white_player_nickname ?? "White"} vs{" "}
+            {replayData.black_player_nickname ?? "Black"}
+          </h2>
+          <div className="replay-header-actions">
+            {analysis?.status === "running" ? (
+              <button
+                type="button"
+                className="replay-reanalyze-btn replay-reanalyze-btn--running"
+                disabled
+              >
+                <span className="replay-reanalyze-spin" />
+                Re-analyzing &middot; {analysis.progress != null ? `${Math.round(analysis.progress * 100)}%` : "..."}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="replay-reanalyze-btn"
+                onClick={() => setShowReanalyzeModal(true)}
+                title="Re-analyze this game with different settings"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M14 2v4h-4"/>
+                  <path d="M2 14v-4h4"/>
+                  <path d="M13.5 6A6 6 0 0 0 3.4 4.4M2.5 10a6 6 0 0 0 10.1 1.6"/>
+                </svg>
+                Re-analyze
+              </button>
+            )}
+            <button
+              type="button"
+              className={`replay-share-btn${copied ? " replay-share-btn--copied" : ""}`}
+              onClick={handleCopyShareLink}
+              aria-label="Copy share link"
+              title="Copy a public link to this replay"
+            >
+              {copied ? "✓ Copied!" : "🔗 Share"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Freshness banner */}
+      {!embed && analysis && analysis.status === "complete" && analysis.analysis_source && (
+        <div className="replay-freshness">
+          Analyzed by <strong>{analysis.analysis_source}</strong>
+        </div>
+      )}
+
+      {/* Re-analysis progress card */}
+      {!embed && analysis?.status === "running" && (
+        <div className="replay-progress-card">
+          <div className="replay-progress-head">
+            <div>
+              <h4 className="replay-progress-title">
+                Re-analyzing at {analysis.analysis_ply ?? analysisPly}-ply
+              </h4>
+              <span className="replay-progress-caption">
+                {analysis.analysis_source ?? "gnubg"}
+              </span>
+            </div>
+            <span className="replay-progress-pct">
+              {analysis.progress != null ? `${Math.round(analysis.progress * 100)}%` : "..."}
+            </span>
+          </div>
+          <div className="replay-progress-track">
+            <div
+              className="replay-progress-fill"
+              style={{ width: `${(analysis.progress ?? 0) * 100}%` }}
+            />
+          </div>
+          <div className="replay-progress-meta">
+            <span>{analysis.moves_analysed} / {analysis.total_moves} moves scored</span>
+          </div>
+          <div className="replay-progress-note">
+            <strong>Old results still visible</strong> &mdash; they&apos;ll swap in when the run completes.
+          </div>
+        </div>
+      )}
+
+      {/* Move counter */}
+      <div className="replay-counter">
+        {moveIndex === 0 ? (
+          <span>Starting position</span>
+        ) : (
+          <span>
+            Move <strong>{moveIndex}</strong> of <strong>{totalMoves}</strong>
+          </span>
+        )}
+      </div>
+
+      {/* Board */}
+      <div className={`replay-board-wrapper replay-board-wrapper--${viewColor}`}>
+        <Board
+          gameState={displayState}
+          myColor={viewColor}
+          selectedPoint={null}
+          validMoves={[]}
+          onPointClick={() => {}}
+          onBarClick={() => {}}
+          onBearOffClick={() => {}}
+          cubeValue={cubeValue}
+          cubeOwner={cubeOwner}
+          moveArrows={displayMoveArrows}
+          bestMoveArrows={displayBestMoveArrows}
+          arrowsMoverColor={movedByColor as "white" | "black"}
+        />
+        {replayDice && (
+          <div className="replay-dice-overlay">
+            <Dice
+              dice={replayDice}
+              remainingDice={remainingDiceForDisplay}
+              currentTurn={movedByColor}
+              openingRoll={openingRoll}
+              animate={false}
+            />
+          </div>
+        )}
+        {currentAnalysis && (
+          <div
+            className={`replay-board-analysis replay-board-analysis--${QUALITY_CSS_CLASS[currentAnalysis.quality]}`}
+            role="status"
+            aria-live="polite"
+          >
+            <span className="replay-board-analysis-quality">
+              {QUALITY_LABEL[currentAnalysis.quality]}
+            </span>
+            {currentWinPct && (
+              <span className="replay-board-analysis-prob">
+                {currentWinPct} win
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Current move info */}
+      <div className="replay-move-info">
+        {currentMove ? (
+          <>
+            <span className={`replay-player-badge replay-player-${movedByColor}`}>
+              {movedBy ?? (movedByColor === "white" ? "White" : "Black")}
+            </span>
+            <span className="replay-notation">{notationToPlayerPerspective(currentMove.moves_notation, movedByColor as "white" | "black")}</span>
+            {currentAnalysis?.best_move_notation &&
+              currentAnalysis.quality !== "best" &&
+              currentAnalysis.quality !== "very_good" && (
+                <span className="replay-notation-best">
+                  best: {notationToPlayerPerspective(currentAnalysis.best_move_notation, movedByColor as "white" | "black")}
+                </span>
+              )}
+          </>
+        ) : (
+          <span className="replay-notation-empty">Game start</span>
+        )}
+      </div>
+
+      {/* Navigation controls */}
+      <div className="replay-controls">
+        <button
+          className="replay-btn"
+          onClick={() => { stopAutoPlay(); goTo(0); }}
+          disabled={moveIndex === 0}
+          title="First move"
+          aria-label="Go to first move"
+        >
+          ⏮
+        </button>
+        <button
+          className="replay-btn"
+          onClick={() => { stopAutoPlay(); goTo(moveIndex - 1); }}
+          disabled={moveIndex === 0}
+          title="Previous move"
+          aria-label="Previous move"
+        >
+          ◀
+        </button>
+
+        {autoPlaying ? (
+          <button
+            className="replay-btn replay-btn-play"
+            onClick={stopAutoPlay}
+            title="Pause auto-play"
+            aria-label="Pause"
+          >
+            ⏸
+          </button>
+        ) : (
+          <button
+            className="replay-btn replay-btn-play"
+            onClick={startAutoPlay}
+            disabled={moveIndex >= totalMoves}
+            title="Auto-play"
+            aria-label="Auto-play"
+          >
+            ▶
+          </button>
+        )}
+
+        <button
+          className="replay-btn"
+          onClick={() => { stopAutoPlay(); goTo(moveIndex + 1); }}
+          disabled={moveIndex >= totalMoves}
+          title="Next move"
+          aria-label="Next move"
+        >
+          ▶
+        </button>
+        <button
+          className="replay-btn"
+          onClick={() => { stopAutoPlay(); goTo(totalMoves); }}
+          disabled={moveIndex >= totalMoves}
+          title="Last move"
+          aria-label="Go to last move"
+        >
+          ⏭
+        </button>
+      </div>
+
+      {/* Deep-dive button + top candidate moves panel */}
+      {currentAnalysis && moveIndex > 0 && (
+        <div className="replay-deepdive-trigger">
+          <button
+            type="button"
+            className={`replay-deepdive-btn${deepDiveMoveNumber === moveIndex ? " replay-deepdive-btn--active" : ""}`}
+            onClick={() => handleDeepDive(moveIndex)}
+            disabled={deepDiveLoading && deepDiveMoveNumber === moveIndex}
+            title="Run maximum-depth analysis on this position"
+          >
+            {deepDiveLoading && deepDiveMoveNumber === moveIndex ? (
+              <>
+                <span className="replay-reanalyze-spin" />
+                Analyzing...
+              </>
+            ) : (
+              <>
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="7" cy="7" r="4.5"/>
+                  <path d="M14 14l-3.5-3.5M5 7h4M7 5v4"/>
+                </svg>
+                Deep-dive
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
+      {currentAnalysis?.top_moves && currentAnalysis.top_moves.length > 0 && moveIndex > 0 && (
+        <div className="replay-top-moves">
+          <div className="replay-top-moves-header">
+            Top moves for move {moveIndex} ({movedByColor === "white" ? "\u26AA" : "\u26AB"} {currentMove?.dice_roll})
+          </div>
+          <table className="replay-top-moves-table">
+            <thead>
+              <tr>
+                <th className="replay-top-moves-th replay-top-moves-th--rank">#</th>
+                <th className="replay-top-moves-th replay-top-moves-th--notation">Move</th>
+                <th className="replay-top-moves-th replay-top-moves-th--equity">Equity</th>
+                <th className="replay-top-moves-th replay-top-moves-th--delta">{"\u0394"} Equity</th>
+              </tr>
+            </thead>
+            <tbody>
+              {currentAnalysis.top_moves.map((candidate, idx) => {
+                const isBest = candidate.rank === 1;
+                const isChosen = candidate.notation === (currentMove?.moves_notation ?? "")
+                  || (isBest && (currentAnalysis.quality === "best" || currentAnalysis.quality === "very_good"));
+                const isSelected = selectedCandidate === idx;
+                return (
+                  <tr
+                    key={candidate.rank}
+                    className={`replay-top-moves-row${isSelected ? " replay-top-moves-row--selected" : ""}${isChosen ? " replay-top-moves-row--chosen" : ""}${isBest ? " replay-top-moves-row--best" : ""}`}
+                    onClick={() => setSelectedCandidate(isSelected ? null : idx)}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <td className="replay-top-moves-td replay-top-moves-td--rank">{candidate.rank}</td>
+                    <td className="replay-top-moves-td replay-top-moves-td--notation">
+                      {notationToPlayerPerspective(candidate.notation, movedByColor as "white" | "black")}
+                      {isChosen && <span className="replay-top-moves-played">{"\u2713"} Played</span>}
+                    </td>
+                    <td className="replay-top-moves-td replay-top-moves-td--equity">
+                      {candidate.equity >= 0 ? "+" : ""}{candidate.equity.toFixed(3)}
+                    </td>
+                    <td className={`replay-top-moves-td replay-top-moves-td--delta${candidate.equity_diff < -0.06 ? " replay-top-moves-td--bad" : candidate.equity_diff < -0.02 ? " replay-top-moves-td--warn" : ""}`}>
+                      {candidate.rank === 1 ? "\u2014" : candidate.equity_diff.toFixed(3)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Deep-dive panel */}
+      {deepDiveData && deepDiveMoveNumber === moveIndex && currentMove && (
+        <DeepDivePanel
+          data={deepDiveData}
+          playedNotation={currentMove.moves_notation}
+          onClose={handleCloseDeepDive}
+        />
+      )}
+
+      {/* Analysis toggle + ply selector */}
+      {!embed && (
+        <div className="replay-analysis-controls">
+          <button
+            type="button"
+            className={`replay-analysis-toggle${analysisOpen ? " replay-analysis-toggle--open" : ""}`}
+            onClick={handleToggleAnalysis}
+            aria-expanded={analysisOpen}
+            aria-controls="replay-analysis-panel"
+          >
+            {analysisOpen ? "▼ Hide analysis" : "▶ Show move analysis"}
+          </button>
+          <div className="replay-ply-selector" role="radiogroup" aria-label="Analysis depth">
+            <span className="replay-ply-label">Depth:</span>
+            {([0, 2, 3] as const).map((p) => (
+              <button
+                key={p}
+                type="button"
+                className={`replay-ply-btn${analysisPly === p ? " replay-ply-btn--active" : ""}`}
+                onClick={() => handlePlyChange(p)}
+                disabled={analysisLoading}
+                aria-pressed={analysisPly === p}
+                title={
+                  p === 0 ? "Fast (neural net only)" :
+                  p === 2 ? "Standard (2-ply lookahead)" :
+                  "Deep (3-ply, slower)"
+                }
+              >
+                {p}-ply
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {analysisOpen && (
+        <div id="replay-analysis-panel" className="replay-analysis">
+          {/* Progress bar for background analysis */}
+          {analysis?.status === "running" && (
+            <div className="replay-analysis-status">
+              <div>Deep analysis in progress… {analysis.progress != null ? `${Math.round(analysis.progress * 100)}%` : ""}</div>
+              {analysis.progress != null && (
+                <div className="replay-analysis-progress-bar">
+                  <div
+                    className="replay-analysis-progress-fill"
+                    style={{ width: `${analysis.progress * 100}%` }}
+                  />
+                </div>
+              )}
+              <div className="replay-analysis-progress-detail">
+                {analysis.moves_analysed} of {analysis.total_moves} moves analysed (polling every 60s)
+              </div>
+            </div>
+          )}
+          {/* Failed state with retry */}
+          {analysis?.status === "failed" && !analysisLoading && (
+            <div className="replay-analysis-status replay-analysis-status--error">
+              Deep analysis failed.{" "}
+              <button
+                type="button"
+                className="replay-analysis-retry-btn"
+                onClick={() => fetchAnalysis(analysisPly, true)}
+              >
+                Retry
+              </button>
+            </div>
+          )}
+          {/* Initial loading (no status yet) */}
+          {analysisLoading && !analysis?.status && (
+            <div className="replay-analysis-status">
+              Analysing game{analysisPly >= 3 ? " (deep analysis, this may take a while)" : ""}…
+            </div>
+          )}
+          {analysisError && !analysisLoading && (
+            <div className="replay-analysis-status replay-analysis-status--error">
+              {analysisError}
+            </div>
+          )}
+          {/* Show results: complete analysis, or partial results while running */}
+          {analysis && analysis.status !== "failed" && analysis.move_analyses.length > 0 && (
+            <>
+              {analysis.analysis_source && analysis.status === "complete" && (
+                <div className="replay-analysis-banner replay-analysis-banner--source">
+                  Analyzed by {analysis.analysis_source}
+                </div>
+              )}
+              {!analysis.analysis_source && analysisSource !== "gnubg" && !analysis.ml_available && (
+                <div className="replay-analysis-banner">
+                  ML model unavailable — showing pip-count fallback analysis.
+                </div>
+              )}
+
+              {playerSummaries && (
+                <div className="replay-analysis-section">
+                  <h3 className="replay-analysis-heading">Game summary</h3>
+                  <div className="replay-summary-grid">
+                    {(["white", "black"] as const).map((c) => {
+                      const s = playerSummaries[c];
+                      if (!s || s.totalMoves === 0) return null;
+                      const avgLoss = s.totalEquityLoss / s.totalMoves;
+                      const qualityOrder = [
+                        "Best",
+                        "Very good",
+                        "Good",
+                        "Inaccuracy",
+                        "Doubtful",
+                        "Mistake",
+                        "Bad",
+                        "Blunder",
+                        "Very bad",
+                      ];
+                      return (
+                        <div key={c} className="replay-summary-player">
+                          <span
+                            className={`replay-player-badge replay-player-${c}`}
+                          >
+                            {s.nickname}
+                          </span>
+                          <div className="replay-summary-stat">
+                            <span className="replay-summary-label">
+                              Avg error
+                            </span>
+                            <span className="replay-summary-value">
+                              {avgLoss.toFixed(3)}
+                            </span>
+                          </div>
+                          <div className="replay-summary-stat">
+                            <span className="replay-summary-label">
+                              Total loss
+                            </span>
+                            <span className="replay-summary-value">
+                              {s.totalEquityLoss.toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="replay-summary-qualities">
+                            {qualityOrder.map((label) => {
+                              const count = s.qualityCounts[label];
+                              if (!count) return null;
+                              const cssKey = Object.entries(QUALITY_LABEL).find(
+                                ([, v]) => v === label,
+                              )?.[0] as MoveQuality | undefined;
+                              const css = cssKey
+                                ? QUALITY_CSS_CLASS[cssKey]
+                                : "good";
+                              return (
+                                <span
+                                  key={label}
+                                  className={`replay-summary-quality replay-quality--${css}`}
+                                >
+                                  {count} {label}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {keyMoments.length > 0 && (
+                <div className="replay-analysis-section">
+                  <h3 className="replay-analysis-heading">Key moments</h3>
+                  <ol className="replay-key-moments">
+                    {keyMoments.map((m) => (
+                      <li key={`key-${m.move_number}`}>
+                        <button
+                          type="button"
+                          className="replay-key-moment"
+                          onClick={() => {
+                            stopAutoPlay();
+                            goTo(m.move_number);
+                          }}
+                        >
+                          <span
+                            className={`replay-quality replay-quality--${QUALITY_CSS_CLASS[m.quality]}`}
+                          >
+                            {QUALITY_LABEL[m.quality]}
+                          </span>
+                          <span className="replay-key-moment-move">
+                            Move {m.move_number} · {m.dice_roll} ·{" "}
+                            {notationToPlayerPerspective(m.moves_notation, m.player_color)}
+                          </span>
+                          <span className="replay-key-moment-loss">
+                            −{m.equity_loss.toFixed(2)}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+
+              <div className="replay-analysis-section">
+                <h3 className="replay-analysis-heading">
+                  Move list ({analysis.moves_analysed}
+                  {analysis.total_moves > analysis.moves_analysed
+                    ? ` of ${analysis.total_moves}`
+                    : ""}
+                  )
+                </h3>
+                {analysisSource === "gnubg" && !analysis.analysis_source && (
+                  <p
+                    className="replay-analysis-attribution"
+                    title="Each move is evaluated by the gnubg engine. Win probabilities reflect the chance the mover wins from that position."
+                  >
+                    Analyzed by GNU Backgammon
+                  </p>
+                )}
+                <ul className="replay-move-list">
+                  {analysis.move_analyses.map((m) => {
+                    const chosenPct = formatPct(
+                      m.chosen_win_prob ?? m.chosen_probs?.win,
+                    );
+                    const bestPct = formatPct(
+                      m.best_win_prob ?? m.best_probs?.win,
+                    );
+                    const hasProbs = chosenPct !== null || bestPct !== null;
+                    const hasDetails =
+                      !!m.chosen_probs || !!m.best_probs;
+                    const isExpanded = expandedMoves.has(m.move_number);
+                    // Collapse the "chosen == best" case into a single line:
+                    // when the player played the top move, showing two identical
+                    // rows duplicates the same number. A move is considered the
+                    // top pick if it's labelled best/very_good AND either there's
+                    // no distinct best-move notation or the equity loss is
+                    // effectively zero.
+                    const chosenIsBest =
+                      chosenPct !== null &&
+                      bestPct !== null &&
+                      (m.quality === "best" || m.quality === "very_good") &&
+                      (m.best_move_notation == null || m.equity_loss < 0.001);
+                    return (
+                      <li
+                        key={m.move_number}
+                        className={`replay-move-item${m.move_number === moveIndex ? " replay-move-item--active" : ""}`}
+                      >
+                        <button
+                          type="button"
+                          className="replay-move-item-btn"
+                          onClick={() => {
+                            stopAutoPlay();
+                            goTo(m.move_number);
+                          }}
+                        >
+                          <span className="replay-move-item-num">
+                            {m.move_number}
+                          </span>
+                          <span
+                            className={`replay-quality replay-quality--${QUALITY_CSS_CLASS[m.quality]}`}
+                            title={`Equity loss: ${m.equity_loss.toFixed(3)}`}
+                          >
+                            {QUALITY_LABEL[m.quality]}
+                          </span>
+                          <span className="replay-move-item-player">
+                            {m.player_color === "white" ? "⚪" : "⚫"} {m.dice_roll}
+                          </span>
+                          <span className="replay-move-item-notation">
+                            {notationToPlayerPerspective(m.moves_notation, m.player_color)}
+                          </span>
+                          {m.quality !== "best" && m.best_move_notation && (
+                            <span className="replay-move-item-best">
+                              best: {notationToPlayerPerspective(m.best_move_notation, m.player_color)}
+                            </span>
+                          )}
+                        </button>
+
+                        {hasProbs && (
+                          <div className="replay-move-probs">
+                            {chosenIsBest ? (
+                              <span className="replay-move-probs-row">
+                                <span className="replay-move-probs-notation">
+                                  {notationToPlayerPerspective(m.moves_notation, m.player_color)}
+                                </span>
+                                <span className="replay-move-probs-pct replay-move-probs-pct--chosen">
+                                  {chosenPct} win
+                                </span>
+                                <span className="replay-move-probs-label replay-move-probs-label--best">
+                                  Best
+                                </span>
+                              </span>
+                            ) : (
+                              <>
+                                {chosenPct && (
+                                  <span className="replay-move-probs-row">
+                                    <span className="replay-move-probs-label">
+                                      Chosen
+                                    </span>
+                                    <span className="replay-move-probs-notation">
+                                      {notationToPlayerPerspective(m.moves_notation, m.player_color)}
+                                    </span>
+                                    <span className="replay-move-probs-pct replay-move-probs-pct--chosen">
+                                      {chosenPct} win
+                                    </span>
+                                  </span>
+                                )}
+                                {bestPct &&
+                                  (m.quality !== "best" || chosenPct !== bestPct) && (
+                                    <span className="replay-move-probs-row">
+                                      <span className="replay-move-probs-label replay-move-probs-label--best">
+                                        Best
+                                      </span>
+                                      <span className="replay-move-probs-notation">
+                                        {notationToPlayerPerspective(m.best_move_notation ?? m.moves_notation, m.player_color)}
+                                      </span>
+                                      <span className="replay-move-probs-pct replay-move-probs-pct--best">
+                                        {bestPct} win
+                                      </span>
+                                    </span>
+                                  )}
+                              </>
+                            )}
+                            {!chosenIsBest && (
+                              <span className="replay-move-probs-delta">
+                                Δ equity −{m.equity_loss.toFixed(3)}
+                              </span>
+                            )}
+                            {hasDetails && (
+                              <button
+                                type="button"
+                                className={`replay-move-probs-toggle${isExpanded ? " replay-move-probs-toggle--open" : ""}`}
+                                aria-expanded={isExpanded}
+                                aria-label={
+                                  isExpanded
+                                    ? `Hide gammon breakdown for move ${m.move_number}`
+                                    : `Show gammon breakdown for move ${m.move_number}`
+                                }
+                                onClick={() =>
+                                  toggleMoveDetails(m.move_number)
+                                }
+                              >
+                                {isExpanded ? "▾" : "▸"} details
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        {isExpanded && hasDetails && (
+                          <MoveProbsBreakdown
+                            chosen={m.chosen_probs ?? null}
+                            best={m.best_probs ?? null}
+                          />
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Speed control */}
+      <div className="replay-speed">
+        <label htmlFor="replay-speed-slider" className="replay-speed-label">
+          Speed
+        </label>
+        <input
+          id="replay-speed-slider"
+          type="range"
+          min={SPEED_OFFSET - SPEED_MAX_MS}
+          max={SPEED_OFFSET - SPEED_MIN_MS}
+          step={100}
+          value={SPEED_OFFSET - playSpeed} /* invert so right = faster */
+          onChange={(e) => setPlaySpeed(SPEED_OFFSET - Number(e.target.value))}
+          className="replay-speed-slider"
+          aria-label="Auto-play speed"
+        />
+        <span className="replay-speed-hint">
+          {playSpeed <= 500 ? "Fast" : playSpeed >= 2500 ? "Slow" : "Normal"}
+        </span>
+      </div>
+
+      {/* Re-analyze modal */}
+      {showReanalyzeModal && (
+        <ReanalyzeModal
+          currentAnalysis={analysis}
+          totalMoves={totalMoves}
+          onConfirm={handleReanalyze}
+          onClose={() => setShowReanalyzeModal(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+export default GameReplay;

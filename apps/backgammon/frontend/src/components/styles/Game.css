@@ -1,0 +1,863 @@
+.game-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: 1rem;
+}
+
+.game-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.game-header-left {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.game-header h2 {
+  color: var(--accent);
+  font-size: 1.25rem;
+  white-space: nowrap;
+}
+
+.header-table-id {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-weight: normal;
+}
+
+.header-copy-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--text-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  vertical-align: -4px;
+}
+
+.header-copy-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.game-status-msg {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  text-align: center;
+  flex: 1;
+  min-width: 0;
+}
+
+/* ---- Header controls group: gear + help + home ---- */
+
+.header-controls {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid #2c2c48;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.02);
+  flex-shrink: 0;
+}
+
+.hc-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  width: 42px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: none;
+  border-right: 1px solid #2c2c48;
+  transition: color 0.15s, background 0.15s;
+}
+.hc-btn:last-child { border-right: none; border-radius: 0 8px 8px 0; }
+.header-controls > :first-child > .hc-btn { border-radius: 8px 0 0 8px; }
+.hc-btn:hover {
+  color: var(--accent);
+  background: rgba(212, 168, 67, 0.10);
+}
+.hc-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.hc-btn--home {
+  color: var(--accent);
+}
+.hc-btn--home:hover {
+  background: rgba(212, 168, 67, 0.16);
+}
+
+.header-controls .settings-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.game-layout {
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.game-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 1000px;
+}
+
+/* Board area with overlay for dice + controls */
+.board-area {
+  position: relative;
+  width: 100%;
+}
+
+.board-overlay {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.board-overlay > * {
+  pointer-events: auto;
+}
+
+/* White perspective: left section from ~2.5% to ~41.5% */
+.perspective-white .board-overlay {
+  left: 2.5%;
+  width: 39%;
+}
+
+/* Black perspective: left section from ~7.5% to ~46.5% */
+.perspective-black .board-overlay {
+  left: 7.5%;
+  width: 39%;
+}
+
+/* Right-side overlay for win banner */
+.board-overlay-right {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.board-overlay-right > * {
+  pointer-events: auto;
+}
+
+.perspective-white .board-overlay-right {
+  left: 46.5%;
+  width: 39%;
+}
+
+.perspective-black .board-overlay-right {
+  left: 51.5%;
+  width: 39%;
+}
+
+.win-banner {
+  background: rgba(0, 0, 0, 0.8);
+  border: 2px solid var(--accent);
+  color: var(--accent);
+  font-size: 1.4rem;
+  font-weight: 700;
+  padding: 0.75rem 1.5rem;
+  border-radius: 10px;
+  text-align: center;
+  white-space: nowrap;
+  animation: bannerFadeIn 0.4s ease;
+}
+
+@keyframes bannerFadeIn {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.player-info-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  justify-content: center;
+}
+
+.pip-count {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.match-pts {
+  font-size: 0.8rem;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.game-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 1rem;
+  color: var(--text-secondary);
+}
+
+.game-loading .spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--bg-secondary);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.game-error-banner {
+  background: rgba(231, 76, 60, 0.15);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 0.9rem;
+  animation: fadeIn 0.3s ease;
+}
+
+.connection-banner {
+  background: rgba(231, 76, 60, 0.15);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  padding: 0.4rem 1rem;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 0.85rem;
+}
+
+.connection-banner.reconnected {
+  background: rgba(46, 204, 113, 0.15);
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.spectator-count-banner {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  padding: 0.3rem 1rem;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 0.8rem;
+}
+
+.waiting-table-id {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+  color: var(--text-primary);
+}
+
+.table-id-code {
+  background: var(--bg-secondary);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  padding: 0.4rem 0.8rem;
+  border-radius: 4px;
+  font-size: 1.25rem;
+  letter-spacing: 0.15em;
+  font-weight: bold;
+}
+
+.copy-id-btn {
+  background: var(--accent);
+  color: var(--bg-primary);
+  border: none;
+  padding: 0.4rem 0.8rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.copy-id-btn:hover {
+  opacity: 0.85;
+}
+
+.waiting-or {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  margin: 0.25rem 0;
+}
+
+.invite-bot-btn {
+  background: var(--bg-secondary);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  padding: 0.5rem 1.2rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: all 0.15s;
+}
+
+.invite-bot-btn:hover {
+  background: var(--accent);
+  color: var(--bg-primary);
+}
+
+.invite-bot-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.player-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.9rem;
+  border-radius: 20px;
+  background: var(--bg-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+.player-pill.disconnected {
+  border-color: var(--danger);
+  opacity: 0.8;
+}
+
+.connection-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.connection-dot.connected {
+  background: var(--success);
+  box-shadow: 0 0 4px var(--success);
+}
+
+.connection-dot.disconnected {
+  background: var(--danger);
+  box-shadow: 0 0 4px var(--danger);
+}
+
+.bot-avatar {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.pill-name {
+  font-weight: 500;
+}
+
+/* Game over / next game / match over banners */
+
+.game-over-banner,
+.match-over-banner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem 1.5rem;
+}
+
+.game-over-result,
+.match-over-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.match-over-title {
+  font-size: 1.4rem;
+  color: var(--accent);
+}
+
+.game-over-score {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.match-over-result {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.next-game-btn {
+  margin-top: 0.25rem;
+  padding: 0.5rem 1.5rem;
+  background: var(--accent);
+  color: var(--bg-primary);
+  border: none;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.next-game-btn:hover {
+  opacity: 0.85;
+}
+
+.analyze-game-btn {
+  display: inline-block;
+  margin-top: 0.25rem;
+  padding: 0.5rem 1.5rem;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.analyze-game-btn:hover {
+  background: var(--accent);
+  color: var(--bg-primary);
+}
+
+/* Bot difficulty badge */
+
+.bot-difficulty-badge {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.bot-difficulty-badge.difficulty-easy {
+  background: rgba(76, 175, 80, 0.2);
+  color: #81c784;
+}
+
+.bot-difficulty-badge.difficulty-medium {
+  background: rgba(255, 193, 7, 0.2);
+  color: #ffd54f;
+}
+
+.bot-difficulty-badge.difficulty-hard {
+  background: rgba(244, 67, 54, 0.2);
+  color: #e57373;
+}
+
+.bot-difficulty-badge.difficulty-expert {
+  background: rgba(156, 39, 176, 0.2);
+  color: #ce93d8;
+}
+
+.bot-difficulty-badge.difficulty-gnu {
+  background: rgba(212, 168, 67, 0.2);
+  color: var(--accent, #d4a843);
+  border: 1px solid rgba(212, 168, 67, 0.5);
+}
+
+/* Crawford game badge */
+
+.crawford-badge {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: rgba(255, 152, 0, 0.2);
+  color: #ffb74d;
+  border: 1px solid rgba(255, 152, 0, 0.4);
+}
+
+/* Player rating badge */
+
+.player-rating {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  background: rgba(255, 193, 7, 0.15);
+  color: #ffc107;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+/* Chess clock display */
+
+.chess-clock {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 1rem;
+  font-weight: 700;
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  min-width: 3.5rem;
+  text-align: center;
+  transition: color 0.3s, border-color 0.3s, background 0.3s;
+}
+
+.chess-clock.clock-active {
+  border-color: var(--accent);
+  background: rgba(230, 185, 71, 0.1);
+}
+
+.chess-clock.clock-warning {
+  color: #ffd54f;
+  border-color: #ffd54f;
+  background: rgba(255, 213, 79, 0.12);
+}
+
+.chess-clock.clock-critical {
+  color: #e57373;
+  border-color: #e57373;
+  background: rgba(229, 115, 115, 0.12);
+  animation: clockPulse 1s ease-in-out infinite;
+}
+
+@keyframes clockPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---- Settings menu ---- */
+
+.settings-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--bg-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  min-width: 180px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  animation: fadeIn 0.15s ease;
+}
+
+.menu-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 0.4rem 0;
+}
+
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.settings-toggle input[type="checkbox"] {
+  display: none;
+}
+
+.toggle-slider {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+
+.toggle-slider::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: var(--text-secondary);
+  border-radius: 50%;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.settings-toggle input:checked + .toggle-slider {
+  background: var(--accent);
+}
+
+.settings-toggle input:checked + .toggle-slider::after {
+  transform: translateX(16px);
+  background: var(--bg-primary);
+}
+
+.settings-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  line-height: 1.3;
+}
+
+/* ---- Shortcut help modal ---- */
+
+.shortcut-help-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.15s ease;
+}
+
+.shortcut-help-modal {
+  background: var(--bg-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  padding: 1.5rem 2rem;
+  min-width: 280px;
+  max-width: 420px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.shortcut-help-modal h3 {
+  color: var(--accent);
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 0;
+  text-align: center;
+}
+
+.shortcut-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.shortcut-table td {
+  padding: 0.35rem 0.5rem;
+  color: var(--text-primary);
+}
+
+.shortcut-table td:first-child {
+  white-space: nowrap;
+  width: 40%;
+}
+
+.shortcut-table tr:not(:last-child) td {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+kbd {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  background: var(--bg-primary);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent);
+  line-height: 1.4;
+}
+
+.shortcut-help-close {
+  align-self: center;
+  padding: 0.4rem 1.5rem;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.shortcut-help-close:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ---- Responsive: Tablet ---- */
+
+@media (max-width: 900px) {
+  .game-page {
+    padding: 0.75rem;
+  }
+
+  .game-header {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.5rem;
+  }
+
+  .game-status-msg {
+    order: 3;
+    flex-basis: 100%;
+    text-align: center;
+  }
+
+  .player-info-row {
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .win-banner {
+    font-size: 1.2rem;
+    padding: 0.6rem 1rem;
+  }
+}
+
+/* ---- Responsive: Mobile ---- */
+
+@media (max-width: 600px) {
+  .game-page {
+    padding: 0.5rem;
+  }
+
+  .game-header {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.5rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .game-header-left {
+    flex: 1 1 auto;
+    min-width: 0;
+    justify-content: flex-start;
+  }
+
+  .game-header h2 {
+    font-size: 1.1rem;
+  }
+
+  .game-status-msg {
+    order: 3;
+    flex-basis: 100%;
+    text-align: center;
+    font-size: 0.8rem;
+  }
+
+  .header-controls {
+    order: 2;
+    flex-shrink: 0;
+  }
+
+  .game-center {
+    gap: 0.5rem;
+  }
+
+  .player-info-row {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.4rem;
+  }
+
+  .player-pill {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.65rem;
+  }
+
+  .pip-count,
+  .match-pts {
+    font-size: 0.7rem;
+  }
+
+  .game-error-banner,
+  .connection-banner {
+    font-size: 0.8rem;
+    padding: 0.4rem 0.75rem;
+  }
+
+  .win-banner {
+    font-size: 1rem;
+    padding: 0.5rem 0.75rem;
+    white-space: normal;
+    text-align: center;
+  }
+
+  .waiting-table-id {
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .table-id-code {
+    font-size: 1.1rem;
+  }
+
+  .game-over-banner,
+  .match-over-banner {
+    padding: 0.75rem 1rem;
+  }
+
+  .game-over-result {
+    font-size: 1rem;
+  }
+
+  .match-over-title {
+    font-size: 1.2rem;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Resign section (below board)
+   --------------------------------------------------------------------------- */
+
+.resign-section {
+  display: flex;
+  justify-content: center;
+  padding: 0.25rem 0;
+}

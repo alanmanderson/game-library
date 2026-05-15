@@ -1,0 +1,9 @@
+subscription_id     = "00000000-0000-0000-0000-000000000000"
+location            = "eastus"
+domain_name         = "backgammon.example.com"
+db_admin_password   = "ChangeMe!2024"
+app_secret_key      = "change-me-to-a-random-string"
+ssh_public_key_path = "~/.ssh/id_rsa.pub"
+google_client_id    = ""
+# REQUIRED: restrict to your actual IP(s) — never use 0.0.0.0/0 in production
+allowed_ssh_ips     = ["YOUR_IP/32"]
