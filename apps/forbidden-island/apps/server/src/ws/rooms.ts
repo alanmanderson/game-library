@@ -59,6 +59,15 @@ export class RoomManager {
       playerId,
       secret,
     });
+
+    // Send current game list so the client sees open games immediately
+    const games = this.getOpenGames();
+    if (games.length > 0) {
+      this.send(ws, {
+        type: 'lobby:game_list_updated',
+        games,
+      });
+    }
   }
 
   handleDisconnect(ws: WebSocket): void {
