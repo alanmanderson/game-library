@@ -1,0 +1,45 @@
+# .NET
+backend/**/bin/
+backend/**/obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+*.db
+*.db-shm
+*.db-wal
+
+# Node
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Azure
+.azure/
+publish/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test
+coverage/
+test-results/
+playwright-report/
