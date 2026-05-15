@@ -1,0 +1,31 @@
+pinochle.games.alanmanderson.com {
+	reverse_proxy ai-pinochle:8000
+}
+
+backgammon.games.alanmanderson.com {
+	reverse_proxy backgammon:8000
+}
+
+bughouse.games.alanmanderson.com {
+	reverse_proxy bughouse:8000
+}
+
+fi.games.alanmanderson.com {
+	reverse_proxy forbidden-island:3000
+}
+
+lemonade.games.alanmanderson.com {
+	reverse_proxy lemonadestand:5000
+}
+
+spades.games.alanmanderson.com {
+	reverse_proxy spades:5000
+}
+
+telestrations.games.alanmanderson.com {
+	reverse_proxy telestrations:8080
+}
+
+# auth.games.alanmanderson.com {
+# 	reverse_proxy auth:8000
+# }
