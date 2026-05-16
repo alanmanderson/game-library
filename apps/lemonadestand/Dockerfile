@@ -31,7 +31,7 @@ RUN dotnet publish LemonadeStand.Api/LemonadeStand.Api.csproj -c Release -o /pub
 # ---------------------------------------------------------------------------
 FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine AS production
 
-RUN addgroup -S app && adduser -S app -G app
+RUN addgroup -S app 2>/dev/null; adduser -S app -G app 2>/dev/null; true
 
 WORKDIR /app
 

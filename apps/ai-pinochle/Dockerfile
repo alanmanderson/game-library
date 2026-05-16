@@ -1,3 +1,22 @@
+# ---------------------------------------------------------------------------
+# Stage 1: Build web frontend (Vite, npm workspaces)
+# ---------------------------------------------------------------------------
+FROM node:20-alpine AS frontend-build
+
+WORKDIR /build
+COPY package.json package-lock.json ./
+COPY web/package.json ./web/
+COPY shared/package.json ./shared/
+RUN npm ci --workspace=web --workspace=shared --include-workspace-root
+
+COPY web/ ./web/
+COPY shared/ ./shared/
+COPY public/ ./public/
+RUN npm run build --workspace=web
+
+# ---------------------------------------------------------------------------
+# Stage 2: Production image
+# ---------------------------------------------------------------------------
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -13,6 +32,9 @@ COPY server/ /app/
 # Path(__file__).parent.parent.parent / "public" / "img"
 # __file__ = /app/app/main.py -> parent.parent.parent = /
 COPY public/img/ /public/img/
+
+# Copy built web frontend
+COPY --from=frontend-build /build/web/dist /app/web-dist/
 
 EXPOSE 8000
 

@@ -2,11 +2,13 @@
 
 import asyncio
 import logging
+import os
 import time
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 try:
     from pythonjsonlogger.json import JsonFormatter as _JsonFormatter
 except ImportError:
@@ -180,3 +182,17 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         }
     except (SQLAlchemyError, ConnectionError, OSError):
         raise HTTPException(status_code=503, detail="Database unavailable")
+
+
+# ---------------------------------------------------------------------------
+# Static files — serve the built frontend SPA in production
+# ---------------------------------------------------------------------------
+
+_frontend_dist = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "frontend",
+    "dist",
+)
+
+if os.path.isdir(_frontend_dist):
+    app.mount("/", StaticFiles(directory=_frontend_dist, html=True), name="frontend")

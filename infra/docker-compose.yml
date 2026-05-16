@@ -41,9 +41,8 @@ services:
     build: ../apps/ai-pinochle
     environment:
       DATABASE_URL: ${AI_PINOCHLE_DATABASE_URL}
+      SECRET_KEY: ${JWT_SECRET}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
-      JWT_SECRET: ${JWT_SECRET}
     depends_on:
       - postgres
     restart: unless-stopped
@@ -52,9 +51,9 @@ services:
     build: ../apps/backgammon
     environment:
       DATABASE_URL: ${BACKGAMMON_DATABASE_URL}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      DATABASE_URL_SYNC: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/backgammon
       JWT_SECRET: ${JWT_SECRET}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
     depends_on:
       - postgres
     restart: unless-stopped
@@ -62,10 +61,10 @@ services:
   bughouse:
     build: ../apps/bughouse
     environment:
-      DATABASE_URL: ${BUGHOUSE_DATABASE_URL}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
-      JWT_SECRET: ${JWT_SECRET}
+      BUGHOUSE_DATABASE_URL: ${BUGHOUSE_DATABASE_URL}
+      BUGHOUSE_JWT_SECRET_KEY: ${JWT_SECRET}
+      BUGHOUSE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      BUGHOUSE_GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
     depends_on:
       - postgres
     restart: unless-stopped
@@ -80,9 +79,8 @@ services:
     build: ../apps/lemonadestand
     environment:
       ASPNETCORE_URLS: http://+:5000
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
-      JWT_SECRET: ${JWT_SECRET}
+      Jwt__Secret: ${JWT_SECRET}
+      Google__ClientId: ${GOOGLE_CLIENT_ID}
     restart: unless-stopped
 
   spades:

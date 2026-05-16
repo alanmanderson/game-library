@@ -68,3 +68,8 @@ app.include_router(ws_router, prefix="/ws", tags=["websocket"])
 _img_dir = Path(__file__).resolve().parent.parent.parent / "public" / "img"
 if _img_dir.is_dir():
     app.mount("/img", StaticFiles(directory=str(_img_dir)), name="images")
+
+# Serve the built web frontend SPA in production
+_web_dist = Path(__file__).resolve().parent.parent / "web-dist"
+if _web_dist.is_dir():
+    app.mount("/", StaticFiles(directory=str(_web_dist), html=True), name="frontend")
