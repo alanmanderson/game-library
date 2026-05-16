@@ -1,0 +1,144 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/**'
+      - 'infra/**'
+
+env:
+  VM_HOST: 20.83.116.73
+  VM_USER: azureuser
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      ai-pinochle: ${{ steps.changes.outputs.ai-pinochle }}
+      backgammon: ${{ steps.changes.outputs.backgammon }}
+      bughouse: ${{ steps.changes.outputs.bughouse }}
+      forbidden-island: ${{ steps.changes.outputs.forbidden-island }}
+      lemonadestand: ${{ steps.changes.outputs.lemonadestand }}
+      spades: ${{ steps.changes.outputs.spades }}
+      telestrations: ${{ steps.changes.outputs.telestrations }}
+      infra: ${{ steps.changes.outputs.infra }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            ai-pinochle:
+              - 'apps/ai-pinochle/**'
+            backgammon:
+              - 'apps/backgammon/**'
+            bughouse:
+              - 'apps/bughouse/**'
+            forbidden-island:
+              - 'apps/forbidden-island/**'
+            lemonadestand:
+              - 'apps/lemonadestand/**'
+            spades:
+              - 'apps/spades/**'
+            telestrations:
+              - 'apps/telestrations/**'
+            infra:
+              - 'infra/**'
+
+  deploy:
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    if: >-
+      needs.detect-changes.outputs.ai-pinochle == 'true' ||
+      needs.detect-changes.outputs.backgammon == 'true' ||
+      needs.detect-changes.outputs.bughouse == 'true' ||
+      needs.detect-changes.outputs.forbidden-island == 'true' ||
+      needs.detect-changes.outputs.lemonadestand == 'true' ||
+      needs.detect-changes.outputs.spades == 'true' ||
+      needs.detect-changes.outputs.telestrations == 'true' ||
+      needs.detect-changes.outputs.infra == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VM_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ env.VM_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Sync code to VM
+        run: |
+          tar czf /tmp/gamelibrary.tar.gz \
+            --exclude='node_modules' --exclude='.git' \
+            --exclude='__pycache__' --exclude='.venv' \
+            --exclude='*.pyc' --exclude='dist' \
+            --exclude='build' --exclude='bin' \
+            --exclude='obj' --exclude='.env' \
+            apps/ infra/
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            /tmp/gamelibrary.tar.gz ${{ env.VM_USER }}@${{ env.VM_HOST }}:/tmp/
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ env.VM_USER }}@${{ env.VM_HOST }} \
+            'tar xzf /tmp/gamelibrary.tar.gz -C /opt/gamelibrary'
+
+      - name: Determine which services to rebuild
+        id: services
+        run: |
+          SERVICES=""
+          if [ "${{ needs.detect-changes.outputs.ai-pinochle }}" == "true" ] || [ "${{ needs.detect-changes.outputs.infra }}" == "true" ]; then
+            SERVICES="$SERVICES ai-pinochle"
+          fi
+          if [ "${{ needs.detect-changes.outputs.backgammon }}" == "true" ] || [ "${{ needs.detect-changes.outputs.infra }}" == "true" ]; then
+            SERVICES="$SERVICES backgammon"
+          fi
+          if [ "${{ needs.detect-changes.outputs.bughouse }}" == "true" ] || [ "${{ needs.detect-changes.outputs.infra }}" == "true" ]; then
+            SERVICES="$SERVICES bughouse"
+          fi
+          if [ "${{ needs.detect-changes.outputs.forbidden-island }}" == "true" ] || [ "${{ needs.detect-changes.outputs.infra }}" == "true" ]; then
+            SERVICES="$SERVICES forbidden-island"
+          fi
+          if [ "${{ needs.detect-changes.outputs.lemonadestand }}" == "true" ] || [ "${{ needs.detect-changes.outputs.infra }}" == "true" ]; then
+            SERVICES="$SERVICES lemonadestand"
+          fi
+          if [ "${{ needs.detect-changes.outputs.spades }}" == "true" ] || [ "${{ needs.detect-changes.outputs.infra }}" == "true" ]; then
+            SERVICES="$SERVICES spades"
+          fi
+          if [ "${{ needs.detect-changes.outputs.telestrations }}" == "true" ] || [ "${{ needs.detect-changes.outputs.infra }}" == "true" ]; then
+            SERVICES="$SERVICES telestrations"
+          fi
+          echo "list=$(echo $SERVICES | xargs)" >> "$GITHUB_OUTPUT"
+          echo "Deploying: $SERVICES"
+
+      - name: Build and restart services
+        if: steps.services.outputs.list != ''
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ env.VM_USER }}@${{ env.VM_HOST }} \
+            "cd /opt/gamelibrary/infra && \
+             docker compose build ${{ steps.services.outputs.list }} && \
+             docker compose up -d ${{ steps.services.outputs.list }}"
+
+      - name: Reload Caddy if infra changed
+        if: needs.detect-changes.outputs.infra == 'true'
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ env.VM_USER }}@${{ env.VM_HOST }} \
+            "cd /opt/gamelibrary/infra && \
+             docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile"
+
+      - name: Verify containers are running
+        run: |
+          sleep 5
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ env.VM_USER }}@${{ env.VM_HOST }} \
+            'docker ps --format "table {{.Names}}\t{{.Status}}" | grep -v "Restarting" || true'
+          # Check for any restarting containers (indicates a problem)
+          RESTARTING=$(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ env.VM_USER }}@${{ env.VM_HOST }} \
+            'docker ps --format "{{.Names}} {{.Status}}" | grep "Restarting" || true')
+          if [ -n "$RESTARTING" ]; then
+            echo "::error::Containers are crash-looping: $RESTARTING"
+            exit 1
+          fi
