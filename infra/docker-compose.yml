@@ -38,7 +38,10 @@ services:
   #   restart: unless-stopped
 
   ai-pinochle:
-    build: ../apps/ai-pinochle
+    build:
+      context: ../apps/ai-pinochle
+      args:
+        GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
     environment:
       DATABASE_URL: ${AI_PINOCHLE_DATABASE_URL}
       SECRET_KEY: ${JWT_SECRET}
@@ -48,7 +51,10 @@ services:
     restart: unless-stopped
 
   backgammon:
-    build: ../apps/backgammon
+    build:
+      context: ../apps/backgammon
+      args:
+        GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
     environment:
       DATABASE_URL: ${BACKGAMMON_DATABASE_URL}
       DATABASE_URL_SYNC: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/backgammon
@@ -76,7 +82,10 @@ services:
     restart: unless-stopped
 
   lemonadestand:
-    build: ../apps/lemonadestand
+    build:
+      context: ../apps/lemonadestand
+      args:
+        GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
     environment:
       ASPNETCORE_URLS: http://+:5000
       Jwt__Secret: ${JWT_SECRET}

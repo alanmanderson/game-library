@@ -2,6 +2,8 @@
 # Stage 1: Build the frontend (Vite)
 # ---------------------------------------------------------------------------
 FROM node:20-alpine AS frontend-build
+ARG GOOGLE_CLIENT_ID
+ENV VITE_GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID
 
 WORKDIR /build
 COPY frontend/package.json frontend/package-lock.json ./
