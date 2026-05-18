@@ -13,7 +13,8 @@ export function renderLobby(): string {
   const state = getState();
   const amHost = isHost();
   const playerCount = state.players.length;
-  const canStart = playerCount >= 4;
+  const connectedCount = state.players.filter(p => p.isConnected).length;
+  const canStart = connectedCount >= 4;
 
   const gameCodeHtml = renderGameCode();
   const playerListHtml = renderPlayerList({ showKickControls: amHost });
@@ -26,7 +27,7 @@ export function renderLobby(): string {
         Start Game
       </button>
       <p class="text-caption text-muted text-center" style="margin-top:var(--sp-2);">
-        ${canStart ? `${playerCount} players ready` : `Need at least 4 players (${playerCount} joined)`}
+        ${canStart ? `${connectedCount} players ready` : `Need at least 4 players (${connectedCount} connected)`}
       </p>
     `
     : `
