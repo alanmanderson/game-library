@@ -23,7 +23,9 @@ jobs:
       spades: ${{ steps.changes.outputs.spades }}
       telestrations: ${{ steps.changes.outputs.telestrations }}
       landing: ${{ steps.changes.outputs.landing }}
-      infra: ${{ steps.changes.outputs.infra }}
+      infra-compose: ${{ steps.changes.outputs.infra-compose }}
+      infra-caddyfile: ${{ steps.changes.outputs.infra-caddyfile }}
+      infra-db-init: ${{ steps.changes.outputs.infra-db-init }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -46,8 +48,12 @@ jobs:
               - 'apps/telestrations/**'
             landing:
               - 'apps/landing/**'
-            infra:
-              - 'infra/**'
+            infra-compose:
+              - 'infra/docker-compose.yml'
+            infra-caddyfile:
+              - 'infra/Caddyfile'
+            infra-db-init:
+              - 'infra/init-databases.sql'
 
   test-landing:
     needs: detect-changes
@@ -81,10 +87,14 @@ jobs:
       needs.detect-changes.outputs.spades == 'true' ||
       needs.detect-changes.outputs.telestrations == 'true' ||
       needs.detect-changes.outputs.landing == 'true' ||
-      needs.detect-changes.outputs.infra == 'true'
+      needs.detect-changes.outputs.infra-compose == 'true' ||
+      needs.detect-changes.outputs.infra-caddyfile == 'true' ||
+      needs.detect-changes.outputs.infra-db-init == 'true'
       )
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: Set up SSH
         run: |
@@ -120,28 +130,42 @@ jobs:
         id: services
         run: |
           SERVICES=""
-          if [ "${{ needs.detect-changes.outputs.ai-pinochle }}" == "true" ] || [ "${{ needs.detect-changes.outputs.infra }}" == "true" ]; then
-            SERVICES="$SERVICES ai-pinochle"
+
+          # 1) App code changes — rebuild that app
+          [ "${{ needs.detect-changes.outputs.ai-pinochle }}" == "true" ] && SERVICES="$SERVICES ai-pinochle"
+          [ "${{ needs.detect-changes.outputs.backgammon }}" == "true" ] && SERVICES="$SERVICES gnubg backgammon"
+          [ "${{ needs.detect-changes.outputs.bughouse }}" == "true" ] && SERVICES="$SERVICES bughouse"
+          [ "${{ needs.detect-changes.outputs.forbidden-island }}" == "true" ] && SERVICES="$SERVICES forbidden-island"
+          [ "${{ needs.detect-changes.outputs.lemonadestand }}" == "true" ] && SERVICES="$SERVICES lemonadestand"
+          [ "${{ needs.detect-changes.outputs.spades }}" == "true" ] && SERVICES="$SERVICES spades"
+          [ "${{ needs.detect-changes.outputs.telestrations }}" == "true" ] && SERVICES="$SERVICES telestrations"
+
+          # 2) docker-compose.yml changed — parse the diff to find affected services
+          #    instead of rebuilding everything
+          if [ "${{ needs.detect-changes.outputs.infra-compose }}" == "true" ]; then
+            DIFF=$(git diff HEAD~1 HEAD -- infra/docker-compose.yml)
+            COMPOSE_SERVICES=""
+            for svc in ai-pinochle gnubg backgammon bughouse forbidden-island lemonadestand spades telestrations caddy postgres; do
+              # Only match actual change lines (+ or -), not diff context
+              if echo "$DIFF" | grep -qE "^[+-].*${svc}"; then
+                COMPOSE_SERVICES="$COMPOSE_SERVICES $svc"
+              fi
+            done
+            # If compose changed but no specific services identified (e.g., volumes
+            # or top-level keys), fall back to rebuilding all app services
+            if [ -z "$COMPOSE_SERVICES" ] && [ -n "$DIFF" ]; then
+              COMPOSE_SERVICES="ai-pinochle gnubg backgammon bughouse forbidden-island lemonadestand spades telestrations"
+            fi
+            SERVICES="$SERVICES $COMPOSE_SERVICES"
+            echo "Compose-affected services: $COMPOSE_SERVICES"
           fi
-          if [ "${{ needs.detect-changes.outputs.backgammon }}" == "true" ] || [ "${{ needs.detect-changes.outputs.infra }}" == "true" ]; then
-            SERVICES="$SERVICES gnubg backgammon"
-          fi
-          if [ "${{ needs.detect-changes.outputs.bughouse }}" == "true" ] || [ "${{ needs.detect-changes.outputs.infra }}" == "true" ]; then
-            SERVICES="$SERVICES bughouse"
-          fi
-          if [ "${{ needs.detect-changes.outputs.forbidden-island }}" == "true" ] || [ "${{ needs.detect-changes.outputs.infra }}" == "true" ]; then
-            SERVICES="$SERVICES forbidden-island"
-          fi
-          if [ "${{ needs.detect-changes.outputs.lemonadestand }}" == "true" ] || [ "${{ needs.detect-changes.outputs.infra }}" == "true" ]; then
-            SERVICES="$SERVICES lemonadestand"
-          fi
-          if [ "${{ needs.detect-changes.outputs.spades }}" == "true" ] || [ "${{ needs.detect-changes.outputs.infra }}" == "true" ]; then
-            SERVICES="$SERVICES spades"
-          fi
-          if [ "${{ needs.detect-changes.outputs.telestrations }}" == "true" ] || [ "${{ needs.detect-changes.outputs.infra }}" == "true" ]; then
-            SERVICES="$SERVICES telestrations"
-          fi
-          echo "list=$(echo $SERVICES | xargs)" >> "$GITHUB_OUTPUT"
+
+          # 3) init-databases.sql only runs on first postgres init — no rebuild needed.
+          #    The file is synced to the VM but running containers are unaffected.
+
+          # Deduplicate and trim
+          SERVICES=$(echo "$SERVICES" | tr ' ' '\n' | sort -u | tr '\n' ' ' | xargs)
+          echo "list=$SERVICES" >> "$GITHUB_OUTPUT"
           echo "Deploying: $SERVICES"
 
       - name: Build and restart services
@@ -153,8 +177,8 @@ jobs:
              docker compose build ${{ steps.services.outputs.list }} && \
              docker compose up -d ${{ steps.services.outputs.list }}"
 
-      - name: Reload Caddy if infra changed
-        if: needs.detect-changes.outputs.infra == 'true'
+      - name: Reload Caddy if Caddyfile changed
+        if: needs.detect-changes.outputs.infra-caddyfile == 'true'
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ env.VM_USER }}@${{ env.VM_HOST }} \

@@ -1,0 +1,180 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/**'
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      ai-pinochle: ${{ steps.changes.outputs.ai-pinochle }}
+      backgammon: ${{ steps.changes.outputs.backgammon }}
+      bughouse: ${{ steps.changes.outputs.bughouse }}
+      forbidden-island: ${{ steps.changes.outputs.forbidden-island }}
+      lemonadestand: ${{ steps.changes.outputs.lemonadestand }}
+      spades: ${{ steps.changes.outputs.spades }}
+      telestrations: ${{ steps.changes.outputs.telestrations }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            ai-pinochle:
+              - 'apps/ai-pinochle/**'
+            backgammon:
+              - 'apps/backgammon/**'
+            bughouse:
+              - 'apps/bughouse/**'
+            forbidden-island:
+              - 'apps/forbidden-island/**'
+            lemonadestand:
+              - 'apps/lemonadestand/**'
+            spades:
+              - 'apps/spades/**'
+            telestrations:
+              - 'apps/telestrations/**'
+
+  test-ai-pinochle:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.ai-pinochle == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/ai-pinochle
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+        working-directory: apps/ai-pinochle/server
+      - name: Run backend tests
+        run: python -m pytest
+        working-directory: apps/ai-pinochle/server
+
+  test-backgammon:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backgammon == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install backend dependencies
+        run: pip install -r requirements-dev.txt
+        working-directory: apps/backgammon/backend
+      - name: Run backend tests
+        run: JWT_SECRET=test pytest
+        working-directory: apps/backgammon/backend
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: apps/backgammon/frontend
+      - name: Run frontend tests
+        run: npm run test:run
+        working-directory: apps/backgammon/frontend
+
+  test-bughouse:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.bughouse == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest aiosqlite
+        working-directory: apps/bughouse/backend
+      - name: Run backend tests
+        env:
+          BUGHOUSE_ENV: development
+        run: pytest tests.py -v
+        working-directory: apps/bughouse/backend
+
+  test-forbidden-island:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.forbidden-island == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies
+        run: npm ci
+        working-directory: apps/forbidden-island
+      - name: Run tests
+        run: npm test
+        working-directory: apps/forbidden-island
+      - name: Build
+        run: npm run build
+        working-directory: apps/forbidden-island
+
+  test-lemonadestand:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.lemonadestand == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run backend tests
+        run: dotnet test
+        working-directory: apps/lemonadestand/backend
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: apps/lemonadestand/frontend
+      - name: Type-check frontend
+        run: npx tsc --noEmit
+        working-directory: apps/lemonadestand/frontend
+
+  test-spades:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.spades == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+        working-directory: apps/spades
+      - name: Run tests
+        run: pytest
+        working-directory: apps/spades
+
+  test-telestrations:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.telestrations == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install server dependencies
+        run: npm ci
+        working-directory: apps/telestrations/server
+      - name: Install client dependencies
+        run: npm ci
+        working-directory: apps/telestrations/client
+      - name: Run server tests
+        run: npx vitest run
+        working-directory: apps/telestrations/server
+      - name: Type-check
+        run: npm run typecheck
+        working-directory: apps/telestrations
