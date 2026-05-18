@@ -35,6 +35,10 @@ def create_app(config_name: str | None = None) -> Flask:
     def hello_world() -> str:
         return 'Hello, World!'
 
+    @app.route('/api/health')
+    def health_check():
+        return jsonify(status='ok', version=os.environ.get('GIT_SHA', 'dev')[:7])
+
     @app.errorhandler(404)
     def not_found(e: Exception) -> tuple:
         return jsonify(error='Not found'), 404

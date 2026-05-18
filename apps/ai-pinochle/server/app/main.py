@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -63,6 +64,11 @@ app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(games_router, prefix="/games", tags=["games"])
 app.include_router(users_router, prefix="/users", tags=["users"])
 app.include_router(ws_router, prefix="/ws", tags=["websocket"])
+
+@app.get("/api/health")
+async def health_check():
+    return {"status": "ok", "version": os.environ.get("GIT_SHA", "dev")[:7]}
+
 
 # Serve card images so mobile clients can load them via URL
 _img_dir = Path(__file__).resolve().parent.parent.parent / "public" / "img"

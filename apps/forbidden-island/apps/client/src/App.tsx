@@ -5,6 +5,7 @@ import { LobbyScreen } from './screens/LobbyScreen';
 import { GameScreen } from './screens/GameScreen';
 import { GameOverScreen } from './screens/GameOverScreen';
 import { useWebSocket } from './hooks/useWebSocket';
+import { BuildInfo } from './components/BuildInfo';
 
 function AppShell() {
   // Establish WebSocket connection once at app level
@@ -27,6 +28,7 @@ export function App() {
     <BrowserRouter>
       <div data-palette="ocean" style={{ width: '100%', height: '100%' }}>
         <AppShell />
+        <BuildInfo />
       </div>
     </BrowserRouter>
   );

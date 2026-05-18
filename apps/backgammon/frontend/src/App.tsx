@@ -18,6 +18,7 @@ import Spectator from "./components/Spectator";
 import AuthModal from "./components/AuthModal";
 import { TournamentList, TournamentDetail } from "./components/Tournament";
 import { lazy, Suspense } from "react";
+import BuildInfo from "./components/BuildInfo";
 
 const Analysis = lazy(() => import("./components/Analysis"));
 
@@ -87,6 +88,7 @@ function App() {
   return (
     <div className="app">
       <AppChrome player={player} onAuthenticated={handleAuthenticated} />
+      <BuildInfo />
 
       <Routes>
         <Route

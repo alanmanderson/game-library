@@ -10,6 +10,7 @@ import {
   type AppState,
 } from './state';
 import { renderConnectionBanner, setupConnectionBanner } from './components/Header';
+import { initBuildInfo } from './components/BuildInfo';
 
 // Screen imports
 import { renderLanding, setupLanding } from './screens/Landing';
@@ -53,6 +54,8 @@ export function initApp(): void {
   if (bannerContainer) {
     setupConnectionBanner(bannerContainer);
   }
+
+  initBuildInfo();
 
   // Subscribe to state changes
   subscribe(() => {

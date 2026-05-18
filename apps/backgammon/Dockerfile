@@ -3,7 +3,9 @@
 # ---------------------------------------------------------------------------
 FROM node:20-alpine AS frontend-build
 ARG GOOGLE_CLIENT_ID
+ARG GIT_SHA
 ENV VITE_GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID
+ENV VITE_GIT_SHA=$GIT_SHA
 
 WORKDIR /build
 COPY frontend/package.json frontend/package-lock.json ./
@@ -26,6 +28,8 @@ RUN pip install --no-cache-dir --prefix=/install torch --index-url https://downl
 # Stage 3: Production image
 # ---------------------------------------------------------------------------
 FROM python:3.12-slim AS production
+ARG GIT_SHA
+ENV GIT_SHA=$GIT_SHA
 
 WORKDIR /app
 

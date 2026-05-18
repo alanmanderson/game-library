@@ -83,6 +83,14 @@ jobs:
             ${{ env.VM_USER }}@${{ env.VM_HOST }} \
             'tar xzf /tmp/gamelibrary.tar.gz -C /opt/gamelibrary'
 
+      - name: Set GIT_SHA for build
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ env.VM_USER }}@${{ env.VM_HOST }} \
+            "cd /opt/gamelibrary/infra && \
+             sed -i '/^GIT_SHA=/d' .env && \
+             echo 'GIT_SHA=${{ github.sha }}' >> .env"
+
       - name: Determine which services to rebuild
         id: services
         run: |

@@ -9,6 +9,7 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import ToastContainer from '@/components/ToastContainer';
 import { useAuthInit } from '@/hooks/useAuthInit';
 import { useAuthStore } from '@/stores/authStore';
+import BuildInfo from '@/components/BuildInfo';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
@@ -66,6 +67,7 @@ function App() {
   return (
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
       <AppRoutes />
+      <BuildInfo />
     </GoogleOAuthProvider>
   );
 }
