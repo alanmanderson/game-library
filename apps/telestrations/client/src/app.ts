@@ -30,7 +30,7 @@ let bannerContainer: HTMLElement | null = null;
 let currentScreen: ScreenName | null = null;
 let toastTimeout: number | null = null;
 let isRendering = false;
-let pendingRender: ScreenName | null = null;
+let pendingRenders: ScreenName[] = [];
 
 // Track previous state snapshots for reactive screens to avoid needless re-renders
 let prevPlayersJson = '';
@@ -138,18 +138,18 @@ function shouldReactiveRerender(state: AppState): boolean {
 
 /**
  * Schedule a render, preventing re-entrancy.
+ * Uses a queue so intermediate screen transitions are never dropped.
  */
 function scheduleRender(screen: ScreenName): void {
   if (isRendering) {
-    pendingRender = screen;
+    pendingRenders.push(screen);
     return;
   }
   renderScreen(screen);
 
-  // Process any pending render that was queued during the render
-  if (pendingRender !== null) {
-    const next = pendingRender;
-    pendingRender = null;
+  // Drain the queue — rendering a queued screen may itself enqueue more renders
+  while (pendingRenders.length > 0) {
+    const next = pendingRenders.shift()!;
     renderScreen(next);
   }
 }
