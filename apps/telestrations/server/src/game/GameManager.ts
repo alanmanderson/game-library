@@ -235,17 +235,16 @@ export class GameManager {
       throw new GameError("INVALID_TOKEN", "Reconnection token is invalid.", 401);
     }
 
-    // Handle duplicate connection: disconnect old socket
-    if (player.socketId && this.io) {
-      const oldSocket = this.io.sockets.sockets.get(player.socketId);
-      if (oldSocket) {
-        oldSocket.emit("error", {
-          code: "SESSION_REPLACED",
-          message: "Your session has been replaced by a new connection.",
-        });
-        oldSocket.disconnect(true);
-      }
-    }
+    // Save the old socketId before updating — we need it to disconnect the
+    // stale socket AFTER the player record already points at the new one.
+    // This ordering is critical: when oldSocket.disconnect(true) fires the
+    // "disconnect" event, handlePlayerDisconnect searches for a player whose
+    // socketId matches the disconnected socket. Because we already swapped
+    // player.socketId to the new value, the search finds no match and the
+    // handler harmlessly returns, avoiding a race where the player is briefly
+    // marked disconnected between the old socket teardown and the new socket
+    // assignment.
+    const oldSocketId = player.socketId;
 
     player.isConnected = true;
     player.socketId = socketId;
@@ -255,6 +254,18 @@ export class GameManager {
 
     // Clear the empty-game cleanup timer if it was running
     this.timers.clearCleanupTimer(game.id);
+
+    // Now disconnect the old socket (safe — player.socketId already updated)
+    if (oldSocketId && this.io) {
+      const oldSocket = this.io.sockets.sockets.get(oldSocketId);
+      if (oldSocket) {
+        oldSocket.emit("error", {
+          code: "SESSION_REPLACED",
+          message: "Your session has been replaced by a new connection.",
+        });
+        oldSocket.disconnect(true);
+      }
+    }
 
     return { game, player };
   }
