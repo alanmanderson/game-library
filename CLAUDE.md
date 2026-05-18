@@ -102,7 +102,8 @@ All games with auth use JWT (HS256) + bcrypt passwords + Google OAuth. Token sto
 
 ## Working in This Repo
 
-1. Navigate to the specific game directory under `apps/`
-2. Read that game's CLAUDE.md for local dev setup, test commands, and conventions
-3. Each game is independently buildable and testable from its own directory
-4. Infrastructure changes go in `infra/`; game changes go in `apps/<game>/`
+1. **Start a worktree** before making any code changes — use the `/worktree-dev` skill to create an isolated git worktree for each development task. This prevents collisions with other agentic sessions working on the same repo.
+2. Navigate to the specific game directory under `apps/`
+3. Read that game's CLAUDE.md for local dev setup, test commands, and conventions
+4. Each game is independently buildable and testable from its own directory
+5. Infrastructure changes go in `infra/`; game changes go in `apps/<game>/`
