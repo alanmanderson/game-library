@@ -286,7 +286,7 @@ export class DrawingCanvasController {
         this.clearCanvas();
       }
       modalContainer.innerHTML = '';
-    }, { once: false });
+    }, { once: true });
 
     // Close on backdrop click
     const backdrop = document.getElementById('clear-modal');
