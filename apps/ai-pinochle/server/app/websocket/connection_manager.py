@@ -4,7 +4,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from starlette.websockets import WebSocket
+from starlette.websockets import WebSocket, WebSocketState
 
 from app.websocket.game_logger import log_message
 
@@ -43,7 +43,9 @@ class ConnectionManager:
         return self._room_locks[room_code]
 
     async def connect(self, room_code: str, connection: Connection):
-        await connection.websocket.accept()
+        state = getattr(connection.websocket, "client_state", None)
+        if state is None or state == WebSocketState.CONNECTING:
+            await connection.websocket.accept()
 
         was_empty = not self._rooms.get(room_code)
 

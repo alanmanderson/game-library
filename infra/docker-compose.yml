@@ -46,6 +46,7 @@ services:
       DATABASE_URL: ${AI_PINOCHLE_DATABASE_URL}
       SECRET_KEY: ${JWT_SECRET}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      ALLOWED_ORIGINS: https://pinochle.games.alanmanderson.com
     depends_on:
       - postgres
     restart: unless-stopped

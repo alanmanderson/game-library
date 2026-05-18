@@ -61,6 +61,12 @@ def _token_is_valid(token: str) -> bool:
 
 @router.websocket("/{room_code}")
 async def game_websocket(websocket: WebSocket, room_code: str):
+    # Accept the WebSocket immediately so that close codes (4001, 4004, etc.)
+    # are delivered as proper WebSocket close frames. Without this, calling
+    # close() before accept() results in an HTTP-level rejection and the
+    # browser sees code 1006 (abnormal closure), causing unwanted reconnects.
+    await websocket.accept()
+
     token = websocket.query_params.get("token")
     if not token:
         await websocket.close(code=4001, reason="Missing token")
@@ -136,15 +142,22 @@ async def _run_websocket(
             for s in ["NORTH", "EAST", "SOUTH", "WEST"]
         )
     ):
-        async with manager.get_room_lock(room_code):
-            await handle_message(
-                websocket,
-                {"action": "START_GAME", "payload": {}},
-                room_code,
-                user.id,
-                db,
-            )
-            await db.commit()
+        try:
+            async with manager.get_room_lock(room_code):
+                await handle_message(
+                    websocket,
+                    {"action": "START_GAME", "payload": {}},
+                    room_code,
+                    user.id,
+                    db,
+                )
+                await db.commit()
+        except Exception:
+            logger.exception("Auto-start failed for room %s", room_code)
+            try:
+                await db.rollback()
+            except Exception:
+                logger.debug("Rollback after auto-start failure also failed")
 
     revalidate_interval = max(1, settings.ws_jwt_revalidate_seconds)
 
