@@ -457,7 +457,7 @@ function handleRoundStart(data: RoundStartPayload): void {
     drawing: data.drawing,
     promptAuthorDisplayName: data.promptAuthorDisplayName,
     drawingAuthorDisplayName: data.drawingAuthorDisplayName,
-    timerStartedAt: data.timerStartedAt,
+    timerStartedAt: new Date().toISOString(),
     timerDurationMs: data.timerDurationMs,
     submittedPlayerIds: [],
     hasSubmitted: false,
