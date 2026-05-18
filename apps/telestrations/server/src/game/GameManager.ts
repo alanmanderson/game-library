@@ -315,6 +315,7 @@ export class GameManager {
 
     // Mark as permanently disconnected
     player.leftVoluntarily = true;
+    player.reconnectionToken = "";
 
     if (this.io) {
       this.io.to(game.code).emit("game:player-left", {
