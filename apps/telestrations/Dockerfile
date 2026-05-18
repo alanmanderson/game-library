@@ -2,6 +2,8 @@
 # Stage 1: Build the client (Vite)
 # ---------------------------------------------------------------------------
 FROM node:20-alpine AS client-build
+ARG GIT_SHA
+ENV VITE_GIT_SHA=$GIT_SHA
 
 WORKDIR /build/client
 COPY client/package.json client/package-lock.json ./
@@ -27,6 +29,8 @@ RUN npm prune --production
 # Stage 3: Production image
 # ---------------------------------------------------------------------------
 FROM node:20-alpine AS production
+ARG GIT_SHA
+ENV GIT_SHA=$GIT_SHA
 
 # Security: run as non-root
 RUN addgroup -S app && adduser -S app -G app

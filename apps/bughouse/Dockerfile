@@ -1,5 +1,7 @@
 # ---- Stage 1: Build frontend ----
 FROM node:20-alpine AS frontend-build
+ARG GIT_SHA
+ENV REACT_APP_GIT_SHA=$GIT_SHA
 WORKDIR /build
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm ci
@@ -8,6 +10,8 @@ RUN npm run build
 
 # ---- Stage 2: Production ----
 FROM python:3.12-slim AS production
+ARG GIT_SHA
+ENV GIT_SHA=$GIT_SHA
 WORKDIR /app
 
 # Install uv for fast dependency management

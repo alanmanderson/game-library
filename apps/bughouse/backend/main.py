@@ -88,6 +88,11 @@ manager = GameManager()
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 
 
+@app.get("/api/health")
+async def health_check():
+    return {"status": "ok", "version": os.environ.get("GIT_SHA", "dev")[:7]}
+
+
 # --- Helper functions ---
 
 def build_full_game_state(room: GameRoom) -> dict:

@@ -14,6 +14,8 @@ RUN npm ci
 # Stage 2: Build the client (Vite)
 # ---------------------------------------------------------------------------
 FROM deps AS client-build
+ARG GIT_SHA
+ENV VITE_GIT_SHA=$GIT_SHA
 
 COPY . .
 RUN npm run build --workspace=@forbidden-island/client
@@ -22,6 +24,8 @@ RUN npm run build --workspace=@forbidden-island/client
 # Stage 3: Production image
 # ---------------------------------------------------------------------------
 FROM node:20-alpine AS production
+ARG GIT_SHA
+ENV GIT_SHA=$GIT_SHA
 
 RUN addgroup -S app && adduser -S app -G app
 

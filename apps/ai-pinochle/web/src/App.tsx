@@ -3,6 +3,7 @@ import { GoogleOAuthProvider } from "@react-oauth/google";
 import { AuthProvider, useAuth } from "./auth/AuthContext.tsx";
 import { LoginPage } from "./auth/LoginPage.tsx";
 import { Loading } from "./ui/Loading.tsx";
+import { BuildInfo } from "./ui/BuildInfo.tsx";
 
 // RegisterPage and the entire post-auth surface (lobby + room + game) are
 // behind dynamic imports so unauthenticated users only download the login
@@ -44,6 +45,7 @@ export default function App() {
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
       <AuthProvider>
         <AppContent />
+        <BuildInfo />
       </AuthProvider>
     </GoogleOAuthProvider>
   );

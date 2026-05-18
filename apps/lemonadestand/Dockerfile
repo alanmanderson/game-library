@@ -3,7 +3,9 @@
 # ---------------------------------------------------------------------------
 FROM node:20-alpine AS frontend-build
 ARG GOOGLE_CLIENT_ID
+ARG GIT_SHA
 ENV VITE_GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID
+ENV VITE_GIT_SHA=$GIT_SHA
 
 WORKDIR /build
 COPY frontend/package.json frontend/package-lock.json ./
@@ -32,6 +34,8 @@ RUN dotnet publish LemonadeStand.Api/LemonadeStand.Api.csproj -c Release -o /pub
 # Stage 3: Production image
 # ---------------------------------------------------------------------------
 FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine AS production
+ARG GIT_SHA
+ENV GIT_SHA=$GIT_SHA
 
 RUN addgroup -S app 2>/dev/null; adduser -S app -G app 2>/dev/null; true
 

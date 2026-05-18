@@ -72,6 +72,13 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
+app.MapGet("/api/health", () =>
+{
+    var sha = Environment.GetEnvironmentVariable("GIT_SHA") ?? "dev";
+    var version = sha.Length > 7 ? sha[..7] : sha;
+    return Results.Ok(new { status = "ok", version });
+});
+
 // --- Serve frontend static files (production) ---
 var wwwrootPath = Path.Combine(app.Environment.ContentRootPath, "wwwroot");
 if (Directory.Exists(wwwrootPath))

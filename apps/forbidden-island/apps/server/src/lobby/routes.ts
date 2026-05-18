@@ -29,6 +29,6 @@ export function registerLobbyRoutes(app: FastifyInstance, roomManager: RoomManag
 
   /** Health check */
   app.get('/api/health', async () => {
-    return { status: 'ok', timestamp: Date.now() };
+    return { status: 'ok', timestamp: Date.now(), version: process.env.GIT_SHA?.slice(0, 7) ?? 'dev' };
   });
 }

@@ -38,6 +38,7 @@ export function createApp(gameManager: GameManager): express.Application {
       activeGames: store.size(),
       activePlayers: store.totalConnectedPlayers(),
       memoryUsageMB: Math.round(process.memoryUsage().rss / 1024 / 1024),
+      version: process.env.GIT_SHA?.slice(0, 7) ?? "dev",
     });
   });
 

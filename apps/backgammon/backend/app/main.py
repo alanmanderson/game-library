@@ -179,6 +179,7 @@ async def health_check(db: AsyncSession = Depends(get_db)):
             "active_games": len(game_manager.engines),
             "active_connections": ws_manager.connection_count(),
             "uptime_seconds": round(time.time() - _start_time),
+            "version": os.environ.get("GIT_SHA", "dev")[:7],
         }
     except (SQLAlchemyError, ConnectionError, OSError):
         raise HTTPException(status_code=503, detail="Database unavailable")
