@@ -91,7 +91,7 @@ jobs:
             SERVICES="$SERVICES ai-pinochle"
           fi
           if [ "${{ needs.detect-changes.outputs.backgammon }}" == "true" ] || [ "${{ needs.detect-changes.outputs.infra }}" == "true" ]; then
-            SERVICES="$SERVICES backgammon"
+            SERVICES="$SERVICES gnubg backgammon"
           fi
           if [ "${{ needs.detect-changes.outputs.bughouse }}" == "true" ] || [ "${{ needs.detect-changes.outputs.infra }}" == "true" ]; then
             SERVICES="$SERVICES bughouse"

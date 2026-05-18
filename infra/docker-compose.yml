@@ -51,6 +51,16 @@ services:
       - postgres
     restart: unless-stopped
 
+  gnubg:
+    build: ../apps/backgammon/gnubg
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=2)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
   backgammon:
     build:
       context: ../apps/backgammon
@@ -61,8 +71,10 @@ services:
       DATABASE_URL_SYNC: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/backgammon
       JWT_SECRET: ${JWT_SECRET}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GNUBG_URL: http://gnubg:8001
     depends_on:
       - postgres
+      - gnubg
     restart: unless-stopped
 
   bughouse:
