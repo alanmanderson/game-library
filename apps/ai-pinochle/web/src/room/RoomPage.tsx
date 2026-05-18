@@ -291,7 +291,7 @@ export function RoomPage({ roomCode, onLeave }: Props) {
       )}
 
       {allSeated && (
-        <Button size="lg" onClick={handleStart} style={{ marginBottom: "1rem" }}>
+        <Button size="lg" onClick={handleStart} disabled={!connected} style={{ marginBottom: "1rem" }}>
           Start Game
         </Button>
       )}

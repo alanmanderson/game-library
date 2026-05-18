@@ -594,6 +594,14 @@ async def handle_fill_ai(
     seats = await _build_seats_dict(game, db)
     await _send_lobby_state(game, room_code, seats, db)
 
+    # Auto-start: all seats are now filled with bots, start immediately
+    # so the user doesn't have to click "Start Game" manually.
+    all_filled = all(
+        getattr(game, col) is not None for col in SEAT_COLUMNS.values()
+    )
+    if all_filled:
+        await _apply(websocket, db, room_code, user_id, "START_GAME", {})
+
 
 # ---------------------------------------------------------------------------
 # Shared helpers (also imported by routes.py / background.py)
