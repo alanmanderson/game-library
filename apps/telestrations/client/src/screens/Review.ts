@@ -23,6 +23,7 @@ const CHECKMARK_ICON = `<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 1
 
 // Track previous chain index to detect chain changes for scroll behavior
 let previousChainIndex: number = -1;
+let scrollTimeout: ReturnType<typeof setTimeout> | null = null;
 
 export function renderReview(): string {
   const state = getState();
@@ -210,7 +211,8 @@ export function setupReview(container: HTMLElement): void {
       window.scrollTo(0, 0);
     } else {
       // Same chain, new entry revealed -- scroll to the latest entry
-      setTimeout(() => {
+      scrollTimeout = setTimeout(() => {
+        scrollTimeout = null;
         const entries = container.querySelectorAll('.chain-entry');
         const lastEntry = entries[entries.length - 1] as HTMLElement;
         lastEntry?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -241,6 +243,11 @@ function handleReviewClick(e: Event): void {
 }
 
 export function cleanupReview(): void {
+  // Cancel any pending scroll timeout so it doesn't fire against stale DOM
+  if (scrollTimeout !== null) {
+    clearTimeout(scrollTimeout);
+    scrollTimeout = null;
+  }
   // Reset chain tracking so re-entering review starts fresh
   previousChainIndex = -1;
 }
