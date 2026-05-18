@@ -1,3 +1,8 @@
+games.alanmanderson.com {
+	root * /srv/landing
+	file_server
+}
+
 pinochle.games.alanmanderson.com {
 	reverse_proxy ai-pinochle:8000
 }

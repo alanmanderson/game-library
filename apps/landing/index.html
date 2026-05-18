@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Library</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg: #f5f5f7;
+            --surface: #ffffff;
+            --text: #1d1d1f;
+            --text-secondary: #6e6e73;
+            --border: #e5e5ea;
+            --radius: 16px;
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.04), 0 1px 3px rgba(0,0,0,0.06);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.06), 0 12px 28px rgba(0,0,0,0.08);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+                         'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* ── Header ─────────────────────────────────── */
+
+        .header {
+            text-align: center;
+            padding: 64px 24px 16px;
+            max-width: 640px;
+            margin: 0 auto;
+        }
+
+        .header h1 {
+            font-size: 40px;
+            font-weight: 700;
+            letter-spacing: -0.025em;
+            line-height: 1.1;
+            margin-bottom: 12px;
+        }
+
+        .header p {
+            font-size: 18px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        /* ── Grid ───────────────────────────────────── */
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            max-width: 1080px;
+            margin: 0 auto;
+            padding: 40px 24px 80px;
+        }
+
+        /* ── Card ───────────────────────────────────── */
+
+        .card {
+            background: var(--surface);
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow-sm);
+            text-decoration: none;
+            color: inherit;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+                        box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+            position: relative;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .card:active {
+            transform: translateY(-2px);
+        }
+
+        .card--coming-soon {
+            opacity: 0.65;
+            pointer-events: none;
+        }
+
+        .coming-soon-badge {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            background: rgba(255,255,255,0.92);
+            color: var(--text-secondary);
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 4px 10px;
+            border-radius: 6px;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+
+        /* ── Icon area ──────────────────────────────── */
+
+        .card-icon {
+            height: 160px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card-icon svg {
+            width: 64px;
+            height: 64px;
+            position: relative;
+            z-index: 1;
+            filter: drop-shadow(0 2px 8px rgba(0,0,0,0.12));
+        }
+
+        /* ── Content ────────────────────────────────── */
+
+        .card-body {
+            padding: 20px 24px 24px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .card-title {
+            font-size: 20px;
+            font-weight: 650;
+            letter-spacing: -0.01em;
+        }
+
+        .card-genre {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-top: -4px;
+        }
+
+        .card-desc {
+            font-size: 15px;
+            line-height: 1.5;
+            color: var(--text-secondary);
+        }
+
+        /* ── Metadata ───────────────────────────────── */
+
+        .card-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: auto;
+            padding-top: 4px;
+        }
+
+        .tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 12.5px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            background: var(--bg);
+            padding: 5px 11px;
+            border-radius: 8px;
+            white-space: nowrap;
+        }
+
+        .tag svg {
+            width: 13px;
+            height: 13px;
+            flex-shrink: 0;
+            opacity: 0.55;
+        }
+
+        .tag--bot {
+            color: #34793a;
+            background: #e8f5e9;
+        }
+
+        /* ── Footer ─────────────────────────────────── */
+
+        .footer {
+            text-align: center;
+            padding: 0 24px 48px;
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+
+        /* ── Responsive ─────────────────────────────── */
+
+        @media (max-width: 680px) {
+            .header { padding: 48px 20px 8px; }
+            .header h1 { font-size: 32px; }
+            .header p { font-size: 16px; }
+            .grid {
+                grid-template-columns: 1fr;
+                padding: 32px 16px 64px;
+                gap: 16px;
+            }
+            .card-icon { height: 140px; }
+        }
+    </style>
+</head>
+<body>
+
+<header class="header">
+    <h1>Game Library</h1>
+    <p>Multiplayer board games, card games, and party games — all in the browser.</p>
+</header>
+
+<main class="grid" id="grid"></main>
+
+<footer class="footer">
+    <p>Built by Alan Anderson</p>
+</footer>
+
+<script>
+// ── Game data (edit here to customize tiles) ────────────
+
+const games = [
+    {
+        name: "Backgammon",
+        genre: "Board Game",
+        desc: "Classic backgammon with an AI opponent trained via neural network self-play. Supports the doubling cube, tournaments, and spectator mode.",
+        url: "https://backgammon.games.alanmanderson.com",
+        players: "2 players",
+        duration: "15 min",
+        bot: true,
+        color: ["#d4a853", "#b8860b"],
+        icon: "backgammon",
+    },
+    {
+        name: "AI Pinochle",
+        genre: "Card Game",
+        desc: "Partnership trick-taking with bidding, trump, and meld scoring. Four players compete in two teams across a 48-card pinochle deck.",
+        url: "https://pinochle.games.alanmanderson.com",
+        players: "4 players",
+        duration: "45 min",
+        bot: false,
+        color: ["#c0392b", "#962d22"],
+        icon: "pinochle",
+    },
+    {
+        name: "Forbidden Island",
+        genre: "Cooperative",
+        desc: "Work together to collect four treasures from a sinking island before it disappears. Six unique adventurer roles with special abilities.",
+        url: "https://fi.games.alanmanderson.com",
+        players: "2 \u2013 4 players",
+        duration: "30 min",
+        bot: false,
+        color: ["#0e9aa7", "#0a7a85"],
+        icon: "island",
+    },
+    {
+        name: "Bughouse",
+        genre: "Chess Variant",
+        desc: "Team chess on two simultaneous boards. Captured pieces transfer to your partner as reinforcements, creating fast-paced tactical chaos.",
+        url: "https://bughouse.games.alanmanderson.com",
+        players: "4 players (2v2)",
+        duration: "10 min",
+        bot: false,
+        color: ["#2c3e50", "#1a252f"],
+        icon: "bughouse",
+    },
+    {
+        name: "Telestrations",
+        genre: "Party Game",
+        desc: "The telephone game with drawings. Alternate between sketching prompts and guessing what others drew for hilarious results.",
+        url: "https://telestrations.games.alanmanderson.com",
+        players: "2 \u2013 8 players",
+        duration: "20 min",
+        bot: false,
+        color: ["#6c5ce7", "#5a4bd1"],
+        icon: "telestrations",
+    },
+    {
+        name: "Lemonade Stand",
+        genre: "Tycoon",
+        desc: "Build a beverage empire from a single stand. Manage recipes, weather, locations, and competition across ten progression stages.",
+        url: "https://lemonade.games.alanmanderson.com",
+        players: "1 player",
+        duration: "30 min",
+        bot: false,
+        color: ["#f6b93b", "#e5a82a"],
+        icon: "lemonade",
+    },
+    {
+        name: "Spades",
+        genre: "Card Game",
+        desc: "Classic partnership trick-taking with spades always trump. Bid wisely and work with your partner to hit your contract.",
+        url: "#",
+        players: "4 players",
+        duration: "30 min",
+        bot: false,
+        color: ["#8e8e93", "#636366"],
+        icon: "spades",
+        comingSoon: true,
+    },
+];
+
+// ── SVG icons ───────────────────────────────────────────
+
+const icons = {
+    backgammon: `<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="6" y="8" width="52" height="48" rx="4" fill="white" fill-opacity="0.2" stroke="white" stroke-width="2"/>
+        <line x1="32" y1="8" x2="32" y2="56" stroke="white" stroke-width="1.5" stroke-opacity="0.4"/>
+        <polygon points="10,12 14,12 12,30" fill="white" fill-opacity="0.9"/>
+        <polygon points="16,12 20,12 18,30" fill="white" fill-opacity="0.5"/>
+        <polygon points="22,12 26,12 24,30" fill="white" fill-opacity="0.9"/>
+        <polygon points="36,12 40,12 38,30" fill="white" fill-opacity="0.5"/>
+        <polygon points="42,12 46,12 44,30" fill="white" fill-opacity="0.9"/>
+        <polygon points="48,12 52,12 50,30" fill="white" fill-opacity="0.5"/>
+        <polygon points="10,52 14,52 12,34" fill="white" fill-opacity="0.5"/>
+        <polygon points="16,52 20,52 18,34" fill="white" fill-opacity="0.9"/>
+        <polygon points="22,52 26,52 24,34" fill="white" fill-opacity="0.5"/>
+        <polygon points="36,52 40,52 38,34" fill="white" fill-opacity="0.9"/>
+        <polygon points="42,52 46,52 44,34" fill="white" fill-opacity="0.5"/>
+        <polygon points="48,52 52,52 50,34" fill="white" fill-opacity="0.9"/>
+        <circle cx="18" cy="16" r="3.5" fill="white" fill-opacity="0.95"/>
+        <circle cx="44" cy="48" r="3.5" fill="white" fill-opacity="0.95"/>
+    </svg>`,
+
+    pinochle: `<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="8" y="6" width="30" height="40" rx="4" fill="white" fill-opacity="0.2" stroke="white" stroke-width="2" transform="rotate(-8 23 26)"/>
+        <rect x="26" y="10" width="30" height="40" rx="4" fill="white" fill-opacity="0.3" stroke="white" stroke-width="2" transform="rotate(8 41 30)"/>
+        <text x="18" y="30" font-family="Georgia, serif" font-size="18" fill="white" fill-opacity="0.95" font-weight="bold" transform="rotate(-8 18 30)">Q</text>
+        <text x="39" y="34" font-family="Georgia, serif" font-size="18" fill="white" fill-opacity="0.95" font-weight="bold" transform="rotate(8 39 34)">K</text>
+        <path d="M30 52 L32 47 L34 52 L32 50 Z" fill="white" fill-opacity="0.7"/>
+    </svg>`,
+
+    island: `<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <ellipse cx="32" cy="44" rx="22" ry="8" fill="white" fill-opacity="0.15"/>
+        <path d="M16 40 Q20 28 26 32 Q30 20 34 28 Q38 22 42 30 Q46 26 48 40 Z" fill="white" fill-opacity="0.3" stroke="white" stroke-width="1.5"/>
+        <path d="M32 14 L32 36" stroke="white" stroke-width="2" stroke-linecap="round"/>
+        <path d="M32 14 Q40 18 38 24 Q34 20 32 22 Q30 18 26 22 Q24 16 32 14Z" fill="white" fill-opacity="0.8"/>
+        <path d="M8 46 Q14 42 20 46 Q26 42 32 46 Q38 42 44 46 Q50 42 56 46" stroke="white" stroke-width="1.5" stroke-linecap="round" fill="none" stroke-opacity="0.4"/>
+        <path d="M4 52 Q10 48 16 52 Q22 48 28 52 Q34 48 40 52 Q46 48 52 52 Q58 48 62 52" stroke="white" stroke-width="1.5" stroke-linecap="round" fill="none" stroke-opacity="0.25"/>
+    </svg>`,
+
+    bughouse: `<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="6" y="10" width="24" height="44" rx="2" fill="white" fill-opacity="0.15" stroke="white" stroke-width="1.5"/>
+        <rect x="34" y="10" width="24" height="44" rx="2" fill="white" fill-opacity="0.15" stroke="white" stroke-width="1.5"/>
+        <path d="M14 44 L14 38 L10 38 L18 28 L26 38 L22 38 L22 44 Z" fill="white" fill-opacity="0.5"/>
+        <circle cx="18" cy="24" r="4" fill="white" fill-opacity="0.5"/>
+        <path d="M42 44 L42 38 L38 38 L46 28 L54 38 L50 38 L50 44 Z" fill="white" fill-opacity="0.9"/>
+        <circle cx="46" cy="24" r="4" fill="white" fill-opacity="0.9"/>
+        <path d="M30 26 L32 24 L34 26" stroke="white" stroke-width="1.5" stroke-linecap="round" fill="none" stroke-opacity="0.6"/>
+        <path d="M30 32 L34 32" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-opacity="0.6"/>
+        <path d="M30 38 L32 40 L34 38" stroke="white" stroke-width="1.5" stroke-linecap="round" fill="none" stroke-opacity="0.6"/>
+    </svg>`,
+
+    telestrations: `<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="10" y="10" width="44" height="36" rx="3" fill="white" fill-opacity="0.15" stroke="white" stroke-width="2"/>
+        <path d="M18 34 Q24 18 32 28 Q38 16 46 30" stroke="white" stroke-width="2.5" stroke-linecap="round" fill="none" stroke-opacity="0.8"/>
+        <circle cx="22" cy="24" r="2" fill="white" fill-opacity="0.5"/>
+        <circle cx="40" cy="22" r="2" fill="white" fill-opacity="0.5"/>
+        <path d="M26 50 L32 46 L38 50" stroke="white" stroke-width="2" stroke-linecap="round" fill="none" stroke-opacity="0.6"/>
+        <line x1="48" y1="50" x2="52" y2="40" stroke="white" stroke-width="2" stroke-linecap="round" stroke-opacity="0.7"/>
+        <circle cx="52" cy="38" r="2" fill="white" fill-opacity="0.7"/>
+    </svg>`,
+
+    lemonade: `<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="32" cy="30" r="16" fill="white" fill-opacity="0.2" stroke="white" stroke-width="2"/>
+        <path d="M32 14 L32 8" stroke="white" stroke-width="2" stroke-linecap="round"/>
+        <path d="M28 10 L36 10" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-opacity="0.6"/>
+        <path d="M26 28 Q28 24 30 28 Q32 24 34 28 Q36 24 38 28" stroke="white" stroke-width="1.5" stroke-linecap="round" fill="none" stroke-opacity="0.6"/>
+        <path d="M22 46 L42 46" stroke="white" stroke-width="2" stroke-linecap="round"/>
+        <path d="M24 46 L26 36 Q32 34 38 36 L40 46" fill="white" fill-opacity="0.15" stroke="white" stroke-width="1.5"/>
+        <path d="M20 52 L44 52" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.5"/>
+        <line x1="32" y1="46" x2="32" y2="52" stroke="white" stroke-width="2" stroke-opacity="0.5"/>
+    </svg>`,
+
+    spades: `<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M32 10 C32 10 12 28 12 38 C12 44 17 48 23 46 C27 44.5 30 42 32 38 C34 42 37 44.5 41 46 C47 48 52 44 52 38 C52 28 32 10 32 10Z" fill="white" fill-opacity="0.85" stroke="white" stroke-width="1.5"/>
+        <path d="M28 46 Q30 54 32 54 Q34 54 36 46" stroke="white" stroke-width="2" stroke-linecap="round" fill="none" stroke-opacity="0.6"/>
+    </svg>`,
+};
+
+// ── Tag icons ───────────────────────────────────────────
+
+const tagIcons = {
+    players: `<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm2-3a2 2 0 1 1-4 0 2 2 0 0 1 4 0Zm4 8c0 1-1 1-1 1H3s-1 0-1-1 1-4 6-4 6 3 6 4Zm-1-.004c-.001-.246-.154-.986-.832-1.664C11.516 10.68 10.289 10 8 10c-2.29 0-3.516.68-4.168 1.332-.678.678-.83 1.418-.832 1.664h10Z"/></svg>`,
+    duration: `<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 3.5a.5.5 0 0 0-1 0V8a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 7.71V3.5Z"/><path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16Zm7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0Z"/></svg>`,
+    bot: `<svg viewBox="0 0 16 16" fill="currentColor"><path d="M6 12.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5ZM3 8.062C3 6.76 4.235 5.765 5.53 5.886a26.58 26.58 0 0 0 4.94 0C11.765 5.765 13 6.76 13 8.062v1.157a.933.933 0 0 1-.765.935c-.845.147-2.34.346-4.235.346-1.895 0-3.39-.2-4.235-.346A.933.933 0 0 1 3 9.219V8.062Zm4.542-.827a.25.25 0 0 0-.217.068l-.92.9a.25.25 0 1 0 .35.356l.754-.738.545 1.09a.25.25 0 0 0 .434.028l.715-1.074.61.611a.25.25 0 1 0 .354-.354l-.786-.786a.25.25 0 0 0-.396.06l-.64.96-.54-1.08a.25.25 0 0 0-.263-.14ZM6.5 3h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1 0-1ZM2.5 10.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0Zm13 0a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0Z"/><path d="M2 4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4Zm2-1a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H4Z"/></svg>`,
+};
+
+// ── Render ───────────────────────────────────────────────
+
+function renderCard(game) {
+    const card = document.createElement("a");
+    card.href = game.url;
+    card.className = "card" + (game.comingSoon ? " card--coming-soon" : "");
+
+    const [c1, c2] = game.color;
+
+    card.innerHTML = `
+        ${game.comingSoon ? '<span class="coming-soon-badge">Coming Soon</span>' : ""}
+        <div class="card-icon" style="background: linear-gradient(135deg, ${c1}, ${c2})">
+            ${icons[game.icon]}
+        </div>
+        <div class="card-body">
+            <div class="card-genre">${game.genre}</div>
+            <div class="card-title">${game.name}</div>
+            <div class="card-desc">${game.desc}</div>
+            <div class="card-meta">
+                <span class="tag">${tagIcons.players} ${game.players}</span>
+                <span class="tag">${tagIcons.duration} ${game.duration}</span>
+                ${game.bot ? `<span class="tag tag--bot">${tagIcons.bot} AI opponent</span>` : ""}
+            </div>
+        </div>
+    `;
+
+    return card;
+}
+
+const grid = document.getElementById("grid");
+games.forEach(game => grid.appendChild(renderCard(game)));
+</script>
+
+</body>
+</html>
