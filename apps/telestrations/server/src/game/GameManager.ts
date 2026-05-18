@@ -667,6 +667,12 @@ export class GameManager {
         throw new GameError("INVALID_CONTENT", "Drawing must be a PNG data URI.", 400);
       }
       const base64Part = content.replace("data:image/png;base64,", "");
+      if (base64Part.length === 0) {
+        throw new GameError("INVALID_CONTENT", "Drawing contains no image data.", 400);
+      }
+      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64Part)) {
+        throw new GameError("INVALID_CONTENT", "Drawing contains invalid base64 data.", 400);
+      }
       const sizeInBytes = Math.ceil(base64Part.length * 3 / 4);
       if (sizeInBytes > config.maxDrawingSizeBytes) {
         throw new GameError("CONTENT_TOO_LARGE", "Drawing must be smaller than 500KB.", 413);
