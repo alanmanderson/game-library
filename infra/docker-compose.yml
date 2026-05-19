@@ -17,6 +17,7 @@ services:
       - lemonadestand
       - spades
       - telestrations
+      - logservice
 
   postgres:
     image: postgres:16
@@ -26,6 +27,21 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql
     restart: unless-stopped
+
+  logservice:
+    build: ../services/logservice
+    environment:
+      API_KEY: ${LOG_SERVICE_API_KEY}
+      LOG_LEVEL: warn
+      DB_PATH: /data/logs.db
+    volumes:
+      - logservice_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3100/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   # auth:
   #   build: ../services/auth
@@ -49,6 +65,8 @@ services:
       SECRET_KEY: ${JWT_SECRET}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       ALLOWED_ORIGINS: https://pinochle.games.alanmanderson.com
+      LOG_SERVICE_URL: http://logservice:3100/api/ingest
+      LOG_SERVICE_API_KEY: ${LOG_SERVICE_API_KEY}
     depends_on:
       - postgres
     restart: unless-stopped
@@ -75,6 +93,8 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GNUBG_URL: http://gnubg:8001
+      LOG_SERVICE_URL: http://logservice:3100/api/ingest
+      LOG_SERVICE_API_KEY: ${LOG_SERVICE_API_KEY}
     depends_on:
       - postgres
       - gnubg
@@ -90,6 +110,8 @@ services:
       BUGHOUSE_JWT_SECRET_KEY: ${JWT_SECRET}
       BUGHOUSE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       BUGHOUSE_GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      LOG_SERVICE_URL: http://logservice:3100/api/ingest
+      LOG_SERVICE_API_KEY: ${LOG_SERVICE_API_KEY}
     depends_on:
       - postgres
     restart: unless-stopped
@@ -101,6 +123,8 @@ services:
         GIT_SHA: ${GIT_SHA}
     environment:
       PORT: "3000"
+      LOG_SERVICE_URL: http://logservice:3100/api/ingest
+      LOG_SERVICE_API_KEY: ${LOG_SERVICE_API_KEY}
     restart: unless-stopped
 
   lemonadestand:
@@ -113,6 +137,8 @@ services:
       ASPNETCORE_URLS: http://+:5000
       Jwt__Secret: ${JWT_SECRET}
       Google__ClientId: ${GOOGLE_CLIENT_ID}
+      LOG_SERVICE_URL: http://logservice:3100/api/ingest
+      LOG_SERVICE_API_KEY: ${LOG_SERVICE_API_KEY}
     restart: unless-stopped
 
   spades:
@@ -123,6 +149,8 @@ services:
     environment:
       FLASK_APP: app
       PORT: "5000"
+      LOG_SERVICE_URL: http://logservice:3100/api/ingest
+      LOG_SERVICE_API_KEY: ${LOG_SERVICE_API_KEY}
     restart: unless-stopped
 
   telestrations:
@@ -132,8 +160,11 @@ services:
         GIT_SHA: ${GIT_SHA}
     environment:
       PORT: "8080"
+      LOG_SERVICE_URL: http://logservice:3100/api/ingest
+      LOG_SERVICE_API_KEY: ${LOG_SERVICE_API_KEY}
     restart: unless-stopped
 
 volumes:
   caddy_data:
   postgres_data:
+  logservice_data:

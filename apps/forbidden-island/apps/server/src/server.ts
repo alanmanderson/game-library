@@ -8,6 +8,7 @@ import fastifyStatic from '@fastify/static';
 import { RoomManager } from './ws/rooms.js';
 import { createWebSocketHandler } from './ws/handler.js';
 import { registerLobbyRoutes } from './lobby/routes.js';
+import { LogService } from './logservice.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,6 +28,17 @@ export async function createServer() {
 
   // WebSocket plugin
   await app.register(fastifyWebsocket);
+
+  // Log service
+  const logService = new LogService('forbidden-island');
+
+  app.addHook('onError', (_request, _reply, error, done) => {
+    logService.error(error.message, {
+      error_type: error.name,
+      stack_trace: error.stack,
+    });
+    done();
+  });
 
   // Room manager -- single instance, holds all game state in memory
   const roomManager = new RoomManager();

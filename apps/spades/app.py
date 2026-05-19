@@ -29,6 +29,9 @@ def create_app(config_name: str | None = None) -> Flask:
     db.init_app(app)
     migrate.init_app(app, db)
 
+    from logservice import setup_log_service_flask
+    setup_log_service_flask(app, service="spades")
+
     import models  # noqa: F401 — register models with SQLAlchemy
 
     @app.route('/')

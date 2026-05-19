@@ -56,9 +56,13 @@ builder.Services.AddCors(options =>
 // --- Register all game services and repositories ---
 builder.Services.AddGameServices(builder.Configuration);
 
+// --- Log service ---
+builder.Services.AddSingleton(new LemonadeStand.Api.Middleware.LogServiceClient("lemonadestand"));
+
 var app = builder.Build();
 
 // --- Middleware pipeline ---
+app.UseMiddleware<LemonadeStand.Api.Middleware.LogServiceMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 if (app.Environment.IsDevelopment())

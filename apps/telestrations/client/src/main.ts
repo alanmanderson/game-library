@@ -6,6 +6,9 @@ import './styles/main.css';
 import { initApp, navigateTo } from './app';
 import { getState, loadSession, setState, saveSession } from './state';
 import { connectSocket } from './socket';
+import { initLogService } from './logservice';
+
+initLogService({ service: 'telestrations' });
 
 // Initialize the app
 document.addEventListener('DOMContentLoaded', () => {

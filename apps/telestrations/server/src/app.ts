@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { createGameRoutes } from "./routes/games.js";
 import { GameManager } from "./game/GameManager.js";
 import { config } from "./config.js";
+import { LogService, expressErrorLogger } from "./logservice.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -58,6 +59,10 @@ export function createApp(gameManager: GameManager): express.Application {
       }
     });
   });
+
+  // -- Error logging --
+  const logService = new LogService("telestrations");
+  app.use(expressErrorLogger(logService));
 
   // -- Error handler --
   app.use(
