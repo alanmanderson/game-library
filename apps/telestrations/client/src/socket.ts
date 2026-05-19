@@ -536,10 +536,13 @@ function handleReviewEntry(data: ReviewEntryPayload): void {
     revealedEntries = [data.entry];
   } else {
     // Same chain - place entry at its exact index so out-of-order arrivals
-    // never truncate entries that were already placed.
+    // never truncate entries that were already placed. Slice to entryIndex+1
+    // so backward navigation correctly shrinks the displayed list.
     const sparse = [...currentReview.revealedEntries] as (ReviewEntry | undefined)[];
     sparse[data.entryIndex] = data.entry;
-    revealedEntries = sparse.filter((e): e is ReviewEntry => e !== undefined);
+    revealedEntries = sparse
+      .slice(0, data.entryIndex + 1)
+      .filter((e): e is ReviewEntry => e !== undefined);
   }
 
   setState({
