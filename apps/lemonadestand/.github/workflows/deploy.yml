@@ -65,7 +65,7 @@ jobs:
         run: npm run build
         working-directory: frontend
         env:
-          VITE_API_URL: https://api.lemonadestand.alanmanderson.com
+          VITE_API_URL: https://lemonade.games.alanmanderson.com
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
 
       - name: Prepare deployment package

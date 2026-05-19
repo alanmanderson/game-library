@@ -42,7 +42,7 @@ This plan analyzes four monetization models and recommends **Option C: Free-to-P
 | Azure App Service | B1 (1 core, 1.75 GB RAM) | $13.14 | Backend .NET 8 API |
 | Azure Static Web Apps | Free tier | $0.00 | React/Vite frontend |
 | Azure SQL Database | Basic (5 DTU, 2 GB) | $4.99 | Game state, user accounts |
-| Custom Domain + SSL | Included with Azure | $0.00 | lemonadestand.alanmanderson.com |
+| Custom Domain + SSL | Included with Azure | $0.00 | lemonade.games.alanmanderson.com |
 | Azure Key Vault | Free tier (10K ops/mo) | $0.00 | Secrets management |
 | GitHub Actions CI/CD | Free tier (2,000 min/mo) | $0.00 | Build and deploy pipelines |
 | **Base Infrastructure Total** | | **$18.13/month** | |

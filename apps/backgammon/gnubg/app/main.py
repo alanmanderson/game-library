@@ -77,7 +77,15 @@ async def evaluate(body: Board) -> EvaluateResponse:
 @app.post("/best-move", response_model=BestMoveResponse)
 async def best_move(body: MoveDice) -> BestMoveResponse:
     try:
-        return await engine.best_move(body)
+        result = await engine.best_move(body)
+        if result is None:
+            raise HTTPException(
+                status_code=422,
+                detail="No legal moves available in this position",
+            )
+        return result
+    except HTTPException:
+        raise
     except GnubgUnavailableError:
         raise _unavailable()
     except Exception as exc:
@@ -99,7 +107,15 @@ async def analyze_move(body: AnalyzeMoveRequest) -> AnalyzeMoveResponse:
 @app.post("/cube-decision", response_model=CubeDecisionResponse)
 async def cube_decision(body: Board) -> CubeDecisionResponse:
     try:
-        return await engine.cube_decision(body)
+        result = await engine.cube_decision(body)
+        if result is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Cube decision not available in this game state",
+            )
+        return result
+    except HTTPException:
+        raise
     except GnubgUnavailableError:
         raise _unavailable()
     except Exception as exc:

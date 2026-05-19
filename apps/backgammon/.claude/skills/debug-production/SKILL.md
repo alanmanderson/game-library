@@ -9,20 +9,20 @@ allowed-tools:
 
 # Debug Production Site
 
-SSH into the production VM to diagnose issues with the live site at **https://backgammon.alanmanderson.com**.
+SSH into the production VM to diagnose issues with the live site at **https://backgammon.games.alanmanderson.com**.
 
 ## SSH Access
 
 You have a trusted SSH key at `~/.ssh/id_ed25519`. Connect with:
 
 ```bash
-ssh -o StrictHostKeyChecking=no azureuser@backgammon.alanmanderson.com "<command>"
+ssh -o StrictHostKeyChecking=no azureuser@backgammon.games.alanmanderson.com "<command>"
 ```
 
 All commands on the VM should be run via individual SSH calls (not heredocs), e.g.:
 
 ```bash
-SSH="ssh -o StrictHostKeyChecking=no azureuser@backgammon.alanmanderson.com"
+SSH="ssh -o StrictHostKeyChecking=no azureuser@backgammon.games.alanmanderson.com"
 $SSH "cd /opt/backgammon && docker compose ps"
 ```
 
@@ -43,8 +43,8 @@ The application lives at `/opt/backgammon/` on the VM with this layout:
 Before SSHing in, check what the outside world sees:
 
 ```bash
-curl -sI https://backgammon.alanmanderson.com/ | head -10
-curl -sf https://backgammon.alanmanderson.com/api/health
+curl -sI https://backgammon.games.alanmanderson.com/ | head -10
+curl -sf https://backgammon.games.alanmanderson.com/api/health
 ```
 
 ### Step 2: Check container status
@@ -111,9 +111,9 @@ $SSH "cd /opt/backgammon && docker compose run --rm fastapi alembic current"
 After applying any fix, run the same verification checks as the `/deploy` skill:
 
 ```bash
-curl -sf https://backgammon.alanmanderson.com/api/health
-curl -sf -o /dev/null -w '%{http_code}' https://backgammon.alanmanderson.com/
-curl -sf -X POST https://backgammon.alanmanderson.com/api/auth/guest \
+curl -sf https://backgammon.games.alanmanderson.com/api/health
+curl -sf -o /dev/null -w '%{http_code}' https://backgammon.games.alanmanderson.com/
+curl -sf -X POST https://backgammon.games.alanmanderson.com/api/auth/guest \
   -H 'Content-Type: application/json' \
   -d '{"nickname": "debug-test"}'
 ```

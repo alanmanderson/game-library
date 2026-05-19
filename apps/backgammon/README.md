@@ -2,7 +2,7 @@
 
 Real-time multiplayer backgammon with bot opponents, Google OAuth, and match statistics.
 
-**Live:** [backgammon.alanmanderson.com](https://backgammon.alanmanderson.com)
+**Live:** [backgammon.games.alanmanderson.com](https://backgammon.games.alanmanderson.com)
 
 ## Tech Stack
 

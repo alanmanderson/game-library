@@ -208,7 +208,7 @@ End-to-end check once deployed:
 
 1. `curl http://<gnubg-private-ip>:8001/health` from `vm-backgammon` — returns gnubg version.
 2. `curl -d '{"sgf":"<paste of a sample match>"}' http://<gnubg-private-ip>:8001/analyze-match` from `vm-backgammon` — returns a classified move list.
-3. `curl https://backgammon.alanmanderson.com/api/gnubg/analyze` (if passthrough route is wired) — proves the internal hop works end to end.
+3. `curl https://backgammon.games.alanmanderson.com/api/gnubg/analyze` (if passthrough route is wired) — proves the internal hop works end to end.
 4. `az vm deallocate … && curl … ` from `vm-backgammon` — confirms the Backgammon API returns 503 cleanly rather than hanging.
 5. `pytest` inside `gnubg/` — unit tests over the parser with canned gnubg output fixtures.
 6. A stopwatch on a 20-move SGF analysis — sanity-check analyze latency on B1s; upgrade to B2s if it's painful.

@@ -106,6 +106,17 @@ def test_parse_hint_no_candidates():
         parse_hint("no moves available")
 
 
+def test_parse_hint_no_legal_moves():
+    """gnubg returns this when all checkers are blocked (e.g. on bar)."""
+    result = parse_hint("\nThere are no legal moves.\n")
+    assert result == []
+
+
+def test_parse_hint_no_legal_move_variant():
+    result = parse_hint("There is no legal move.\n")
+    assert result == []
+
+
 HINT_WITHOUT_PROBS = """\
    1.  bar/20 13/11 Equity: -0.150
 """
@@ -179,6 +190,12 @@ def test_parse_cube_no_double():
 def test_parse_cube_missing_raises():
     with pytest.raises(ParseError):
         parse_cube("garbage")
+
+
+def test_parse_cube_unknown_keyword_returns_none():
+    """gnubg rejects 'cube' when the game state doesn't allow it."""
+    result = parse_cube("Unknown keyword `cube'.\n")
+    assert result is None
 
 
 # ── Notation → steps ────────────────────────────────────────────────────

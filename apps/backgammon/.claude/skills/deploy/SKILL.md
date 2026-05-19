@@ -1,6 +1,6 @@
 ---
 name: deploy
-description: Deploy to production (backgammon.alanmanderson.com) and verify the deployment succeeded with end-to-end checks.
+description: Deploy to production (backgammon.games.alanmanderson.com) and verify the deployment succeeded with end-to-end checks.
 argument-hint: (no arguments needed)
 allowed-tools:
   - Bash
@@ -9,7 +9,7 @@ allowed-tools:
 
 # Deploy to Production
 
-Deploy the backgammon application to production at backgammon.alanmanderson.com and verify the deployment succeeded.
+Deploy the backgammon application to production at backgammon.games.alanmanderson.com and verify the deployment succeeded.
 
 ## Instructions
 
@@ -33,29 +33,29 @@ Monitor the output carefully. If any step fails, diagnose the error and report i
 
 After the deploy script completes successfully, run the following verification checks against production. Run each check sequentially and report results. Use `curl` for all HTTP checks.
 
-**The production URL is: https://backgammon.alanmanderson.com**
+**The production URL is: https://backgammon.games.alanmanderson.com**
 
 #### Check 1: Health endpoint
 ```bash
-curl -sf https://backgammon.alanmanderson.com/api/health
+curl -sf https://backgammon.games.alanmanderson.com/api/health
 ```
 Expected: `{"status":"healthy"}` with HTTP 200. This confirms the backend is running and the database is connected.
 
 #### Check 2: Homepage loads
 ```bash
-curl -sf -o /dev/null -w '%{http_code}' https://backgammon.alanmanderson.com/
+curl -sf -o /dev/null -w '%{http_code}' https://backgammon.games.alanmanderson.com/
 ```
 Expected: HTTP 200. This confirms Caddy is serving the frontend static files.
 
 #### Check 3: Frontend assets are present
 ```bash
-curl -sf https://backgammon.alanmanderson.com/ | grep -o 'src="/assets/[^"]*"'
+curl -sf https://backgammon.games.alanmanderson.com/ | grep -o 'src="/assets/[^"]*"'
 ```
 Expected: One or more asset references (JS/CSS bundles). This confirms the frontend build was deployed.
 
 #### Check 4: Guest login works
 ```bash
-curl -sf -X POST https://backgammon.alanmanderson.com/api/auth/guest \
+curl -sf -X POST https://backgammon.games.alanmanderson.com/api/auth/guest \
   -H 'Content-Type: application/json' \
   -d '{"nickname": "deploy-test-bot"}'
 ```
@@ -64,7 +64,7 @@ Expected: JSON response with `token` and `player` fields. This confirms auth end
 #### Check 5: Create a table
 Using the token from Check 4:
 ```bash
-curl -sf -X POST https://backgammon.alanmanderson.com/api/tables \
+curl -sf -X POST https://backgammon.games.alanmanderson.com/api/tables \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $TOKEN"
 ```
@@ -73,7 +73,7 @@ Expected: JSON response with a `table_id`. This confirms game creation works.
 #### Check 6: Invite bot to table
 Using the token and table_id from Check 5:
 ```bash
-curl -sf -X POST "https://backgammon.alanmanderson.com/api/tables/$TABLE_ID/invite-bot" \
+curl -sf -X POST "https://backgammon.games.alanmanderson.com/api/tables/$TABLE_ID/invite-bot" \
   -H "Authorization: Bearer $TOKEN"
 ```
 Expected: Success response. This confirms the bot opponent feature works.
@@ -85,7 +85,7 @@ curl -sf -o /dev/null -w '%{http_code}' \
   --header "Upgrade: websocket" \
   --header "Sec-WebSocket-Version: 13" \
   --header "Sec-WebSocket-Key: dGVzdA==" \
-  "https://backgammon.alanmanderson.com/ws/$TABLE_ID/$PLAYER_ID?token=$TOKEN"
+  "https://backgammon.games.alanmanderson.com/ws/$TABLE_ID/$PLAYER_ID?token=$TOKEN"
 ```
 Expected: HTTP 101 (Switching Protocols). This confirms WebSocket upgrade works through Caddy.
 

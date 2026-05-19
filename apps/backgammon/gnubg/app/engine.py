@@ -346,7 +346,8 @@ class GnubgEngine:
             probs=Probs(**parsed.probs.__dict__),
         )
 
-    async def best_move(self, req: MoveDice) -> BestMoveResponse:
+    async def best_move(self, req: MoveDice) -> Optional[BestMoveResponse]:
+        """Return ranked candidates, or ``None`` if there are no legal moves."""
         await self._ensure_started()
         async with self._lock:
             await self._set_ply(req.ply)
@@ -354,6 +355,10 @@ class GnubgEngine:
             await self._raw_command(f"set dice {req.dice[0]} {req.dice[1]}")
             out = await self._raw_command("hint")
             candidates = parser.parse_hint(out)
+
+        if not candidates:
+            # No legal moves (e.g. all checkers blocked on bar).
+            return None
 
         result = [
             Candidate(
@@ -367,8 +372,6 @@ class GnubgEngine:
             )
             for c in candidates[:5]
         ]
-        if not result:
-            raise RuntimeError("gnubg returned no candidate moves")
         return BestMoveResponse(best=result[0], candidates=result)
 
     async def analyze_move(self, req: AnalyzeMoveRequest) -> AnalyzeMoveResponse:
@@ -380,6 +383,26 @@ class GnubgEngine:
         move isn't in the top candidates we evaluate it separately.
         """
         best_resp = await self.best_move(req)
+
+        if best_resp is None:
+            # No legal moves — the player was forced to pass. Evaluate the
+            # current position to get equity/probs and return a zero-loss
+            # "no move" result.
+            eval_resp = await self.evaluate(req)
+            no_move = Candidate(
+                moves=[],
+                notation="(no moves)",
+                equity=eval_resp.equity,
+                probs=eval_resp.probs,
+            )
+            return AnalyzeMoveResponse(
+                best=no_move,
+                chosen=no_move,
+                equity_loss=0.0,
+                quality="very_good",
+                candidates=[],
+            )
+
         best = best_resp.best
 
         chosen_notation = _steps_to_notation(req.chosen_moves, req.turn)
@@ -416,13 +439,16 @@ class GnubgEngine:
             candidates=best_resp.candidates,
         )
 
-    async def cube_decision(self, board: Board) -> CubeDecisionResponse:
+    async def cube_decision(self, board: Board) -> Optional[CubeDecisionResponse]:
+        """Return cube equities, or ``None`` if not applicable in this state."""
         await self._ensure_started()
         async with self._lock:
             await self._set_ply(board.ply)
             await self._set_board(board)
             out = await self._raw_command("cube")
             parsed = parser.parse_cube(out)
+        if parsed is None:
+            return None
         return CubeDecisionResponse(
             equity_no_double=parsed.equity_no_double,
             equity_double_take=parsed.equity_double_take,
