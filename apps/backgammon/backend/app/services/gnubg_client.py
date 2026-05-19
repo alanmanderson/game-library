@@ -13,13 +13,14 @@ integration strictly additive — if the service is down, nothing breaks.
 
 The module holds a single lazy ``httpx.AsyncClient`` created on first
 use. It's not closed automatically; FastAPI's lifespan can call
-``close_gnubg_client`` on shutdown if we want to be tidy, but since the
-client is stateless HTTP any leaked connections are harmless.
+``close_gnubg_client`` on shutdown if we want to be tidy, but since
+the client is stateless HTTP any leaked connections are harmless.
 """
 
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Optional
 
 import httpx
@@ -122,10 +123,16 @@ async def is_available() -> bool:
     try:
         resp = await client.get("/health", timeout=_TIMEOUT_HEALTH)
         if resp.status_code != 200:
+            logger.warning("gnubg health check returned %s", resp.status_code)
             return False
         data = resp.json()
-        return bool(data.get("ready", False))
-    except (httpx.HTTPError, ValueError):
+        ready = bool(data.get("ready", False))
+        if not ready:
+            logger.warning("gnubg health check: service not ready (response: %s)",
+                           str(data)[:200])
+        return ready
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("gnubg health check failed: %s", exc)
         return False
 
 
@@ -139,28 +146,33 @@ async def _post(
     if client is None:
         return None
     last_exc: Optional[Exception] = None
+    t0 = time.monotonic()
     for attempt in range(_MAX_RETRIES + 1):
         try:
             resp = await client.post(path, json=payload, timeout=timeout)
+            elapsed = time.monotonic() - t0
             if resp.status_code != 200:
-                logger.warning("gnubg %s returned %s: %s",
-                               path, resp.status_code, resp.text[:200])
+                logger.warning("gnubg %s returned %s after %.1fs: %s",
+                               path, resp.status_code, elapsed, resp.text[:200])
                 return None
+            logger.debug("gnubg %s OK in %.1fs", path, elapsed)
             return resp.json()
         except (httpx.TimeoutException, httpx.ConnectError) as exc:
             last_exc = exc
             if attempt < _MAX_RETRIES:
-                logger.info("gnubg %s attempt %d timed out, retrying...",
-                            path, attempt + 1)
+                logger.info("gnubg %s attempt %d timed out after %.1fs, retrying...",
+                            path, attempt + 1, time.monotonic() - t0)
                 continue
         except httpx.HTTPError as exc:
-            logger.warning("gnubg %s failed: %s", path, exc)
+            logger.warning("gnubg %s failed after %.1fs: %s",
+                           path, time.monotonic() - t0, exc)
             return None
         except ValueError as exc:  # JSON decode error
-            logger.warning("gnubg %s returned non-JSON: %s", path, exc)
+            logger.warning("gnubg %s returned non-JSON after %.1fs: %s",
+                           path, time.monotonic() - t0, exc)
             return None
-    logger.warning("gnubg %s failed after %d attempts: %s",
-                   path, _MAX_RETRIES + 1, last_exc)
+    logger.warning("gnubg %s failed after %d attempts (%.1fs total): %s",
+                   path, _MAX_RETRIES + 1, time.monotonic() - t0, last_exc)
     return None
 
 
@@ -243,27 +255,33 @@ def _post_sync(path: str, payload: dict, timeout: httpx.Timeout) -> Optional[dic
     if client is None:
         return None
     last_exc: Optional[Exception] = None
+    t0 = time.monotonic()
     for attempt in range(_MAX_RETRIES + 1):
         try:
             resp = client.post(path, json=payload, timeout=timeout)
+            elapsed = time.monotonic() - t0
             if resp.status_code != 200:
-                logger.warning("gnubg %s (sync) returned %s", path, resp.status_code)
+                logger.warning("gnubg %s (sync) returned %s after %.1fs: %s",
+                               path, resp.status_code, elapsed, resp.text[:200])
                 return None
+            logger.debug("gnubg %s (sync) OK in %.1fs", path, elapsed)
             return resp.json()
         except (httpx.TimeoutException, httpx.ConnectError) as exc:
             last_exc = exc
             if attempt < _MAX_RETRIES:
-                logger.info("gnubg %s (sync) attempt %d timed out, retrying...",
-                            path, attempt + 1)
+                logger.info("gnubg %s (sync) attempt %d timed out after %.1fs, retrying...",
+                            path, attempt + 1, time.monotonic() - t0)
                 continue
         except httpx.HTTPError as exc:
-            logger.warning("gnubg %s (sync) failed: %s", path, exc)
+            logger.warning("gnubg %s (sync) failed after %.1fs: %s",
+                           path, time.monotonic() - t0, exc)
             return None
         except ValueError as exc:
-            logger.warning("gnubg %s (sync) returned non-JSON: %s", path, exc)
+            logger.warning("gnubg %s (sync) returned non-JSON after %.1fs: %s",
+                           path, time.monotonic() - t0, exc)
             return None
-    logger.warning("gnubg %s (sync) failed after %d attempts: %s",
-                   path, _MAX_RETRIES + 1, last_exc)
+    logger.warning("gnubg %s (sync) failed after %d attempts (%.1fs total): %s",
+                   path, _MAX_RETRIES + 1, time.monotonic() - t0, last_exc)
     return None
 
 
@@ -292,7 +310,14 @@ def is_available_sync() -> bool:
     try:
         resp = client.get("/health", timeout=_TIMEOUT_HEALTH)
         if resp.status_code != 200:
+            logger.warning("gnubg health check (sync) returned %s", resp.status_code)
             return False
-        return bool(resp.json().get("ready", False))
-    except (httpx.HTTPError, ValueError):
+        data = resp.json()
+        ready = bool(data.get("ready", False))
+        if not ready:
+            logger.warning("gnubg health check (sync): service not ready (response: %s)",
+                           str(data)[:200])
+        return ready
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("gnubg health check (sync) failed: %s", exc)
         return False

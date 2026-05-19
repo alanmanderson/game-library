@@ -22,6 +22,7 @@ import logging
 import os
 import re
 import sys
+import time
 from typing import Any, Optional
 
 from app.game_engine import (
@@ -263,10 +264,12 @@ def compute_analysis(
     # Prefer gnubg when configured and reachable.  Falls through to the
     # existing ML/pip-count path on any failure so analysis stays best-
     # effort rather than all-or-nothing.
+    gnubg_attempted = False
     try:
         from app.services import gnubg_client
 
         if gnubg_client.is_available_sync():
+            gnubg_attempted = True
             return _compute_analysis_gnubg(
                 initial_state,
                 move_records,
@@ -276,11 +279,22 @@ def compute_analysis(
                 move_limit,
                 ply,
             )
+        else:
+            logger.warning(
+                "gnubg unavailable for analysis, falling back to ML/heuristic "
+                "(GNUBG_URL=%s)",
+                "set" if gnubg_client.settings.gnubg_url else "unset",
+            )
     except Exception as exc:  # pragma: no cover - defensive
-        logger.warning("gnubg analysis path failed, falling back: %s", exc)
+        logger.warning(
+            "gnubg analysis path failed after gnubg was reachable, "
+            "falling back to ML/heuristic: %s", exc,
+        )
 
     evaluator, ml_available = _make_evaluator()
     analysis_source = "ML neural network (0-ply)" if ml_available else "Pip-count heuristic"
+    if gnubg_attempted:
+        logger.info("Fell back to %s after gnubg failure", analysis_source)
 
     engine = BackgammonEngine()
     analyses: list[dict] = []
@@ -478,8 +492,11 @@ def _compute_analysis_gnubg(
     prev_state = initial_state
     limit = min(len(move_records), max(0, move_limit))
 
+    logger.info("Starting %d-ply gnubg analysis (%d moves)", effective_ply, limit)
+    t_analysis_start = time.monotonic()
+
     failures = 0
-    for record in move_records[:limit]:
+    for idx, record in enumerate(move_records[:limit]):
         color = _color_from_record(
             record.get("player_id"), white_player_id, black_player_id
         )
@@ -507,6 +524,8 @@ def _compute_analysis_gnubg(
             "match_score": None,
         }
 
+        move_number = record.get("move_number", idx)
+        t_move_start = time.monotonic()
         try:
             resp = gnubg_client.analyze_move_sync(
                 board_payload,
@@ -515,17 +534,34 @@ def _compute_analysis_gnubg(
                 ply=effective_ply,
             )
         except Exception as exc:  # pragma: no cover - defensive
-            logger.warning("gnubg analyze_move failed: %s", exc)
+            logger.warning("gnubg analyze_move failed on move %s (%.1fs): %s",
+                           move_number, time.monotonic() - t_move_start, exc)
             resp = None
 
         if resp is None:
             failures += 1
+            logger.warning(
+                "gnubg returned None for move %s (%d consecutive failures, "
+                "dice=%s, turn=%s)",
+                move_number, failures,
+                record.get("dice_roll"), color.value if color else "?",
+            )
             prev_state = game_state_after
             # Only give up if gnubg is truly down — isolated timeouts on
             # complex positions shouldn't abort the entire analysis.
             if failures >= 10:
+                elapsed = time.monotonic() - t_analysis_start
+                logger.error(
+                    "Aborting %d-ply analysis after 10 consecutive failures "
+                    "at move %s (%.1fs elapsed, %d/%d moves analysed)",
+                    effective_ply, move_number, elapsed, len(analyses), limit,
+                )
                 raise RuntimeError("gnubg analysis unavailable")
             continue
+
+        move_elapsed = time.monotonic() - t_move_start
+        if move_elapsed > 30.0:
+            logger.info("gnubg move %s took %.1fs (slow)", move_number, move_elapsed)
 
         # Reset consecutive failure counter on success.
         failures = 0
@@ -535,6 +571,13 @@ def _compute_analysis_gnubg(
         )
         analyses.append(analysis_dict)
         prev_state = game_state_after
+
+    elapsed = time.monotonic() - t_analysis_start
+    logger.info(
+        "%d-ply gnubg analysis complete: %d/%d moves in %.1fs (%.1fs/move avg)",
+        effective_ply, len(analyses), limit, elapsed,
+        elapsed / len(analyses) if analyses else 0.0,
+    )
 
     # gnubg-backed analysis counts as "ml_available" from the UI's
     # perspective — it's not the heuristic fallback.
@@ -659,6 +702,12 @@ async def run_background_analysis(
     move_limit = min(len(record_dicts), max(0, limit))
     failures = 0
 
+    logger.info(
+        "Starting background %d-ply analysis for table %s (%d moves)",
+        effective_ply, table_id, move_limit,
+    )
+    t_analysis_start = time.monotonic()
+
     try:
         for idx, record in enumerate(record_dicts[:move_limit]):
             color = _color_from_record(
@@ -687,6 +736,9 @@ async def run_background_analysis(
                 "match_score": None,
             }
 
+            move_number = record.get("move_number", idx)
+            t_move_start = time.monotonic()
+
             # Async gnubg calls
             try:
                 resp = await gnubg_client.analyze_move(
@@ -696,15 +748,39 @@ async def run_background_analysis(
                     ply=effective_ply,
                 )
             except Exception as exc:
-                logger.warning("gnubg analyze_move (async) failed: %s", exc)
+                logger.warning(
+                    "gnubg analyze_move (async) failed on move %s for table %s (%.1fs): %s",
+                    move_number, table_id, time.monotonic() - t_move_start, exc,
+                )
                 resp = None
 
             if resp is None:
                 failures += 1
+                logger.warning(
+                    "gnubg returned None for move %s, table %s "
+                    "(%d consecutive failures, dice=%s, turn=%s)",
+                    move_number, table_id, failures,
+                    record.get("dice_roll"), color.value if color else "?",
+                )
                 prev_state = game_state_after
                 if failures >= 10:
+                    elapsed = time.monotonic() - t_analysis_start
+                    logger.error(
+                        "Aborting background %d-ply analysis for table %s after "
+                        "10 consecutive failures at move %s "
+                        "(%.1fs elapsed, %d/%d moves analysed)",
+                        effective_ply, table_id, move_number,
+                        elapsed, len(analyses), move_limit,
+                    )
                     raise RuntimeError("gnubg analysis unavailable")
                 continue
+
+            move_elapsed = time.monotonic() - t_move_start
+            if move_elapsed > 60.0:
+                logger.info(
+                    "gnubg move %s for table %s took %.1fs (slow)",
+                    move_number, table_id, move_elapsed,
+                )
 
             # Reset consecutive failure counter on success.
             failures = 0
@@ -717,6 +793,13 @@ async def run_background_analysis(
 
             # Write incremental progress every N moves
             if (idx + 1) % _PROGRESS_BATCH_SIZE == 0:
+                batch_elapsed = time.monotonic() - t_analysis_start
+                logger.info(
+                    "Background %d-ply analysis progress for table %s: "
+                    "%d/%d moves (%.1fs elapsed)",
+                    effective_ply, table_id, len(analyses), move_limit,
+                    batch_elapsed,
+                )
                 try:
                     async with async_session() as db:
                         cached = await db.get(GameAnalysis, table_id)
@@ -739,13 +822,21 @@ async def run_background_analysis(
                 cached.status = "complete"
                 await db.commit()
 
+        elapsed = time.monotonic() - t_analysis_start
         logger.info(
-            "Background %d-ply analysis complete for table %s (%d moves)",
-            effective_ply, table_id, len(analyses),
+            "Background %d-ply analysis complete for table %s: "
+            "%d moves in %.1fs (%.1fs/move avg)",
+            effective_ply, table_id, len(analyses), elapsed,
+            elapsed / len(analyses) if analyses else 0.0,
         )
 
     except Exception:
-        logger.exception("Background %d-ply analysis failed for table %s", effective_ply, table_id)
+        elapsed = time.monotonic() - t_analysis_start
+        logger.exception(
+            "Background %d-ply analysis failed for table %s "
+            "after %.1fs (%d/%d moves analysed)",
+            effective_ply, table_id, elapsed, len(analyses), move_limit,
+        )
         try:
             async with async_session() as db:
                 cached = await db.get(GameAnalysis, table_id)
