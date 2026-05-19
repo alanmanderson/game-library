@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 # giving a reliable framing marker without relying on prompt format.
 _SENTINEL = "__gnubg_sentinel_done__"
 _STARTUP_TIMEOUT = 15.0
-_COMMAND_TIMEOUT = 180.0  # 3-ply evaluations can take minutes per position
+_COMMAND_TIMEOUT = 600.0  # 3-ply evaluations can take many minutes per position
 
 
 class GnubgUnavailableError(RuntimeError):
@@ -413,6 +413,7 @@ class GnubgEngine:
             chosen=chosen_candidate,
             equity_loss=equity_loss,
             quality=parser.classify_quality(equity_loss),  # type: ignore[arg-type]
+            candidates=best_resp.candidates,
         )
 
     async def cube_decision(self, board: Board) -> CubeDecisionResponse:
