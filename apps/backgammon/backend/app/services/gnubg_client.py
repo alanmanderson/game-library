@@ -13,8 +13,8 @@ integration strictly additive — if the service is down, nothing breaks.
 
 The module holds a single lazy ``httpx.AsyncClient`` created on first
 use. It's not closed automatically; FastAPI's lifespan can call
-``close_gnubg_client`` on shutdown if we want to be tidy, but since the
-client is stateless HTTP any leaked connections are harmless.
+``close_gnubg_client`` on shutdown if we want to be tidy, but since
+the client is stateless HTTP any leaked connections are harmless.
 """
 
 from __future__ import annotations
