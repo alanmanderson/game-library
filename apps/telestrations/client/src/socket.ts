@@ -529,14 +529,17 @@ function handleReviewEntry(data: ReviewEntryPayload): void {
 
   if (!currentReview || currentReview.currentChainIndex !== data.chainIndex) {
     // New chain - start fresh from entry 0
-    revealedEntries = [data.entry];
+    revealedEntries = [];
+    revealedEntries[data.entryIndex] = data.entry;
   } else if (data.entryIndex === 0) {
     // Reset to first entry (e.g. navigated to chain start)
     revealedEntries = [data.entry];
   } else {
-    // Same chain - accumulate up to current index
-    revealedEntries = currentReview.revealedEntries.slice(0, data.entryIndex);
-    revealedEntries.push(data.entry);
+    // Same chain - place entry at its exact index so out-of-order arrivals
+    // never truncate entries that were already placed.
+    const sparse = [...currentReview.revealedEntries] as (ReviewEntry | undefined)[];
+    sparse[data.entryIndex] = data.entry;
+    revealedEntries = sparse.filter((e): e is ReviewEntry => e !== undefined);
   }
 
   setState({
