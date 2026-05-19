@@ -3,6 +3,7 @@
  */
 
 let buildInfoEl: HTMLElement | null = null;
+let buildInfoController: AbortController | null = null;
 
 export function initBuildInfo(): void {
   if (buildInfoEl) return;
@@ -78,13 +79,15 @@ export function initBuildInfo(): void {
   });
 
   // Click outside
+  buildInfoController?.abort();
+  buildInfoController = new AbortController();
   document.addEventListener('mousedown', (e) => {
     if (isOpen && !wrapper.contains(e.target as Node)) {
       isOpen = false;
       dropdown.remove();
       btn.style.opacity = '0.5';
     }
-  });
+  }, { signal: buildInfoController.signal });
 
   wrapper.appendChild(btn);
   document.body.appendChild(wrapper);

@@ -9,6 +9,8 @@ import { renderPlayerList } from '../components/PlayerList';
 import { navigateTo, showToast } from '../app';
 import { emitStartGame, emitKickPlayer, emitSettings, emitLeave, disconnectSocket } from '../socket';
 
+let lobbyController: AbortController | null = null;
+
 export function renderLobby(): string {
   const state = getState();
   const amHost = isHost();
@@ -134,6 +136,10 @@ function renderSettingsSummary(): string {
 }
 
 export function setupLobby(container: HTMLElement): void {
+  lobbyController?.abort();
+  lobbyController = new AbortController();
+  const { signal } = lobbyController;
+
   setupGameCodeActions(container);
 
   // Settings changes (host only)
@@ -148,7 +154,7 @@ export function setupLobby(container: HTMLElement): void {
       const value = parseInt((target as HTMLSelectElement).value, 10);
       emitSettings({ [setting]: value });
     }
-  });
+  }, { signal });
 
   // Button actions
   container.addEventListener('click', (e) => {
@@ -175,5 +181,5 @@ export function setupLobby(container: HTMLElement): void {
         emitKickPlayer(playerId);
       }
     }
-  });
+  }, { signal });
 }

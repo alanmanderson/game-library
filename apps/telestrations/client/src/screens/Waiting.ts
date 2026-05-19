@@ -8,6 +8,8 @@ import { renderTimer, startTimerLoop, stopTimerLoop } from '../components/Timer'
 import { renderPlayerList } from '../components/PlayerList';
 import { emitEndRoundEarly } from '../socket';
 
+let waitingController: AbortController | null = null;
+
 export function renderWaiting(): string {
   const state = getState();
   const amHost = isHost();
@@ -51,6 +53,10 @@ export function renderWaiting(): string {
 }
 
 export function setupWaiting(container: HTMLElement): void {
+  waitingController?.abort();
+  waitingController = new AbortController();
+  const { signal } = waitingController;
+
   const timerEl = container.querySelector('#game-timer') as HTMLElement;
   if (timerEl) startTimerLoop(timerEl);
 
@@ -63,9 +69,11 @@ export function setupWaiting(container: HTMLElement): void {
       (target as HTMLButtonElement).disabled = true;
       target.textContent = 'Ending round...';
     }
-  });
+  }, { signal });
 }
 
 export function cleanupWaiting(): void {
   stopTimerLoop();
+  waitingController?.abort();
+  waitingController = null;
 }
