@@ -39,19 +39,19 @@ const FLUSH_INTERVAL = 5000;
 const MAX_BUFFER = 10;
 
 function isDev(): boolean {
-  return location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 }
 
 function getEndpoint(): string {
   if (config?.endpoint) return config.endpoint;
-  const proto = location.protocol;
-  const hostParts = location.hostname.split('.');
+  const proto = window.location.protocol;
+  const hostParts = window.location.hostname.split('.');
   // Replace game subdomain with 'logs': backgammon.games.example.com -> logs.games.example.com
   if (hostParts.length >= 3) {
     hostParts[0] = 'logs';
-    return `${proto}//${hostParts.join('.')}${location.port ? ':' + location.port : ''}/api/ingest`;
+    return `${proto}//${hostParts.join('.')}${window.location.port ? ':' + window.location.port : ''}/api/ingest`;
   }
-  return `${proto}//${location.host}/api/ingest`;
+  return `${proto}//${window.location.host}/api/ingest`;
 }
 
 function flush(): void {
@@ -124,7 +124,7 @@ export function initLogService(cfg: LogServiceConfig): void {
         filename: event.filename,
         lineno: event.lineno,
         colno: event.colno,
-        url: location.href,
+        url: window.location.href,
       },
     }));
   });
@@ -135,7 +135,7 @@ export function initLogService(cfg: LogServiceConfig): void {
     enqueue(makeEntry('error', `Unhandled rejection: ${message}`, {
       error_type: reason instanceof Error ? reason.name : 'UnhandledRejection',
       stack_trace: reason instanceof Error ? reason.stack : undefined,
-      context: { url: location.href },
+      context: { url: window.location.href },
     }));
   });
 
