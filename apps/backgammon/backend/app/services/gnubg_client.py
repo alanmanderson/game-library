@@ -30,11 +30,15 @@ from app.game_engine import BackgammonEngine, Color
 logger = logging.getLogger(__name__)
 
 
-# Timeouts chosen per the plan: fast ops get 10s, analysis is heavier (may
-# enumerate all candidate moves on a slow subprocess) so allow 30s for 2-ply evaluation.
-_TIMEOUT_FAST = httpx.Timeout(10.0, connect=2.0)  # Increased from 5s to 10s for 2-ply
-_TIMEOUT_SLOW = httpx.Timeout(30.0, connect=2.0)  # Increased from 10s to 30s for 2-ply
-_TIMEOUT_3PLY = httpx.Timeout(120.0, connect=5.0)  # 3-ply can take much longer per position
+# Timeouts must be generous: gnubg's `hint` command evaluates every legal
+# move at the requested ply depth. Complex positions (e.g. doubles with
+# many bearing-off options) can take minutes even at 2-ply on a 1-vCPU VM.
+_TIMEOUT_HEALTH = httpx.Timeout(10.0, connect=2.0)
+_TIMEOUT_2PLY = httpx.Timeout(120.0, connect=5.0)   # 2-ply: up to 2 min per position
+_TIMEOUT_3PLY = httpx.Timeout(600.0, connect=5.0)   # 3-ply: up to 10 min per position
+
+# Number of retries on timeout or connection error before giving up.
+_MAX_RETRIES = 1
 
 
 _client: Optional[httpx.AsyncClient] = None
@@ -116,7 +120,7 @@ async def is_available() -> bool:
     if client is None:
         return False
     try:
-        resp = await client.get("/health", timeout=_TIMEOUT_FAST)
+        resp = await client.get("/health", timeout=_TIMEOUT_HEALTH)
         if resp.status_code != 200:
             return False
         data = resp.json()
@@ -134,26 +138,37 @@ async def _post(
     client = _get_client()
     if client is None:
         return None
-    try:
-        resp = await client.post(path, json=payload, timeout=timeout)
-        if resp.status_code != 200:
-            logger.warning("gnubg %s returned %s: %s",
-                           path, resp.status_code, resp.text[:200])
+    last_exc: Optional[Exception] = None
+    for attempt in range(_MAX_RETRIES + 1):
+        try:
+            resp = await client.post(path, json=payload, timeout=timeout)
+            if resp.status_code != 200:
+                logger.warning("gnubg %s returned %s: %s",
+                               path, resp.status_code, resp.text[:200])
+                return None
+            return resp.json()
+        except (httpx.TimeoutException, httpx.ConnectError) as exc:
+            last_exc = exc
+            if attempt < _MAX_RETRIES:
+                logger.info("gnubg %s attempt %d timed out, retrying...",
+                            path, attempt + 1)
+                continue
+        except httpx.HTTPError as exc:
+            logger.warning("gnubg %s failed: %s", path, exc)
             return None
-        return resp.json()
-    except httpx.HTTPError as exc:
-        logger.warning("gnubg %s failed: %s", path, exc)
-        return None
-    except ValueError as exc:  # JSON decode error
-        logger.warning("gnubg %s returned non-JSON: %s", path, exc)
-        return None
+        except ValueError as exc:  # JSON decode error
+            logger.warning("gnubg %s returned non-JSON: %s", path, exc)
+            return None
+    logger.warning("gnubg %s failed after %d attempts: %s",
+                   path, _MAX_RETRIES + 1, last_exc)
+    return None
 
 
-def _timeout_for_ply(ply: Optional[int], default: httpx.Timeout = _TIMEOUT_FAST) -> httpx.Timeout:
+def _timeout_for_ply(ply: Optional[int]) -> httpx.Timeout:
     """Select the appropriate timeout based on ply depth."""
     if (ply or 0) >= 3:
         return _TIMEOUT_3PLY
-    return default
+    return _TIMEOUT_2PLY
 
 
 async def evaluate(board: dict, ply: Optional[int] = None) -> Optional[dict]:
@@ -188,7 +203,7 @@ async def analyze_move(
     }
     if ply is not None:
         payload["ply"] = ply
-    return await _post("/analyze-move", payload, _timeout_for_ply(ply, _TIMEOUT_SLOW))
+    return await _post("/analyze-move", payload, _timeout_for_ply(ply))
 
 
 async def cube_decision(board: dict, ply: Optional[int] = None) -> Optional[dict]:
@@ -227,18 +242,29 @@ def _post_sync(path: str, payload: dict, timeout: httpx.Timeout) -> Optional[dic
     client = _get_sync_client()
     if client is None:
         return None
-    try:
-        resp = client.post(path, json=payload, timeout=timeout)
-        if resp.status_code != 200:
-            logger.warning("gnubg %s (sync) returned %s", path, resp.status_code)
+    last_exc: Optional[Exception] = None
+    for attempt in range(_MAX_RETRIES + 1):
+        try:
+            resp = client.post(path, json=payload, timeout=timeout)
+            if resp.status_code != 200:
+                logger.warning("gnubg %s (sync) returned %s", path, resp.status_code)
+                return None
+            return resp.json()
+        except (httpx.TimeoutException, httpx.ConnectError) as exc:
+            last_exc = exc
+            if attempt < _MAX_RETRIES:
+                logger.info("gnubg %s (sync) attempt %d timed out, retrying...",
+                            path, attempt + 1)
+                continue
+        except httpx.HTTPError as exc:
+            logger.warning("gnubg %s (sync) failed: %s", path, exc)
             return None
-        return resp.json()
-    except httpx.HTTPError as exc:
-        logger.warning("gnubg %s (sync) failed: %s", path, exc)
-        return None
-    except ValueError as exc:
-        logger.warning("gnubg %s (sync) returned non-JSON: %s", path, exc)
-        return None
+        except ValueError as exc:
+            logger.warning("gnubg %s (sync) returned non-JSON: %s", path, exc)
+            return None
+    logger.warning("gnubg %s (sync) failed after %d attempts: %s",
+                   path, _MAX_RETRIES + 1, last_exc)
+    return None
 
 
 def analyze_move_sync(
@@ -247,7 +273,7 @@ def analyze_move_sync(
     payload = {**board, "dice": list(dice), "chosen_moves": list(chosen_moves)}
     if ply is not None:
         payload["ply"] = ply
-    return _post_sync("/analyze-move", payload, _timeout_for_ply(ply, _TIMEOUT_SLOW))
+    return _post_sync("/analyze-move", payload, _timeout_for_ply(ply))
 
 
 def best_move_sync(board: dict, dice: list[int], ply: Optional[int] = None) -> Optional[dict]:
@@ -264,7 +290,7 @@ def is_available_sync() -> bool:
     if client is None:
         return False
     try:
-        resp = client.get("/health", timeout=_TIMEOUT_FAST)
+        resp = client.get("/health", timeout=_TIMEOUT_HEALTH)
         if resp.status_code != 200:
             return False
         return bool(resp.json().get("ready", False))

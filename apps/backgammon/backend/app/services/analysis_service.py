@@ -521,88 +521,19 @@ def _compute_analysis_gnubg(
         if resp is None:
             failures += 1
             prev_state = game_state_after
-            # If gnubg fails for more than a handful of moves in a row, give
-            # up and let the caller run the ML path for the whole game.
-            if failures >= 3:
+            # Only give up if gnubg is truly down — isolated timeouts on
+            # complex positions shouldn't abort the entire analysis.
+            if failures >= 10:
                 raise RuntimeError("gnubg analysis unavailable")
             continue
 
-        best = resp.get("best") or {}
-        chosen = resp.get("chosen") or {}
-        best_probs = best.get("probs") or None
-        chosen_probs = chosen.get("probs") or None
-        best_equity = float(best.get("equity") or 0.0)
-        chosen_equity = float(chosen.get("equity") or 0.0)
-        equity_loss = max(0.0, float(resp.get("equity_loss") or 0.0))
-        gnubg_quality = str(resp.get("quality") or "good")
-        quality = _GNUBG_QUALITY_MAP.get(gnubg_quality, "good")
+        # Reset consecutive failure counter on success.
+        failures = 0
 
-        # Build best-move notation from the backend-coordinate moves list
-        # so it matches the game's own notation format.  gnubg's raw
-        # notation uses the on-roll player's perspective numbering.
-        best_moves_list = best.get("moves") or []
-        if best_moves_list:
-            best_notation = _moves_to_backend_notation(best_moves_list, color)
-        else:
-            best_notation = best.get("notation")
-
-        # Try to get top-5 candidate moves from gnubg's best-move endpoint
-        top_moves_list = None
-        try:
-            bm_resp = gnubg_client.best_move_sync(
-                board_payload, [dice.die1, dice.die2], ply=effective_ply
-            )
-            if bm_resp and bm_resp.get("candidates"):
-                all_cands = bm_resp["candidates"]
-                top_eq = all_cands[0].get("equity", 0.0) if all_cands else 0.0
-                top_moves_list = []
-                for i, c in enumerate(all_cands[:5]):
-                    cand_notation = c.get("notation", "")
-                    # Convert gnubg moves to backend notation if available
-                    cand_moves = c.get("moves", [])
-                    if cand_moves:
-                        cand_notation = _moves_to_backend_notation(cand_moves, color)
-                    top_moves_list.append({
-                        "rank": i + 1,
-                        "notation": cand_notation,
-                        "equity": round(c.get("equity", 0.0), 4),
-                        "equity_diff": round(c.get("equity", 0.0) - top_eq, 4),
-                        "probs": c.get("probs"),
-                    })
-        except Exception as exc:
-            logger.debug("gnubg candidates unavailable: %s", exc)
-
-        analyses.append(
-            {
-                "move_number": int(record.get("move_number") or 0),
-                "player_color": color.value,
-                "player_nickname": player_nicknames.get(record.get("player_id") or ""),
-                "dice_roll": record.get("dice_roll") or "",
-                "moves_notation": record.get("moves_notation") or "",
-                # equity_before is what the player had before moving — we
-                # don't have a direct gnubg number for this, but the
-                # best-move equity is the upper bound, so use it. The
-                # frontend uses the delta (best - after) for severity.
-                "equity_before": round(best_equity, 4),
-                "equity_after": round(chosen_equity, 4),
-                "best_equity": round(best_equity, 4),
-                "equity_loss": round(equity_loss, 4),
-                "quality": quality,
-                "best_move_notation": best_notation,
-                "best_probs": best_probs,
-                "chosen_probs": chosen_probs,
-                "best_win_prob": (
-                    float(best_probs["win"]) if best_probs and "win" in best_probs else None
-                ),
-                "chosen_win_prob": (
-                    float(chosen_probs["win"])
-                    if chosen_probs and "win" in chosen_probs
-                    else None
-                ),
-                "source": "gnubg",
-                "top_moves": top_moves_list,
-            }
+        analysis_dict = _build_gnubg_analysis_dict(
+            record, color, resp, None, player_nicknames
         )
+        analyses.append(analysis_dict)
         prev_state = game_state_after
 
     # gnubg-backed analysis counts as "ml_available" from the UI's
@@ -637,10 +568,15 @@ def _build_gnubg_analysis_dict(
     else:
         best_notation = best.get("notation")
 
+    # Use candidates from the analyze_move response (preferred — avoids a
+    # redundant best_move call) or from a separate bm_resp if provided.
+    all_cands = resp.get("candidates") or []
+    if not all_cands and bm_resp:
+        all_cands = bm_resp.get("candidates") or []
+
     top_moves_list = None
-    if bm_resp and bm_resp.get("candidates"):
-        all_cands = bm_resp["candidates"]
-        top_eq = all_cands[0].get("equity", 0.0) if all_cands else 0.0
+    if all_cands:
+        top_eq = all_cands[0].get("equity", 0.0)
         top_moves_list = []
         for i, c in enumerate(all_cands[:5]):
             cand_notation = c.get("notation", "")
@@ -766,20 +702,15 @@ async def run_background_analysis(
             if resp is None:
                 failures += 1
                 prev_state = game_state_after
-                if failures >= 3:
+                if failures >= 10:
                     raise RuntimeError("gnubg analysis unavailable")
                 continue
 
-            bm_resp = None
-            try:
-                bm_resp = await gnubg_client.best_move(
-                    board_payload, [dice.die1, dice.die2], ply=effective_ply
-                )
-            except Exception as exc:
-                logger.debug("gnubg best_move (async) failed: %s", exc)
+            # Reset consecutive failure counter on success.
+            failures = 0
 
             analysis_dict = _build_gnubg_analysis_dict(
-                record, color, resp, bm_resp, nickname_map
+                record, color, resp, None, nickname_map
             )
             analyses.append(analysis_dict)
             prev_state = game_state_after

@@ -109,6 +109,7 @@ class AnalyzeMoveResponse(BaseModel):
     quality: Literal[
         "very_good", "good", "doubtful", "bad", "very_bad", "blunder"
     ]
+    candidates: list[Candidate] = []
 
 
 class CubeDecisionResponse(BaseModel):
