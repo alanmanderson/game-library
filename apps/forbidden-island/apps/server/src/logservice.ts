@@ -125,21 +125,21 @@ export class LogService {
 /**
  * Express error-handling middleware that logs errors to the log service.
  * Place after all routes: app.use(expressErrorLogger(logService));
+ *
+ * Uses `any` for req/res/next so the SDK doesn't need express as a dependency.
+ * Express recognizes 4-arg middleware as error handlers by arity.
  */
-export function expressErrorLogger(logService: LogService) {
-  return (
-    err: Error,
-    req: { method: string; url: string; headers: Record<string, string> },
-    _res: unknown,
-    next: (err: Error) => void,
-  ): void => {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function expressErrorLogger(logService: LogService): any {
+  // Express identifies error handlers by their 4-parameter arity
+  return function logError(err: Error, req: any, _res: any, next: any): void {
     logService.error(err.message, {
       error_type: err.name,
       stack_trace: err.stack,
       context: {
         method: req.method,
         path: req.url,
-        user_agent: req.headers['user-agent'],
+        user_agent: req.headers?.['user-agent'],
       },
     });
     next(err);
