@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import styles from "./GameErrorBoundary.module.css";
+import { logService } from "../logservice";
 
 interface Props {
   children: ReactNode;
@@ -22,12 +23,13 @@ export class GameErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    // TODO: wire Sentry here (see issue #35). For now, structured console logs
-    // so ops can grep room context out of captured browser logs.
-    console.error("[GameErrorBoundary] Uncaught error in game surface", {
-      roomCode: this.props.roomCode,
-      error,
-      componentStack: info.componentStack,
+    logService.error(error.message, {
+      error_type: error.name,
+      stack_trace: error.stack,
+      context: {
+        roomCode: this.props.roomCode,
+        componentStack: info.componentStack,
+      },
     });
   }
 

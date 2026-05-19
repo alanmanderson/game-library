@@ -16,6 +16,7 @@ from app.config import settings
 from app.database import AsyncSessionLocal
 from app.websocket.background import maintenance_loop
 from app.websocket.broker import RedisBroker
+from app.logservice import setup_log_service
 from app.websocket.connection_manager import manager
 from app.websocket.routes import router as ws_router
 
@@ -50,6 +51,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Pinochle API", lifespan=lifespan)
+
+setup_log_service(app, service="ai-pinochle")
 
 _origins = [o.strip() for o in settings.allowed_origins.split(",") if o.strip()]
 app.add_middleware(

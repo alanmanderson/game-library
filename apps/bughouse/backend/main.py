@@ -37,6 +37,7 @@ from models import (
 from auth import auth_router, get_optional_user
 from auth.database import init_db
 from auth.models import User
+from logservice import setup_log_service
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,8 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+setup_log_service(app, service="bughouse")
 
 # CORS - origins controlled via CORS_ALLOWED_ORIGINS env var
 app.add_middleware(

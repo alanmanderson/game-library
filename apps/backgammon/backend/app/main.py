@@ -28,6 +28,7 @@ from app.api.websocket import manager as ws_manager, websocket_endpoint, websock
 from app.config import settings
 from app.database import async_session, get_db
 from app.limiter import limiter
+from app.logservice import setup_log_service
 from app.services.game_service import game_manager
 
 # ---------------------------------------------------------------------------
@@ -116,6 +117,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="GammonHub", version="1.0.0", lifespan=lifespan)
+
+setup_log_service(app, service="backgammon")
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
