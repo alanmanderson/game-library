@@ -119,9 +119,9 @@ Add all missing standard tags:
 <meta name="theme-color" content="#1a1a2e" />
 
 <!-- Open Graph (additions/corrections) -->
-<meta property="og:url" content="https://backgammon.alanmanderson.com/" />
+<meta property="og:url" content="https://backgammon.games.alanmanderson.com/" />
 <meta property="og:site_name" content="Backgammon Online" />
-<meta property="og:image" content="https://backgammon.alanmanderson.com/images/og-image.png" />
+<meta property="og:image" content="https://backgammon.games.alanmanderson.com/images/og-image.png" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
 
@@ -129,7 +129,7 @@ Add all missing standard tags:
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="Backgammon Online" />
 <meta name="twitter:description" content="Play backgammon online — challenge friends, beat the AI, or compete on the leaderboard." />
-<meta name="twitter:image" content="https://backgammon.alanmanderson.com/images/og-image.png" />
+<meta name="twitter:image" content="https://backgammon.games.alanmanderson.com/images/og-image.png" />
 ```
 
 Note: OG `og:image` should use an absolute URL (some scrapers don't resolve
@@ -145,7 +145,7 @@ relative paths).
 User-agent: *
 Allow: /
 
-Sitemap: https://backgammon.alanmanderson.com/sitemap.xml
+Sitemap: https://backgammon.games.alanmanderson.com/sitemap.xml
 ```
 
 ---
@@ -161,12 +161,12 @@ Static sitemap covering the public routes. Game-specific URLs are not included
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://backgammon.alanmanderson.com/</loc>
+    <loc>https://backgammon.games.alanmanderson.com/</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://backgammon.alanmanderson.com/leaderboard</loc>
+    <loc>https://backgammon.games.alanmanderson.com/leaderboard</loc>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
   </url>
@@ -185,7 +185,7 @@ Static sitemap covering the public routes. Game-specific URLs are not included
   "@context": "https://schema.org",
   "@type": "WebApplication",
   "name": "Backgammon Online",
-  "url": "https://backgammon.alanmanderson.com",
+  "url": "https://backgammon.games.alanmanderson.com",
   "description": "Multiplayer backgammon with AI opponent, leaderboard, and real-time play.",
   "applicationCategory": "Game",
   "operatingSystem": "Web",

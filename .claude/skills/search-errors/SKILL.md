@@ -12,17 +12,24 @@ Search the centralized logging service for errors across all games and optionall
 
 ## Connection
 
-The logging service runs on the production VM. Query it via SSH:
+The logging service runs inside Docker on the production VM. It is only reachable via the Docker network (port 3100 is not exposed to the host), so all queries go through `docker exec`.
 
 ```bash
-SSH="ssh -o StrictHostKeyChecking=no azureuser@backgammon.alanmanderson.com"
+SSH="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null azureuser@games.alanmanderson.com"
 ```
 
-The service endpoint on the VM is `http://localhost:3100`. All query endpoints require the API key:
+Get the API key from the production env file:
 
 ```bash
-API_KEY=$(${SSH} "grep LOG_SERVICE_API_KEY /opt/game-library/.env | cut -d= -f2")
-AUTH="Authorization: Bearer ${API_KEY}"
+API_KEY=$($SSH "grep LOG_SERVICE_API_KEY /opt/gamelibrary/infra/.env | cut -d= -f2")
+```
+
+All query commands use `docker exec` + `wget` (curl is not installed in the container). The SSH stderr warning must be filtered out when piping to JSON parsers:
+
+```bash
+QUERY() {
+  $SSH "docker exec infra-logservice-1 wget -qO- --header 'Authorization: Bearer ${API_KEY}' 'http://localhost:3100$1'" 2>&1 | grep -v "^Warning:"
+}
 ```
 
 ## Instructions
@@ -31,40 +38,39 @@ AUTH="Authorization: Bearer ${API_KEY}"
 
 Based on the user's request, query the appropriate endpoint:
 
+**Health check / overview:**
+```bash
+$SSH "docker exec infra-logservice-1 wget -qO- 'http://localhost:3100/api/health'" 2>&1 | grep -v "^Warning:"
+```
+
 **Get all open errors (default):**
 ```bash
-$SSH "curl -sf -H '${AUTH}' 'http://localhost:3100/api/errors?status=open&limit=20'"
+QUERY '/api/errors?status=open&limit=20'
 ```
 
 **Search by keyword:**
 ```bash
-$SSH "curl -sf -H '${AUTH}' 'http://localhost:3100/api/errors?q=SEARCH_TERM&limit=20'"
+QUERY '/api/errors?q=SEARCH_TERM&limit=20'
 ```
 
 **Filter by service:**
 ```bash
-$SSH "curl -sf -H '${AUTH}' 'http://localhost:3100/api/errors?service=backgammon&status=open'"
+QUERY '/api/errors?service=backgammon&status=open'
 ```
 
-**Errors from the last 24 hours:**
+**Query raw logs (warn and above):**
 ```bash
-SINCE=$(date -u -d '24 hours ago' '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date -u -v-24H '+%Y-%m-%dT%H:%M:%SZ')
-$SSH "curl -sf -H '${AUTH}' 'http://localhost:3100/api/errors?since=${SINCE}'"
+QUERY '/api/logs?limit=100&level=warn'
 ```
 
 **Get detailed error with recent occurrences:**
 ```bash
-$SSH "curl -sf -H '${AUTH}' 'http://localhost:3100/api/errors/ERROR_ID'"
+QUERY '/api/errors/ERROR_ID'
 ```
 
 **Get raw logs for an error fingerprint:**
 ```bash
-$SSH "curl -sf -H '${AUTH}' 'http://localhost:3100/api/logs?fingerprint=FINGERPRINT&limit=10'"
-```
-
-**Health check / overview:**
-```bash
-$SSH "curl -sf 'http://localhost:3100/api/health'"
+QUERY '/api/logs?fingerprint=FINGERPRINT&limit=10'
 ```
 
 ### Step 2: Present findings
@@ -118,28 +124,19 @@ ISSUE_EOF
 Then link the issue back to the error group:
 
 ```bash
-$SSH "curl -sf -X PATCH 'http://localhost:3100/api/errors/ERROR_ID' \
-  -H 'Content-Type: application/json' \
-  -H '${AUTH}' \
-  -d '{\"github_issue_url\": \"ISSUE_URL\"}'"
+$SSH "docker exec infra-logservice-1 wget -qO- --method PATCH --body-data '{\"github_issue_url\": \"ISSUE_URL\"}' --header 'Content-Type: application/json' --header 'Authorization: Bearer ${API_KEY}' 'http://localhost:3100/api/errors/ERROR_ID'" 2>&1 | grep -v "^Warning:"
 ```
 
 ### Step 4: Manage errors (on user request)
 
 **Resolve an error:**
 ```bash
-$SSH "curl -sf -X PATCH 'http://localhost:3100/api/errors/ERROR_ID' \
-  -H 'Content-Type: application/json' \
-  -H '${AUTH}' \
-  -d '{\"status\": \"resolved\"}'"
+$SSH "docker exec infra-logservice-1 wget -qO- --method PATCH --body-data '{\"status\": \"resolved\"}' --header 'Content-Type: application/json' --header 'Authorization: Bearer ${API_KEY}' 'http://localhost:3100/api/errors/ERROR_ID'" 2>&1 | grep -v "^Warning:"
 ```
 
 **Ignore an error:**
 ```bash
-$SSH "curl -sf -X PATCH 'http://localhost:3100/api/errors/ERROR_ID' \
-  -H 'Content-Type: application/json' \
-  -H '${AUTH}' \
-  -d '{\"status\": \"ignored\"}'"
+$SSH "docker exec infra-logservice-1 wget -qO- --method PATCH --body-data '{\"status\": \"ignored\"}' --header 'Content-Type: application/json' --header 'Authorization: Bearer ${API_KEY}' 'http://localhost:3100/api/errors/ERROR_ID'" 2>&1 | grep -v "^Warning:"
 ```
 
 ## Notes
@@ -148,3 +145,5 @@ $SSH "curl -sf -X PATCH 'http://localhost:3100/api/errors/ERROR_ID' \
 - The logging service uses SQLite; for large queries, use `limit` and `offset` params
 - Error groups with status `resolved` automatically reopen if the same error occurs again
 - The `fingerprint` field groups identical errors across occurrences
+- Port 3100 is only accessible within Docker network — always use `docker exec infra-logservice-1`
+- Filter `grep -v "^Warning:"` from SSH output before piping to JSON parsers

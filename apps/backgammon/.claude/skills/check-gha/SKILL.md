@@ -18,7 +18,7 @@ The repo is **private**, so the GitHub API requires authentication. Use the `gh`
 ### Step 1: Get workflow run status
 
 ```bash
-SSH="ssh -o StrictHostKeyChecking=no azureuser@backgammon.alanmanderson.com"
+SSH="ssh -o StrictHostKeyChecking=no azureuser@backgammon.games.alanmanderson.com"
 $SSH "gh run list --repo alanmanderson/backgammon --limit 5"
 ```
 

@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://backgammon.alanmanderson.com/sitemap.xml
+Sitemap: https://backgammon.games.alanmanderson.com/sitemap.xml

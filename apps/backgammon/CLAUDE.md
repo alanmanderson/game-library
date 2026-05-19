@@ -140,7 +140,7 @@ JWT in `localStorage['backgammon_token']`. Four providers: local (email/password
 
 ## Deployment
 
-Production domain: `backgammon.alanmanderson.com`. Run `deploy.sh` or use the `/deploy` skill. Builds frontend, Docker image for backend (includes ML model + PyTorch CPU), transfers to Azure VM via SSH, runs migrations, restarts services behind Caddy (auto-HTTPS). Docker build context is the repo root (`-f backend/Dockerfile .`) so the `ml/` directory is accessible during build.
+Production domain: `backgammon.games.alanmanderson.com`. Run `deploy.sh` or use the `/deploy` skill. Builds frontend, Docker image for backend (includes ML model + PyTorch CPU), transfers to Azure VM via SSH, runs migrations, restarts services behind Caddy (auto-HTTPS). Docker build context is the repo root (`-f backend/Dockerfile .`) so the `ml/` directory is accessible during build.
 
 ## Conventions
 

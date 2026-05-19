@@ -120,7 +120,7 @@ alembic revision --autogenerate -m "description"  # Create new migration
 - **Region**: Canada Central (`canadacentral`)
 - **VM**: `vm-pinochle` (Standard_B2s_v2, Ubuntu 24.04), IP: `20.151.4.179`
 - **Database**: PostgreSQL 16 Flexible Server (`psql-pinochle-vs`, private networking)
-- **Domain**: `pinochle.alanmanderson.com`
+- **Domain**: `pinochle.games.alanmanderson.com`
 - **SSH**: `ssh -i ~/.ssh/id_ed25519 azureuser@20.151.4.179`
 
 ### Deployment Architecture

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://lemonadestand.alanmanderson.com';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://lemonade.games.alanmanderson.com';
 
 test('main menu loads and new game works', async ({ page }) => {
   // Collect console errors

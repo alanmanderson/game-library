@@ -1,6 +1,6 @@
 # Deployment Guide: Telestrations on Azure
 
-**Target URL:** tele.alanmanderson.com
+**Target URL:** telestrations.games.alanmanderson.com
 **Stack:** Node.js 20, Express + Socket.IO, served from Azure App Service B1 (Linux)
 
 This guide covers everything from a fresh Azure account to a working deployment with a custom domain and SSL. Follow the sections in order the first time. After that, every push to `main` deploys automatically via GitHub Actions.
@@ -130,7 +130,7 @@ az webapp config appsettings set \
   --resource-group rg-telestrations \
   --settings \
     NODE_ENV=production \
-    ALLOWED_ORIGIN=https://tele.alanmanderson.com \
+    ALLOWED_ORIGIN=https://telestrations.games.alanmanderson.com \
     LOG_LEVEL=info
 ```
 
@@ -175,12 +175,12 @@ In your DNS provider for alanmanderson.com, add a CNAME record:
 |---|---|---|---|
 | CNAME | tele | telestrations-app.azurewebsites.net | 3600 |
 
-This routes `tele.alanmanderson.com` to your App Service. DNS propagation can take up to 48 hours but is usually done within 15 minutes.
+This routes `telestrations.games.alanmanderson.com` to your App Service. DNS propagation can take up to 48 hours but is usually done within 15 minutes.
 
 Verify propagation before proceeding:
 
 ```bash
-dig tele.alanmanderson.com CNAME +short
+dig telestrations.games.alanmanderson.com CNAME +short
 # Should return: telestrations-app.azurewebsites.net.
 ```
 
@@ -190,7 +190,7 @@ dig tele.alanmanderson.com CNAME +short
 az webapp config hostname add \
   --webapp-name telestrations-app \
   --resource-group rg-telestrations \
-  --hostname tele.alanmanderson.com
+  --hostname telestrations.games.alanmanderson.com
 ```
 
 If this returns a validation error, wait a few more minutes for DNS propagation and retry.
@@ -203,7 +203,7 @@ Azure provides free SSL certificates for custom domains on B1 and above.
 az webapp config ssl create \
   --name telestrations-app \
   --resource-group rg-telestrations \
-  --hostname tele.alanmanderson.com
+  --hostname telestrations.games.alanmanderson.com
 ```
 
 This creates and binds the certificate. It may take 2-5 minutes. Azure auto-renews it.
@@ -227,7 +227,7 @@ Once the custom domain is working, update the CORS setting if you set it to the 
 az webapp config appsettings set \
   --name telestrations-app \
   --resource-group rg-telestrations \
-  --settings ALLOWED_ORIGIN=https://tele.alanmanderson.com
+  --settings ALLOWED_ORIGIN=https://telestrations.games.alanmanderson.com
 ```
 
 ---
@@ -315,13 +315,13 @@ Once the deploy step shows green:
 
 ```bash
 # Hit the health endpoint
-curl https://tele.alanmanderson.com/api/health
+curl https://telestrations.games.alanmanderson.com/api/health
 
 # Should return:
 # {"status":"ok","uptime":...,"activeGames":0,"activePlayers":0,"memoryUsageMB":...}
 ```
 
-Open `https://tele.alanmanderson.com` in a browser. You should see the landing page with "Create Game" and "Join Game" buttons.
+Open `https://telestrations.games.alanmanderson.com` in a browser. You should see the landing page with "Create Game" and "Join Game" buttons.
 
 Test WebSocket connectivity by creating a game and checking that the lobby updates in real time when a second browser tab joins with the same game code.
 
@@ -498,7 +498,7 @@ az webapp config appsettings list \
   --query "[?name=='ALLOWED_ORIGIN']"
 ```
 
-If the value is `*` in production, Socket.IO connections may behave unexpectedly. Set it to the specific domain: `https://tele.alanmanderson.com`.
+If the value is `*` in production, Socket.IO connections may behave unexpectedly. Set it to the specific domain: `https://telestrations.games.alanmanderson.com`.
 
 **App restarts / game state lost unexpectedly**
 
@@ -506,12 +506,12 @@ Always On (section 2.5) prevents idle-triggered restarts. Azure may still restar
 
 **Custom domain shows "site not found" or certificate errors**
 
-- Confirm the CNAME record is set and propagated (`dig tele.alanmanderson.com CNAME +short`).
+- Confirm the CNAME record is set and propagated (`dig telestrations.games.alanmanderson.com CNAME +short`).
 - Confirm the hostname was added to Azure (section 3.2).
 - Confirm the SSL certificate was created and bound (section 3.3). Check the binding:
 
 ```bash
-az webapp config ssl list --resource-group rg-telestrations --query "[?name=='tele.alanmanderson.com']"
+az webapp config ssl list --resource-group rg-telestrations --query "[?name=='telestrations.games.alanmanderson.com']"
 ```
 
 **Rate limiting responses (429)**

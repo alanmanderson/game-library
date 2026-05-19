@@ -255,6 +255,11 @@ def parse_hint(text: str) -> list[ParsedCandidate]:
             block_starts.append(i)
 
     if not block_starts:
+        # "There are no legal moves." is a valid gnubg response when the
+        # player is completely blocked (e.g. all checkers on bar with no
+        # open points). Return an empty list rather than crashing.
+        if "no legal move" in text.lower() or "there are no" in text.lower():
+            return []
         raise ParseError(f"no candidate moves found in hint output:\n{text}")
 
     block_starts.append(len(lines))
@@ -283,8 +288,15 @@ def parse_hint(text: str) -> list[ParsedCandidate]:
     return candidates
 
 
-def parse_cube(text: str) -> ParsedCube:
-    """Parse ``cube`` / cube-decision output."""
+def parse_cube(text: str) -> Optional[ParsedCube]:
+    """Parse ``cube`` / cube-decision output, or return ``None`` if unavailable.
+
+    gnubg rejects the ``cube`` command with "Unknown keyword" when the
+    game state doesn't allow a cube decision. Return ``None`` so the
+    caller can surface a clean 4xx rather than a 500.
+    """
+    if "unknown keyword" in text.lower():
+        return None
     m_nd = _CUBE_NO_DOUBLE.search(text)
     m_dt = _CUBE_DOUBLE_TAKE.search(text)
     m_dp = _CUBE_DOUBLE_PASS.search(text)

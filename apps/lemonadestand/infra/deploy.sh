@@ -62,7 +62,7 @@ az webapp config appsettings set \
 az webapp cors add \
   --name "$BACKEND_APP" \
   --resource-group "$RESOURCE_GROUP" \
-  --allowed-origins "https://lemonadestand.alanmanderson.com" "https://app-lemonadestand-web.azurewebsites.net" "http://localhost:5173" \
+  --allowed-origins "https://lemonade.games.alanmanderson.com" "https://app-lemonadestand-web.azurewebsites.net" "http://localhost:5173" \
   --output none
 
 # Create Static Web App for Frontend
@@ -97,7 +97,7 @@ az webapp deploy \
 echo ""
 echo "=== Building Frontend ==="
 cd /app/frontend
-VITE_API_URL="https://api.lemonadestand.alanmanderson.com" npm run build
+VITE_API_URL="https://lemonade.games.alanmanderson.com" npm run build
 
 echo ""
 echo "=== Deploying Frontend ==="
@@ -169,17 +169,17 @@ PKGEOF
     FRONTEND_URL="https://${FRONTEND_APP}-web.azurewebsites.net"
   }
 
-BACKEND_URL="https://api.lemonadestand.alanmanderson.com"
-FRONTEND_URL="${FRONTEND_URL:-https://lemonadestand.alanmanderson.com}"
+BACKEND_URL="https://lemonade.games.alanmanderson.com"
+FRONTEND_URL="${FRONTEND_URL:-https://lemonade.games.alanmanderson.com}"
 
 echo ""
 echo "=== Deployment Complete ==="
 echo "Backend URL:  $BACKEND_URL"
 echo "Frontend URL: $FRONTEND_URL"
 echo ""
-echo "To configure custom domain (lemonadestand.alanmanderson.com):"
+echo "To configure custom domain (lemonade.games.alanmanderson.com):"
 echo "  1. Add CNAME record pointing to: ${FRONTEND_APP}.azurestaticapps.net"
-echo "  2. Run: az staticwebapp hostname set --name $FRONTEND_APP --hostname lemonadestand.alanmanderson.com"
+echo "  2. Run: az staticwebapp hostname set --name $FRONTEND_APP --hostname lemonade.games.alanmanderson.com"
 echo ""
 echo "API Health Check:"
 curl -s "$BACKEND_URL/api/game" || echo "(Backend may take a minute to start)"

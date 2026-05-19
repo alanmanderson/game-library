@@ -1,6 +1,6 @@
 import { test } from '@playwright/test';
 
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://lemonadestand.alanmanderson.com';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://lemonade.games.alanmanderson.com';
 
 test('create new game and check API', async ({ page }) => {
   page.on('pageerror', err => {
