@@ -306,7 +306,7 @@ class TestWebSocketConnection:
                 pass
 
     def test_connect_to_waiting_table(self, ws_test_env):
-        """Connection to a waiting table (no game started) sends a 'waiting' message."""
+        """Connection to a waiting table sends initial board state with 'waiting' status."""
         client = ws_test_env["client"]
         sf = ws_test_env["session_factory"]
         player = _run_async(_create_player(sf))
@@ -323,9 +323,10 @@ class TestWebSocketConnection:
             f"/ws/{tid}/{player.id}?token={token}"
         ) as ws:
             msg = ws.receive_json()
-            assert msg["type"] == "waiting"
-            assert msg["data"]["table_id"] == tid
-            assert msg["data"]["status"] == "waiting"
+            assert msg["type"] == "game_state"
+            assert msg["data"]["game_state"]["status"] == "waiting"
+            assert msg["data"]["your_color"] in ("white", "black")
+            assert msg["data"]["table"]["id"] == tid
 
     def test_connect_to_active_game(self, ws_test_env):
         """Connection to an active game sends initial game_state."""
@@ -429,13 +430,15 @@ class TestWebSocketConnection:
         assert resp.status_code == 200
         tid = resp.json()["id"]
 
-        # Creator connects to the waiting table
+        # Creator connects to the waiting table — gets initial board state
         with client.websocket_connect(
             f"/ws/{tid}/{creator.id}?token={token}"
         ) as ws:
             msg = ws.receive_json()
-            assert msg["type"] == "waiting"
-            assert msg["data"]["status"] == "waiting"
+            assert msg["type"] == "game_state"
+            assert msg["data"]["game_state"]["status"] == "waiting"
+            assert msg["data"]["your_color"] in ("white", "black")
+            assert msg["data"]["table"]["id"] == tid
 
     def test_non_participant_rejected_on_waiting_table(self, ws_test_env):
         """A random player cannot connect to someone else's waiting table."""

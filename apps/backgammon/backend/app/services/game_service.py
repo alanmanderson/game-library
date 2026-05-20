@@ -355,7 +355,7 @@ class GameManager:
         Returns the restored engine, or None if restoration is not possible.
         """
         table = await db.get(Table, table_id)
-        if table is None or table.status not in ("playing", "game_over") or table.game_state is None:
+        if table is None or table.status not in ("playing", "game_over", "finished") or table.game_state is None:
             return None
 
         snap = table.game_state

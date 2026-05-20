@@ -10,7 +10,7 @@ import Dice from "./Dice";
 import GameControls from "./GameControls";
 import GameInfo from "./GameInfo";
 import GameOverBanner from "./GameOverBanner";
-import WaitingState from "./WaitingState";
+import WaitingOverlay from "./WaitingOverlay";
 import PlayerInfoRow from "./PlayerInfoRow";
 import ConnectionBanners from "./ConnectionBanners";
 import ShortcutHelpModal from "./ShortcutHelpModal";
@@ -303,11 +303,12 @@ function Game() {
 
   if (!gameState || !myColor || !table) {
     return (
-      <WaitingState
-        tableId={tableId}
-        isConnected={isConnected}
-        waitingForOpponent={waitingForOpponent}
-      />
+      <div className="game-page">
+        <div className="game-loading">
+          <div className="spinner" />
+          <p>{isConnected ? "Loading game..." : "Connecting..."}</p>
+        </div>
+      </div>
     );
   }
 
@@ -390,6 +391,9 @@ function Game() {
               <Dice dice={gameState.dice} remainingDice={gameState.remaining_dice} currentTurn={diceColor} openingRoll={gameState.opening_roll} diceOrder={isMyTurn && isMovingPhase ? diceOrder : undefined} onSwap={isMyTurn && isMovingPhase ? swapDice : undefined} />
               <GameControls gameState={gameState} myColor={myColor} opponentName={opponentName} onRollDice={actions.rollDice} onEndTurn={actions.endTurn} onUndoTurn={actions.undoTurn} onOfferDouble={actions.offerDouble} onAcceptDouble={actions.acceptDouble} onDeclineDouble={actions.declineDouble} onRequestHint={actions.requestHint} onAcceptResign={actions.acceptResign} onRejectResign={actions.rejectResign} hintsRemaining={hintsRemaining} hintsEnabled={hintsEnabled} />
             </div>
+            {gameState.status === "waiting" && (
+              <WaitingOverlay tableId={tableId!} />
+            )}
             {(gameState.status === "finished" || table.status === "game_over") && (
               <GameOverBanner gameState={gameState} table={table} tableId={tableId!} myColor={myColor} myName={myName} opponentName={opponentName} myScore={myScore} opponentScore={opponentScore} onNextGame={actions.nextGame} />
             )}

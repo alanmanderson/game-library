@@ -469,13 +469,49 @@ async def websocket_endpoint(websocket: WebSocket, table_id: str, player_id: str
             if is_bot_game(table_id):
                 schedule_bot_turn_if_needed(table_id)
         else:
-            # Game not started yet or already finished -- send table status
+            # No engine — send initial board for "waiting" tables so the
+            # game screen renders immediately instead of a loading page.
             async with async_session() as db:
                 table = await db.get(Table, table_id)
-                await websocket.send_json({
-                    "type": "waiting",
-                    "data": {"table_id": table_id, "status": table.status if table else "unknown"},
-                })
+                if table and table.status == "waiting":
+                    color = "white" if table.white_player_id == player_id else "black"
+                    white_player = await db.get(Player, table.white_player_id) if table.white_player_id else None
+                    black_player = await db.get(Player, table.black_player_id) if table.black_player_id else None
+                    table_data = {
+                        "id": table.id, "status": table.status,
+                        "white_player": {"id": white_player.id, "nickname": white_player.nickname, "created_at": str(white_player.created_at), "rating": white_player.rating, "rating_games": white_player.rating_games} if white_player else None,
+                        "black_player": {"id": black_player.id, "nickname": black_player.nickname, "created_at": str(black_player.created_at), "rating": black_player.rating, "rating_games": black_player.rating_games} if black_player else None,
+                        "created_at": str(table.created_at), "match_points": table.match_points,
+                        "white_match_score": table.white_match_score, "black_match_score": table.black_match_score,
+                        "bot_difficulty": table.bot_difficulty, "time_control": table.time_control,
+                        "white_time_remaining_ms": table.white_time_remaining_ms,
+                        "black_time_remaining_ms": table.black_time_remaining_ms,
+                        "spectator_count": 0,
+                    }
+                    # Standard starting position
+                    initial_state = {
+                        "points": [0, -2, 0, 0, 0, 0, 5, 0, 3, 0, 0, 0, -5, 5, 0, 0, 0, -3, 0, -5, 0, 0, 0, 0, 2, 0],
+                        "bar_white": 0, "bar_black": 0, "off_white": 0, "off_black": 0,
+                        "current_turn": "white", "dice": None, "remaining_dice": [],
+                        "status": "waiting", "valid_moves": [], "winner": None, "win_type": None,
+                        "opening_roll": None, "turn_moves_count": 0, "can_undo": False,
+                        "cube_value": 1, "cube_owner": None, "double_offered": False,
+                        "double_offered_by": None, "can_double": False, "is_crawford_game": False,
+                        "resign_offered": False, "resign_offered_by": None, "resign_type": None,
+                        "pip_white": 167, "pip_black": 167,
+                        "time_control": table.time_control or "unlimited",
+                        "white_time_remaining_ms": table.white_time_remaining_ms,
+                        "black_time_remaining_ms": table.black_time_remaining_ms,
+                    }
+                    await websocket.send_json({
+                        "type": "game_state",
+                        "data": {"game_state": initial_state, "your_color": color, "table": table_data},
+                    })
+                else:
+                    await websocket.send_json({
+                        "type": "waiting",
+                        "data": {"table_id": table_id, "status": table.status if table else "unknown"},
+                    })
 
         # Start a background ping task to detect stale connections
         ping_task = asyncio.create_task(_ping_loop(websocket))
