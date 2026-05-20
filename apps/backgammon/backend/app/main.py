@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 try:
     from pythonjsonlogger.json import JsonFormatter as _JsonFormatter
 except ImportError:
@@ -199,4 +199,16 @@ _frontend_dist = os.path.join(
 )
 
 if os.path.isdir(_frontend_dist):
-    app.mount("/", StaticFiles(directory=_frontend_dist, html=True), name="frontend")
+    _frontend_dist_resolved = os.path.realpath(_frontend_dist)
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        """Serve static files if they exist, otherwise fall back to index.html for SPA routing."""
+        if full_path:
+            file_path = os.path.realpath(os.path.join(_frontend_dist, full_path))
+            if (
+                file_path.startswith(_frontend_dist_resolved + os.sep)
+                and os.path.isfile(file_path)
+            ):
+                return FileResponse(file_path)
+        return FileResponse(os.path.join(_frontend_dist, "index.html"))
