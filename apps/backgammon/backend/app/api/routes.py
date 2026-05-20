@@ -822,8 +822,13 @@ async def get_game_analysis(
         )
 
     # --- Count total moves (for display) up front ---
+    # Exclude the game-ending result record (empty dice_roll) from the count
+    # so that total_moves reflects only actual analysable moves.
     total_result = await db.execute(
-        select(func.count(MoveRecord.id)).where(MoveRecord.table_id == table_id)
+        select(func.count(MoveRecord.id)).where(
+            MoveRecord.table_id == table_id,
+            MoveRecord.dice_roll != "",
+        )
     )
     total_moves = int(total_result.scalar() or 0)
 
