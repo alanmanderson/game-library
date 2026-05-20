@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import express from 'express';
 import cors from 'cors';
 import type { Request, Response } from 'express';
@@ -208,6 +209,12 @@ export function createApp(): express.Application {
   return app;
 }
 
+// Constant-time string comparison to prevent timing attacks on API key checks.
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
+
 // Middleware: require API key for read endpoints (ingest is open for frontends)
 function requireApiKey(req: Request, res: Response, next: () => void): void {
   if (!API_KEY) {
@@ -216,13 +223,12 @@ function requireApiKey(req: Request, res: Response, next: () => void): void {
   }
 
   const authHeader = req.headers.authorization;
-  if (authHeader === `Bearer ${API_KEY}`) {
-    next();
-    return;
-  }
-
-  // Also allow query param for simple curl usage
-  if (req.query.key === API_KEY) {
+  const prefix = 'Bearer ';
+  if (
+    authHeader &&
+    authHeader.startsWith(prefix) &&
+    timingSafeEqual(authHeader.slice(prefix.length), API_KEY)
+  ) {
     next();
     return;
   }
