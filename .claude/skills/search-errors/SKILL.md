@@ -124,19 +124,45 @@ ISSUE_EOF
 Then link the issue back to the error group:
 
 ```bash
-$SSH "docker exec infra-logservice-1 wget -qO- --method PATCH --body-data '{\"github_issue_url\": \"ISSUE_URL\"}' --header 'Content-Type: application/json' --header 'Authorization: Bearer ${API_KEY}' 'http://localhost:3100/api/errors/ERROR_ID'" 2>&1 | grep -v "^Warning:"
+$SSH "docker exec infra-logservice-1 node -e \"
+  const http = require('http');
+  const req = http.request('http://localhost:3100/api/errors/ERROR_ID', {
+    method: 'PATCH',
+    headers: {'Content-Type':'application/json','Authorization':'Bearer ${API_KEY}'}
+  }, res => { let d=''; res.on('data',c=>d+=c); res.on('end',()=>console.log(d)); });
+  req.write(JSON.stringify({github_issue_url:'ISSUE_URL'}));
+  req.end();
+\"" 2>&1 | grep -v "^Warning:"
 ```
 
 ### Step 4: Manage errors (on user request)
 
+The logservice container uses BusyBox wget which doesn't support PATCH. Use node instead:
+
 **Resolve an error:**
 ```bash
-$SSH "docker exec infra-logservice-1 wget -qO- --method PATCH --body-data '{\"status\": \"resolved\"}' --header 'Content-Type: application/json' --header 'Authorization: Bearer ${API_KEY}' 'http://localhost:3100/api/errors/ERROR_ID'" 2>&1 | grep -v "^Warning:"
+$SSH "docker exec infra-logservice-1 node -e \"
+  const http = require('http');
+  const req = http.request('http://localhost:3100/api/errors/ERROR_ID', {
+    method: 'PATCH',
+    headers: {'Content-Type':'application/json','Authorization':'Bearer ${API_KEY}'}
+  }, res => { let d=''; res.on('data',c=>d+=c); res.on('end',()=>console.log(d)); });
+  req.write(JSON.stringify({status:'resolved'}));
+  req.end();
+\"" 2>&1 | grep -v "^Warning:"
 ```
 
 **Ignore an error:**
 ```bash
-$SSH "docker exec infra-logservice-1 wget -qO- --method PATCH --body-data '{\"status\": \"ignored\"}' --header 'Content-Type: application/json' --header 'Authorization: Bearer ${API_KEY}' 'http://localhost:3100/api/errors/ERROR_ID'" 2>&1 | grep -v "^Warning:"
+$SSH "docker exec infra-logservice-1 node -e \"
+  const http = require('http');
+  const req = http.request('http://localhost:3100/api/errors/ERROR_ID', {
+    method: 'PATCH',
+    headers: {'Content-Type':'application/json','Authorization':'Bearer ${API_KEY}'}
+  }, res => { let d=''; res.on('data',c=>d+=c); res.on('end',()=>console.log(d)); });
+  req.write(JSON.stringify({status:'ignored'}));
+  req.end();
+\"" 2>&1 | grep -v "^Warning:"
 ```
 
 ## Notes
