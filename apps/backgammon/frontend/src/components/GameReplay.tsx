@@ -47,41 +47,67 @@ function readStoredPlayerId(): string | null {
 /**
  * Display label for each move-quality level.
  *
- * Covers both the ML-native labels (`best`, `good`, `inaccuracy`, `mistake`,
- * `blunder`) and the GNU Backgammon native labels (`very_good`, `doubtful`,
- * `bad`, `very_bad`).
+ * Uses a 5-tier system: Best, Good, Doubtful, Mistake, Blunder.
+ * The old "inaccuracy" label maps to "Doubtful"; gnubg-native labels
+ * (`very_good`, `bad`, `very_bad`) map to the closest tier.
  */
 const QUALITY_LABEL: Record<MoveQuality, string> = {
   best: "Best",
   good: "Good",
-  inaccuracy: "Inaccuracy",
+  inaccuracy: "Doubtful",
   mistake: "Mistake",
   blunder: "Blunder",
-  very_good: "Very good",
+  very_good: "Best",
   doubtful: "Doubtful",
-  bad: "Bad",
-  very_bad: "Very bad",
+  bad: "Mistake",
+  very_bad: "Blunder",
 };
 
 /**
- * Map every quality label to an existing CSS colour class.
- *
- * gnubg-native labels reuse the closest matching ML colour: `very_good` → best,
- * `doubtful` → inaccuracy, `bad` → mistake, `very_bad` → blunder. This keeps
- * the palette tight and avoids inventing new colours for conceptually similar
- * buckets.
+ * Map every quality label to a CSS colour class matching the 5-tier system:
+ * best (gold), good (green), doubtful (amber), mistake (orange), blunder (red).
  */
 const QUALITY_CSS_CLASS: Record<MoveQuality, string> = {
   best: "best",
   good: "good",
-  inaccuracy: "inaccuracy",
+  inaccuracy: "doubtful",
   mistake: "mistake",
   blunder: "blunder",
   very_good: "best",
-  doubtful: "inaccuracy",
+  doubtful: "doubtful",
   bad: "mistake",
   very_bad: "blunder",
 };
+
+/** Classify a candidate move's quality based on its equity delta from best. */
+function classifyDelta(delta: number): string {
+  const d = Math.abs(delta);
+  if (d < 0.005) return "best";
+  if (d < 0.040) return "good";
+  if (d < 0.080) return "doubtful";
+  if (d < 0.160) return "mistake";
+  return "blunder";
+}
+
+/** CSS class for the equity delta text colour. */
+function deltaClass(delta: number): string {
+  const d = Math.abs(delta);
+  if (d < 0.040) return "";
+  if (d < 0.080) return "warn";
+  if (d < 0.160) return "bad";
+  return "blunder";
+}
+
+/** Format equity with sign prefix. */
+function formatEq(e: number): string {
+  return (e >= 0 ? "+" : "") + e.toFixed(3);
+}
+
+/** Format delta: 0 → "best", otherwise signed number. */
+function formatDelta(d: number): string {
+  if (Math.abs(d) < 0.001) return "best";
+  return (d > 0 ? "+" : "") + d.toFixed(3);
+}
 
 /** Format a 0..1 probability as a percentage with one decimal place. */
 function formatPct(p: number | null | undefined): string | null {
@@ -845,6 +871,7 @@ function GameReplay() {
           moveArrows={displayMoveArrows}
           bestMoveArrows={displayBestMoveArrows}
           arrowsMoverColor={movedByColor as "white" | "black"}
+          labelPerspective={currentMove ? (movedByColor as "white" | "black") : viewColor}
         />
         {replayDice && (
           <div className="replay-dice-overlay">
