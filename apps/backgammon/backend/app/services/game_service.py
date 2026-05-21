@@ -109,6 +109,8 @@ class GameManager:
         self._crawford_used: dict[str, bool] = {}  # table_id -> whether Crawford game has been used
         # In-memory time tracking: table_id -> {time_control, white_time_ms, black_time_ms, turn_started_at}
         self._time_state: dict[str, dict] = {}
+        # Pass-and-play: table_id -> host player_id (the authenticated user who controls both sides)
+        self._pass_and_play_hosts: dict[str, str] = {}
 
     @property
     def engines(self) -> dict:
@@ -334,6 +336,73 @@ class GameManager:
         await db.flush()
         return table
 
+    async def create_pass_and_play_table(
+        self,
+        db: AsyncSession,
+        host_player_id: str,
+        player2_name: str,
+        preferred_color: Optional[str] = None,
+        match_points: int = 5,
+        doubling_cube: bool = True,
+        crawford_rule: bool = True,
+    ) -> "Table":
+        """Create a pass-and-play table with both players auto-joined.
+
+        The host (authenticated user) controls both sides from one device.
+        A guest Player record is created for the second seat.  The game
+        starts immediately -- no waiting state.
+        """
+        # Create a guest player for P2
+        p2 = Player(
+            nickname=player2_name,
+            is_guest=True,
+            auth_provider="guest",
+        )
+        db.add(p2)
+        await db.flush()
+
+        table_id = self.generate_table_id()
+
+        # Assign colours based on host preference
+        if preferred_color == "black":
+            white_id, black_id = p2.id, host_player_id
+        else:
+            # Default (None or "white"): host plays white
+            white_id, black_id = host_player_id, p2.id
+
+        table = Table(
+            id=table_id,
+            white_player_id=white_id,
+            black_player_id=black_id,
+            status="playing",
+            match_points=match_points,
+            is_public=False,
+            time_control="unlimited",
+            is_ranked=False,
+            game_mode="pass_and_play",
+        )
+        db.add(table)
+        await db.flush()
+
+        # Create and start engine
+        engine = BackgammonEngine()
+        engine.start_game()
+
+        self._engines[table_id] = engine
+        self._player_colors[table_id] = {
+            white_id: Color.WHITE,
+            black_id: Color.BLACK,
+        }
+        self._pass_and_play_hosts[table_id] = host_player_id
+
+        # No time tracking needed for pass-and-play
+        self.init_time_state(table_id, "unlimited", None, None)
+
+        # Persist initial game state
+        table.game_state = engine.get_state_snapshot()
+        await db.flush()
+        return table
+
     # ------------------------------------------------------------------
     # Engine access
     # ------------------------------------------------------------------
@@ -346,6 +415,14 @@ class GameManager:
         """Return the Color assigned to a player at a table, or None."""
         colors = self._player_colors.get(table_id, {})
         return colors.get(player_id)
+
+    def is_pass_and_play(self, table_id: str) -> bool:
+        """Check if a table is a pass-and-play game."""
+        return table_id in self._pass_and_play_hosts
+
+    def get_pp_host(self, table_id: str) -> Optional[str]:
+        """Get the host player ID for a pass-and-play table."""
+        return self._pass_and_play_hosts.get(table_id)
 
     async def restore_engine(self, table_id: str, db: AsyncSession) -> Optional[BackgammonEngine]:
         """Restore an engine from the database game_state JSON snapshot.
@@ -451,6 +528,19 @@ class GameManager:
             if ts and table.turn_started_at:
                 ts["turn_started_at"] = table.turn_started_at
 
+        # Restore pass-and-play host mapping. The host is the non-guest
+        # player; the guest was created as a placeholder for the second seat.
+        if table.game_mode == "pass_and_play":
+            white_player = await db.get(Player, table.white_player_id) if table.white_player_id else None
+            black_player = await db.get(Player, table.black_player_id) if table.black_player_id else None
+            host_id = None
+            if white_player and not white_player.is_guest:
+                host_id = white_player.id
+            elif black_player and not black_player.is_guest:
+                host_id = black_player.id
+            if host_id:
+                self._pass_and_play_hosts[table_id] = host_id
+
         logger.info("Restored engine for table %s from database", table_id)
         return engine
 
@@ -518,17 +608,24 @@ class GameManager:
 
         Only the current player whose turn it is to move will see their
         valid_moves populated; the opponent sees an empty list.
+
+        In pass-and-play mode, the host always sees valid_moves regardless
+        of which colour's turn it is, since they control both sides.
         """
         engine = self._engines[table_id]
         snapshot = engine.get_state_snapshot()
         color = self.get_player_color(table_id, player_id)
 
-        valid_moves: list[dict] = []
-        if (
-            color
+        # In pass-and-play mode the host controls both sides
+        is_current_turn = (
+            color is not None
             and engine.state.current_turn == color
-            and engine.state.status == GameStatus.MOVING
-        ):
+        )
+        if self.is_pass_and_play(table_id) and player_id == self.get_pp_host(table_id):
+            is_current_turn = True
+
+        valid_moves: list[dict] = []
+        if is_current_turn and engine.state.status == GameStatus.MOVING:
             valid_moves = [
                 {
                     "from_point": m.from_point,
@@ -539,7 +636,11 @@ class GameManager:
             ]
 
         snapshot["valid_moves"] = valid_moves
-        snapshot["can_double"] = engine.can_double(color) if color else False
+        # In pass-and-play mode, report can_double for the current turn's colour
+        if self.is_pass_and_play(table_id) and player_id == self.get_pp_host(table_id):
+            snapshot["can_double"] = engine.can_double(engine.state.current_turn)
+        else:
+            snapshot["can_double"] = engine.can_double(color) if color else False
 
         # Include time control info
         white_time_ms, black_time_ms = self.get_time_remaining(table_id)
@@ -580,7 +681,10 @@ class GameManager:
             raise ValueError("Game not found")
 
         color = self.get_player_color(table_id, player_id)
-        if not color or engine.state.current_turn != color:
+        # In pass-and-play mode, the host controls both sides
+        if self.is_pass_and_play(table_id) and player_id == self.get_pp_host(table_id):
+            color = engine.state.current_turn
+        elif not color or engine.state.current_turn != color:
             raise ValueError("Not your turn")
         if engine.state.status != GameStatus.ROLLING:
             raise ValueError("Cannot roll now")
@@ -618,7 +722,10 @@ class GameManager:
             raise ValueError("Game not found")
 
         color = self.get_player_color(table_id, player_id)
-        if not color or engine.state.current_turn != color:
+        # In pass-and-play mode, the host controls both sides
+        if self.is_pass_and_play(table_id) and player_id == self.get_pp_host(table_id):
+            color = engine.state.current_turn
+        elif not color or engine.state.current_turn != color:
             raise ValueError("Not your turn")
 
         # Find the matching valid move (which includes is_hit info from the engine)
@@ -675,7 +782,10 @@ class GameManager:
             raise ValueError("Game not found")
 
         color = self.get_player_color(table_id, player_id)
-        if not color or engine.state.current_turn != color:
+        # In pass-and-play mode, the host controls both sides
+        if self.is_pass_and_play(table_id) and player_id == self.get_pp_host(table_id):
+            color = engine.state.current_turn
+        elif not color or engine.state.current_turn != color:
             raise ValueError("Not your turn")
 
         success = engine.end_turn()
@@ -701,7 +811,10 @@ class GameManager:
         if not engine:
             raise ValueError("Game not found")
         color = self.get_player_color(table_id, player_id)
-        if not color:
+        # In pass-and-play mode, the host controls both sides
+        if self.is_pass_and_play(table_id) and player_id == self.get_pp_host(table_id):
+            color = engine.state.current_turn
+        elif not color:
             raise ValueError("Not a player at this table")
         # Snapshot cube value + evaluate equity BEFORE the engine mutates.
         cube_value_before = engine.state.cube_value
@@ -726,7 +839,11 @@ class GameManager:
         if not engine:
             raise ValueError("Game not found")
         color = self.get_player_color(table_id, player_id)
-        if not color:
+        # In pass-and-play mode, the host responds as the opponent of whoever offered
+        if self.is_pass_and_play(table_id) and player_id == self.get_pp_host(table_id):
+            offered_by = engine.state.double_offered_by
+            color = Color.BLACK if offered_by == Color.WHITE else Color.WHITE
+        elif not color:
             raise ValueError("Not a player at this table")
         # Pre-action snapshot: cube value is the value BEFORE it doubles
         # (i.e. what the taker is considering taking from).
@@ -749,7 +866,11 @@ class GameManager:
         if not engine:
             raise ValueError("Game not found")
         color = self.get_player_color(table_id, player_id)
-        if not color:
+        # In pass-and-play mode, the host responds as the opponent of whoever offered
+        if self.is_pass_and_play(table_id) and player_id == self.get_pp_host(table_id):
+            offered_by = engine.state.double_offered_by
+            color = Color.BLACK if offered_by == Color.WHITE else Color.WHITE
+        elif not color:
             raise ValueError("Not a player at this table")
         cube_value_before = engine.state.cube_value
         # Evaluate equity BEFORE _finish_game mutates engine state.
@@ -800,7 +921,10 @@ class GameManager:
             raise ValueError("Game not found")
 
         color = self.get_player_color(table_id, player_id)
-        if not color:
+        # In pass-and-play mode, the host controls both sides
+        if self.is_pass_and_play(table_id) and player_id == self.get_pp_host(table_id):
+            color = engine.state.current_turn
+        elif not color:
             raise ValueError("Not a player at this table")
 
         type_map = {"normal": WinType.NORMAL, "gammon": WinType.GAMMON, "backgammon": WinType.BACKGAMMON}
@@ -818,7 +942,11 @@ class GameManager:
             raise ValueError("Game not found")
 
         color = self.get_player_color(table_id, player_id)
-        if not color:
+        # In pass-and-play mode, the host responds as the opponent of whoever offered
+        if self.is_pass_and_play(table_id) and player_id == self.get_pp_host(table_id):
+            offered_by = engine.state.resign_offered_by
+            color = Color.BLACK if offered_by == Color.WHITE else Color.WHITE
+        elif not color:
             raise ValueError("Not a player at this table")
 
         success, winner = engine.accept_resign(color)
@@ -841,7 +969,11 @@ class GameManager:
             raise ValueError("Game not found")
 
         color = self.get_player_color(table_id, player_id)
-        if not color:
+        # In pass-and-play mode, the host responds as the opponent of whoever offered
+        if self.is_pass_and_play(table_id) and player_id == self.get_pp_host(table_id):
+            offered_by = engine.state.resign_offered_by
+            color = Color.BLACK if offered_by == Color.WHITE else Color.WHITE
+        elif not color:
             raise ValueError("Not a player at this table")
 
         if not engine.reject_resign(color):
@@ -854,7 +986,10 @@ class GameManager:
             raise ValueError("Game not found")
 
         color = self.get_player_color(table_id, player_id)
-        if not color or engine.state.current_turn != color:
+        # In pass-and-play mode, the host controls both sides
+        if self.is_pass_and_play(table_id) and player_id == self.get_pp_host(table_id):
+            color = engine.state.current_turn
+        elif not color or engine.state.current_turn != color:
             raise ValueError("Not your turn")
 
         success = engine.undo_turn()
@@ -1000,6 +1135,17 @@ class GameManager:
         latest = engine.state.moves_history[-1]
         color, dice, moves = latest
 
+        # In pass-and-play mode, resolve the actual player_id from the color
+        # that just moved (the host always passes their own ID, but the
+        # move record should attribute the move to the correct seat).
+        record_player_id = player_id
+        if self.is_pass_and_play(table_id):
+            colors = self._player_colors.get(table_id, {})
+            for pid, c in colors.items():
+                if c == color:
+                    record_player_id = pid
+                    break
+
         # Count existing move records for this table to determine move_number
         result = await db.execute(
             select(func.count(MoveRecord.id)).where(MoveRecord.table_id == table_id)
@@ -1009,11 +1155,11 @@ class GameManager:
         notation = moves_to_notation(moves, color)
 
         from app.services.bot_service import is_bot_player, get_bot_strategy
-        strategy = get_bot_strategy(table_id) if is_bot_player(player_id) else None
+        strategy = get_bot_strategy(table_id) if is_bot_player(record_player_id) else None
 
         record = MoveRecord(
             table_id=table_id,
-            player_id=player_id,
+            player_id=record_player_id,
             move_number=existing_count + 1,
             dice_roll=f"{dice.die1}-{dice.die2}",
             moves_notation=notation,
@@ -1233,6 +1379,7 @@ class GameManager:
         self._locks.pop(table_id, None)
         self._crawford_used.pop(table_id, None)
         self._time_state.pop(table_id, None)
+        self._pass_and_play_hosts.pop(table_id, None)
 
     async def cleanup_stale_engines(self, db: AsyncSession) -> int:
         """Remove in-memory engines for games that are finished or abandoned.
@@ -1273,6 +1420,7 @@ class GameManager:
                 self._locks.pop(table_id, None)
                 self._crawford_used.pop(table_id, None)
                 self._time_state.pop(table_id, None)
+                self._pass_and_play_hosts.pop(table_id, None)
                 cleaned += 1
                 logger.info("Cleaned up stale engine for table %s", table_id)
 

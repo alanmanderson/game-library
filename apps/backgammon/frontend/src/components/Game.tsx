@@ -242,6 +242,7 @@ function Game() {
   }, []);
   const isTimed = timeControl !== "unlimited" && whiteTimeMs != null;
   const isBotGame = !!(table && (table.white_player?.id === BOT_PLAYER_ID || table.black_player?.id === BOT_PLAYER_ID));
+  const ppShouldFlip = isPassAndPlay && gameState?.current_turn !== myColor;
   const myScore = table && myColor ? (myColor === "white" ? table.white_match_score : table.black_match_score) : 0;
   const opponentScore = table && myColor ? (myColor === "white" ? table.black_match_score : table.white_match_score) : 0;
   const myPips = myColor === "white" ? pipCounts.white : pipCounts.black;
@@ -267,6 +268,12 @@ function Game() {
       copiedTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
     }
   }, [tableId]);
+  const currentTurnPlayerName = useMemo(() => {
+    if (!gameState || !table) return "";
+    if (gameState.current_turn === myColor) return myName;
+    return opponentName;
+  }, [gameState, table, myColor, myName, opponentName]);
+
   const statusMessage = useMemo(() => {
     if (!gameState) return null;
     if (gameState.status === "waiting") return "Share the table ID with a friend so they can join.";
@@ -279,6 +286,21 @@ function Game() {
       if (gameState.double_offered_by === myColor) return `Waiting for ${opponentName} to respond to your double...`;
       return `${opponentName} offers to double to ${gameState.cube_value * 2}. Accept or decline?`;
     }
+
+    // Pass & Play mode: use player names instead of "your turn"
+    if (isPassAndPlay) {
+      if (gameState.status === "rolling") {
+        return `${currentTurnPlayerName}'s turn \u2014 roll the dice`;
+      }
+      if (gameState.status === "moving") {
+        if (gameState.valid_moves.length === 0 && gameState.turn_moves_count > 0) return `${currentTurnPlayerName}: no more valid moves. Confirm your turn.`;
+        if (gameState.valid_moves.length === 0) return `${currentTurnPlayerName}: no valid moves available.`;
+        if (gameState.remaining_dice.length === 0) return `${currentTurnPlayerName}: all dice used. Confirm your turn.`;
+        return `${currentTurnPlayerName}'s turn \u2014 click a checker to move it.`;
+      }
+      return null;
+    }
+
     if (isMyTurn && gameState.status === "rolling") {
       if (gameState.is_crawford_game) return "Crawford Game — no doubling allowed. Roll the dice to begin your turn.";
       if (gameState.can_double) return "Double the stakes or roll the dice to begin your turn.";
@@ -292,7 +314,7 @@ function Game() {
     }
     if (!isMyTurn) return `Waiting for ${opponentName} to move...`;
     return null;
-  }, [gameState, isMyTurn, myColor, opponentName]);
+  }, [gameState, isMyTurn, isPassAndPlay, myColor, opponentName, currentTurnPlayerName, table]);
 
   if (!tableId || !playerId) {
     return (
@@ -335,6 +357,9 @@ function Game() {
               )
             </span>
           </h2>
+          {isPassAndPlay && (
+            <span className="pp-badge">Pass &amp; Play &middot; Unrated</span>
+          )}
         </div>
 
         {statusMessage && <div className="game-status-msg">{statusMessage}</div>}
@@ -386,14 +411,14 @@ function Game() {
       <ConnectionBanners isBotGame={isBotGame} opponentConnected={opponentConnected} opponentReconnected={opponentReconnected} opponentName={opponentName} error={error} spectatorCount={table.spectator_count ?? 0} />
 
       <div className="game-layout">
-        <div className="game-center">
+        <div className={`game-center${ppShouldFlip ? ' pp-flipped' : ''}`}>
           <PlayerInfoRow name={opponentName} player={opponentPlayer} pips={opponentPips} isOpponent={true} isConnected={opponentConnected} isBotGame={isBotGame} botDifficulty={table.bot_difficulty} isTimed={isTimed} timeMs={opponentTimeMs} isClockActive={!isMyTurn && gameState.status !== "finished"} matchPoints={table.match_points} matchScore={opponentScore} isCrawfordGame={gameState.is_crawford_game} formatClock={formatClock} getClockClass={getClockClass} />
 
           <div className={`board-area perspective-${myColor}`}>
             <Board gameState={gameState} myColor={myColor} selectedPoint={selectedPoint} validMoves={isMyTurn ? validMoves : []} onPointClick={handlePointClick} onBarClick={handleBarClick} onBearOffClick={handleBearOffClick} cubeValue={gameState.cube_value} cubeOwner={gameState.cube_owner} animatingMove={animatingMove} hintMoves={hintMoves} moveArrows={previousMoveArrows} arrowsMoverColor={gameState.last_turn_color as Color | undefined} boardTheme={myPlayer?.board_theme} checkerStyle={myPlayer?.checker_style} />
             <div className="board-overlay">
               <Dice dice={gameState.dice} remainingDice={gameState.remaining_dice} currentTurn={diceColor} openingRoll={gameState.opening_roll} diceOrder={isMyTurn && isMovingPhase ? diceOrder : undefined} onSwap={isMyTurn && isMovingPhase ? swapDice : undefined} />
-              <GameControls gameState={gameState} myColor={myColor} opponentName={opponentName} onRollDice={actions.rollDice} onEndTurn={actions.endTurn} onUndoTurn={actions.undoTurn} onOfferDouble={actions.offerDouble} onAcceptDouble={actions.acceptDouble} onDeclineDouble={actions.declineDouble} onRequestHint={actions.requestHint} onAcceptResign={actions.acceptResign} onRejectResign={actions.rejectResign} hintsRemaining={hintsRemaining} hintsEnabled={hintsEnabled} isPassAndPlay={isPassAndPlay} />
+              <GameControls gameState={gameState} myColor={myColor} opponentName={opponentName} onRollDice={actions.rollDice} onEndTurn={actions.endTurn} onUndoTurn={actions.undoTurn} onOfferDouble={actions.offerDouble} onAcceptDouble={actions.acceptDouble} onDeclineDouble={actions.declineDouble} onRequestHint={actions.requestHint} onAcceptResign={actions.acceptResign} onRejectResign={actions.rejectResign} hintsRemaining={hintsRemaining} hintsEnabled={hintsEnabled} isPassAndPlay={isPassAndPlay} nextPlayerName={isPassAndPlay ? (gameState.current_turn === myColor ? opponentName : myName) : undefined} />
             </div>
             {gameState.status === "waiting" && (
               <WaitingOverlay tableId={tableId!} />
@@ -427,7 +452,9 @@ function Game() {
 
       {showShortcutHelp && <ShortcutHelpModal onClose={() => setShowShortcutHelp(false)} />}
 
-      <ChatPanel chatMessages={chatMessages} onSendChat={actions.sendChat} playerId={playerId} />
+      {!isPassAndPlay && (
+        <ChatPanel chatMessages={chatMessages} onSendChat={actions.sendChat} playerId={playerId} />
+      )}
     </div>
   );
 }

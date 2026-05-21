@@ -1,0 +1,271 @@
+/* ===== Pass & Play Setup page ===== */
+
+.pp-setup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  padding: 24px;
+  gap: 0;
+}
+
+/* Back link */
+
+.pp-setup-back {
+  align-self: flex-start;
+  max-width: 480px;
+  width: 100%;
+  margin: 0 auto 16px;
+}
+
+.pp-setup-back a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.pp-setup-back a:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+/* Card container */
+
+.pp-setup-card {
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+  padding: 32px;
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Header */
+
+.pp-setup-header {
+  text-align: center;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pp-setup-header h1 {
+  color: var(--accent);
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.pp-setup-subtitle {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+/* Form fields */
+
+.pp-setup-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pp-setup-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.pp-setup-input {
+  padding: 10px 14px;
+  background: var(--bg-primary);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.pp-setup-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.pp-setup-input:focus {
+  border-color: var(--accent);
+}
+
+/* Pill bar (reuse Home.css pattern) */
+
+.pp-setup-pill-bar {
+  display: flex;
+  gap: 0;
+  background: var(--bg-primary);
+  border-radius: 8px;
+  padding: 3px;
+  width: 100%;
+}
+
+.pp-setup-pill {
+  flex: 1;
+  padding: 8px 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 400;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.pp-setup-pill:hover:not(.pp-setup-pill--selected) {
+  color: var(--text-primary);
+}
+
+.pp-setup-pill--selected {
+  background: var(--accent);
+  color: var(--bg-primary);
+  font-weight: 600;
+}
+
+/* Toggle switch */
+
+.pp-setup-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pp-setup-toggle-label {
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.pp-setup-toggle {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.pp-setup-toggle input {
+  display: none;
+}
+
+.pp-setup-toggle-track {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  transition: background 0.2s;
+}
+
+.pp-setup-toggle input:checked + .pp-setup-toggle-track {
+  background: var(--accent);
+}
+
+.pp-setup-toggle-track::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  background: var(--text-secondary);
+  border-radius: 50%;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.pp-setup-toggle input:checked + .pp-setup-toggle-track::after {
+  transform: translateX(20px);
+  background: var(--bg-primary);
+}
+
+/* Submit button */
+
+.pp-setup-submit {
+  width: 100%;
+  padding: 14px 0;
+  background: var(--accent);
+  color: var(--bg-primary);
+  font-size: 1.05rem;
+  font-weight: 700;
+  border-radius: 8px;
+  border: none;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+  margin-top: 4px;
+}
+
+.pp-setup-submit:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: scale(1.01);
+}
+
+.pp-setup-submit:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+.pp-setup-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Error */
+
+.pp-setup-error {
+  background: rgba(231, 76, 60, 0.1);
+  border: 1px solid rgba(231, 76, 60, 0.3);
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: var(--danger);
+  font-size: 0.85rem;
+}
+
+/* ===== Responsive: Tablet ===== */
+
+@media (max-width: 960px) {
+  .pp-setup {
+    padding: 20px;
+  }
+
+  .pp-setup-card {
+    padding: 24px;
+  }
+}
+
+/* ===== Responsive: Mobile ===== */
+
+@media (max-width: 600px) {
+  .pp-setup {
+    padding: 16px;
+  }
+
+  .pp-setup-card {
+    padding: 20px;
+    gap: 20px;
+  }
+
+  .pp-setup-header h1 {
+    font-size: 1.25rem;
+  }
+
+  .pp-setup-pill {
+    font-size: 0.8rem;
+    padding: 6px 0;
+  }
+}

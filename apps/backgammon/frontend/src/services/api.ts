@@ -247,6 +247,26 @@ export function createTable(
   });
 }
 
+/** Create a pass-and-play table (two players on one device). */
+export function createPassAndPlayTable(
+  player2Name: string = "Player 2",
+  preferredColor?: string,
+  matchPoints: number = 5,
+  doublingCube: boolean = true,
+  crawfordRule: boolean = true,
+): Promise<Table> {
+  return request<Table>("/api/tables/pass-and-play", {
+    method: "POST",
+    body: JSON.stringify({
+      player2_name: player2Name,
+      preferred_color: preferredColor || null,
+      match_points: matchPoints,
+      doubling_cube: doublingCube,
+      crawford_rule: crawfordRule,
+    }),
+  });
+}
+
 /** Join an existing table as the second player. */
 export function joinTable(tableId: string, playerId: string): Promise<Table> {
   return request<Table>(`/api/tables/${tableId}/join`, {

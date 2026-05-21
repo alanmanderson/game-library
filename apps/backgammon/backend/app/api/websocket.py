@@ -267,6 +267,7 @@ async def _build_full_message(table_id: str, player_id: str, msg_type: str = "ga
             "white_time_remaining_ms": white_time_ms,
             "black_time_remaining_ms": black_time_ms,
             "spectator_count": manager.get_spectator_count(table_id),
+            "game_mode": getattr(table, "game_mode", "online"),
         }
 
     if db is not None:
@@ -334,6 +335,7 @@ async def _build_spectator_message(table_id: str, msg_type: str = "game_state", 
             "white_time_remaining_ms": white_time_ms,
             "black_time_remaining_ms": black_time_ms,
             "spectator_count": manager.get_spectator_count(table_id),
+            "game_mode": getattr(table, "game_mode", "online"),
         }
 
     if db is not None:
