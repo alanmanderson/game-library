@@ -111,7 +111,7 @@ jobs:
 
       - name: Transfer artifacts to vm-gnubg
         run: |
-          SSH_OPTS="-i ~/.ssh/id_deploy -o StrictHostKeyChecking=no"
+          SSH_OPTS="-i ~/.ssh/id_deploy"
           scp $SSH_OPTS /tmp/backgammon-gnubg.tar.zst gnubg:/tmp/
           scp $SSH_OPTS gnubg/docker-compose.yml gnubg:/opt/gnubg/
 

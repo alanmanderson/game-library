@@ -7,9 +7,16 @@ on:
       - 'apps/**'
       - 'infra/**'
 
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 env:
-  VM_HOST: 20.83.116.73
-  VM_USER: azureuser
+  VM_HOST: ${{ secrets.VM_HOST }}
+  VM_USER: ${{ secrets.VM_USER }}
 
 jobs:
   detect-changes:
@@ -27,8 +34,8 @@ jobs:
       infra-caddyfile: ${{ steps.changes.outputs.infra-caddyfile }}
       infra-db-init: ${{ steps.changes.outputs.infra-db-init }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
         id: changes
         with:
           filters: |
@@ -63,8 +70,8 @@ jobs:
       run:
         working-directory: apps/landing
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 20
           cache: npm
@@ -92,7 +99,7 @@ jobs:
       needs.detect-changes.outputs.infra-db-init == 'true'
       )
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 2
 
@@ -112,15 +119,15 @@ jobs:
             --exclude='build' --exclude='bin' \
             --exclude='obj' --exclude='.env' \
             apps/ infra/
-          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+          scp -i ~/.ssh/deploy_key \
             /tmp/gamelibrary.tar.gz ${{ env.VM_USER }}@${{ env.VM_HOST }}:/tmp/
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+          ssh -i ~/.ssh/deploy_key \
             ${{ env.VM_USER }}@${{ env.VM_HOST }} \
             'tar xzf /tmp/gamelibrary.tar.gz -C /opt/gamelibrary'
 
       - name: Set GIT_SHA for build
         run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+          ssh -i ~/.ssh/deploy_key \
             ${{ env.VM_USER }}@${{ env.VM_HOST }} \
             "cd /opt/gamelibrary/infra && \
              sed -i '/^GIT_SHA=/d' .env && \
@@ -171,7 +178,7 @@ jobs:
       - name: Build and restart services
         if: steps.services.outputs.list != ''
         run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+          ssh -i ~/.ssh/deploy_key \
             ${{ env.VM_USER }}@${{ env.VM_HOST }} \
             "cd /opt/gamelibrary/infra && \
              docker compose build ${{ steps.services.outputs.list }} && \
@@ -180,7 +187,7 @@ jobs:
       - name: Reload Caddy if Caddyfile changed
         if: needs.detect-changes.outputs.infra-caddyfile == 'true'
         run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+          ssh -i ~/.ssh/deploy_key \
             ${{ env.VM_USER }}@${{ env.VM_HOST }} \
             "cd /opt/gamelibrary/infra && \
              docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile"
@@ -188,11 +195,11 @@ jobs:
       - name: Verify containers are running
         run: |
           sleep 5
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+          ssh -i ~/.ssh/deploy_key \
             ${{ env.VM_USER }}@${{ env.VM_HOST }} \
             'docker ps --format "table {{.Names}}\t{{.Status}}" | grep -v "Restarting" || true'
           # Check for any restarting containers (indicates a problem)
-          RESTARTING=$(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+          RESTARTING=$(ssh -i ~/.ssh/deploy_key \
             ${{ env.VM_USER }}@${{ env.VM_HOST }} \
             'docker ps --format "{{.Names}} {{.Status}}" | grep "Restarting" || true')
           if [ -n "$RESTARTING" ]; then
