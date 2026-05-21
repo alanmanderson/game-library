@@ -47,4 +47,7 @@ EXPOSE 8000
 COPY server/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
+RUN adduser --disabled-password --gecos "" appuser
+USER appuser
+
 CMD ["/entrypoint.sh"]
