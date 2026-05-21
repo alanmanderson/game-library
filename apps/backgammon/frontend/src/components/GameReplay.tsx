@@ -79,6 +79,15 @@ const QUALITY_CSS_CLASS: Record<MoveQuality, string> = {
   very_bad: "blunder",
 };
 
+/**
+ * Normalise move notation for comparison: strip hit markers and sort
+ * segments so move order doesn't matter (e.g. "18/13 24/20" matches
+ * "24/20 18/13").
+ */
+function normaliseNotation(s: string): string {
+  return s.replace(/\*/g, "").trim().split(/\s+/).sort().join(" ");
+}
+
 /** Classify a candidate move's quality based on its equity delta from best. */
 function classifyDelta(delta: number): string {
   const d = Math.abs(delta);
@@ -1105,7 +1114,7 @@ function GameReplay() {
               {currentAnalysis.top_moves.map((c, idx) => {
                 const candidateQ = classifyDelta(c.equity_diff);
                 const isSelected = selectedCandidate === idx;
-                const isPlayed = c.notation.replace(/\*/g, "") === (currentMove?.moves_notation ?? "").replace(/\*/g, "");
+                const isPlayed = normaliseNotation(c.notation) === normaliseNotation(currentMove?.moves_notation ?? "");
                 return (
                   <div
                     key={c.rank}

@@ -405,10 +405,9 @@ class GnubgEngine:
 
         best = best_resp.best
 
-        chosen_notation = _steps_to_notation(req.chosen_moves, req.turn)
         chosen_candidate: Optional[Candidate] = None
         for c in best_resp.candidates:
-            if _normalise_notation(c.notation) == _normalise_notation(chosen_notation):
+            if _moves_match(c.moves, req.chosen_moves):
                 chosen_candidate = c
                 break
 
@@ -425,7 +424,7 @@ class GnubgEngine:
             # Flip probs/equity to the mover's perspective.
             chosen_candidate = Candidate(
                 moves=list(req.chosen_moves),
-                notation=chosen_notation,
+                notation=_steps_to_notation(req.chosen_moves, req.turn),
                 equity=-post_eval.equity,
                 probs=_flip_probs(post_eval.probs),
             )
@@ -495,8 +494,18 @@ def _steps_to_notation(steps: list[MoveStep], turn: str) -> str:
                     for s in steps)
 
 
-def _normalise_notation(s: str) -> str:
-    return " ".join(s.replace("*", "").split()).lower()
+def _moves_match(a: list[MoveStep], b: list[MoveStep]) -> bool:
+    """Check if two move lists represent the same turn, ignoring order.
+
+    In backgammon the order individual checker moves are applied doesn't
+    affect the final position (checkers are indistinguishable).  gnubg
+    lists moves highest-point-first while the game record preserves the
+    player's click order, so we compare as sorted (from, to) tuples.
+    """
+    if len(a) != len(b):
+        return False
+    return (sorted((m.from_point, m.to_point) for m in a)
+            == sorted((m.from_point, m.to_point) for m in b))
 
 
 def _apply_moves(board: Board, steps: list[MoveStep]) -> Board:
