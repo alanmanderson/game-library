@@ -496,7 +496,7 @@ def _steps_to_notation(steps: list[MoveStep], turn: str) -> str:
 
 
 def _normalise_notation(s: str) -> str:
-    return " ".join(s.split()).lower().rstrip("*")
+    return " ".join(s.replace("*", "").split()).lower()
 
 
 def _apply_moves(board: Board, steps: list[MoveStep]) -> Board:

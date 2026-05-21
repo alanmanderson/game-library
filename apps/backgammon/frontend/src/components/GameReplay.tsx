@@ -957,22 +957,29 @@ function GameReplay() {
                 />
               </div>
             )}
-            {currentAnalysis && (
-              <div
-                className={`replay-board-analysis replay-board-analysis--${QUALITY_CSS_CLASS[currentAnalysis.quality]}`}
-                role="status"
-                aria-live="polite"
-              >
-                <span className="replay-board-analysis-quality">
-                  {QUALITY_LABEL[currentAnalysis.quality]}
-                </span>
-                {currentWinPct && (
-                  <span className="replay-board-analysis-prob">
-                    {currentWinPct} win
+            {currentAnalysis && (() => {
+              const selectedCand = selectedCandidate !== null ? currentAnalysis.top_moves?.[selectedCandidate] : null;
+              const pillQuality = selectedCand ? classifyDelta(selectedCand.equity_diff) : currentAnalysis.quality;
+              const pillWinPct = selectedCand
+                ? formatPct(selectedCand.probs?.win)
+                : currentWinPct;
+              return (
+                <div
+                  className={`replay-board-analysis replay-board-analysis--${QUALITY_CSS_CLASS[pillQuality as MoveQuality] ?? pillQuality}`}
+                  role="status"
+                  aria-live="polite"
+                >
+                  <span className="replay-board-analysis-quality">
+                    {QUALITY_LABEL[pillQuality as MoveQuality] ?? pillQuality}
                   </span>
-                )}
-              </div>
-            )}
+                  {pillWinPct && (
+                    <span className="replay-board-analysis-prob">
+                      {pillWinPct} win
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Current move info */}
@@ -1098,7 +1105,7 @@ function GameReplay() {
               {currentAnalysis.top_moves.map((c, idx) => {
                 const candidateQ = classifyDelta(c.equity_diff);
                 const isSelected = selectedCandidate === idx;
-                const isPlayed = c.notation === (currentMove?.moves_notation ?? "");
+                const isPlayed = c.notation.replace(/\*/g, "") === (currentMove?.moves_notation ?? "").replace(/\*/g, "");
                 return (
                   <div
                     key={c.rank}
