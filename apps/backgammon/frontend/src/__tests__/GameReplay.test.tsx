@@ -567,6 +567,7 @@ describe("GameReplay – analysis panel", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /show move analysis/i }),
     );
+    fireEvent.click(screen.getByRole("button", { name: /next move/i }));
 
     await waitFor(() => {
       // The gnubg-native "Very bad" label should render as-is
