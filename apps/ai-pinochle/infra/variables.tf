@@ -41,5 +41,4 @@ variable "google_client_id" {
 variable "ssh_allowed_cidr" {
   description = "CIDR block allowed to SSH into the VM. Restrict to specific IPs in production."
   type        = string
-  default     = "0.0.0.0/0"
 }
