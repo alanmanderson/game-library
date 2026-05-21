@@ -17,6 +17,7 @@ import GameReplay from "./components/GameReplay";
 import Spectator from "./components/Spectator";
 import AuthModal from "./components/AuthModal";
 import { TournamentList, TournamentDetail } from "./components/Tournament";
+import PassAndPlaySetup from "./components/PassAndPlaySetup";
 import { lazy, Suspense } from "react";
 import BuildInfo from "./components/BuildInfo";
 
@@ -100,6 +101,19 @@ function App() {
               <div className="landing">
                 <h1>GammonHub</h1>
                 <p>Please sign in or continue as a guest to play.</p>
+              </div>
+            )
+          }
+        />
+        <Route
+          path="/pass-and-play"
+          element={
+            player ? (
+              <PassAndPlaySetup />
+            ) : (
+              <div className="landing">
+                <h1>GammonHub</h1>
+                <p>Please sign in to play.</p>
               </div>
             )
           }

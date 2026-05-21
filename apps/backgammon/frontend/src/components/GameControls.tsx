@@ -17,6 +17,8 @@ interface GameControlsProps {
   opponentName: string;
   hintsRemaining: number;
   hintsEnabled: boolean;
+  isPassAndPlay?: boolean;
+  nextPlayerName?: string;
 }
 
 function GameControls({
@@ -34,8 +36,10 @@ function GameControls({
   opponentName,
   hintsRemaining,
   hintsEnabled,
+  isPassAndPlay,
+  nextPlayerName,
 }: GameControlsProps) {
-  const isMyTurn = gameState.current_turn === myColor;
+  const isMyTurn = isPassAndPlay || gameState.current_turn === myColor;
 
   const statusInfo = useMemo(() => {
     if (gameState.status === "waiting") {
@@ -150,12 +154,16 @@ function GameControls({
         )}
         {showConfirmTurnButton && (
           <button className="confirm-turn-btn" onClick={onEndTurn} title="Confirm turn (E)">
-            Confirm Turn
+            {isPassAndPlay && nextPlayerName
+              ? `Confirm \u2014 ${nextPlayerName}'s turn`
+              : "Confirm Turn"}
           </button>
         )}
         {showEndTurnButton && (
           <button className="end-turn-btn" onClick={onEndTurn} title="End turn (E)">
-            End Turn
+            {isPassAndPlay && nextPlayerName
+              ? `End Turn \u2014 ${nextPlayerName}'s turn`
+              : "End Turn"}
           </button>
         )}
         {showHintButton && (

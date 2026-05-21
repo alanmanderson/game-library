@@ -102,6 +102,15 @@ class TableCreate(BaseModel):
     is_ranked: bool = True
 
 
+class PassAndPlayCreate(BaseModel):
+    """Request body for creating a pass-and-play game (two players, one device)."""
+    player2_name: str = Field(default="Player 2", min_length=1, max_length=50)
+    preferred_color: Optional[str] = None  # "white", "black", or None (random)
+    match_points: int = Field(default=5, ge=1, le=99)
+    doubling_cube: bool = True
+    crawford_rule: bool = True
+
+
 class TableResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -119,6 +128,7 @@ class TableResponse(BaseModel):
     white_time_remaining_ms: Optional[int] = None
     black_time_remaining_ms: Optional[int] = None
     is_ranked: bool = True
+    game_mode: str = "online"
 
 
 class InviteBotRequest(BaseModel):

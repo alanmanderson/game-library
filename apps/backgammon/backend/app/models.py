@@ -108,6 +108,9 @@ class Table(Base):
     turn_started_at: datetime | None = Column(DateTime(timezone=True), nullable=True)
     # Ranked vs casual — ranked games update ELO ratings, casual games do not.
     is_ranked: bool = Column(Boolean, default=True, nullable=False, server_default="true")
+    # Game mode: "online" (default two-player over network) or "pass_and_play"
+    # (two players sharing one device, host controls both sides).
+    game_mode: str = Column(String(20), default="online", nullable=False, server_default="online")
 
     # Relationships
     white_player = relationship(

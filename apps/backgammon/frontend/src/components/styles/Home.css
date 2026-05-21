@@ -218,6 +218,29 @@
   cursor: not-allowed;
 }
 
+.play-action-pp {
+  width: 100%;
+  padding: 12px 0;
+  background: transparent;
+  color: var(--success);
+  font-size: 0.95rem;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1.5px solid var(--success);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.play-action-pp:hover:not(:disabled) {
+  background: rgba(46, 204, 113, 0.1);
+}
+
+.play-action-pp:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Error display */
 
 .panel-error {
