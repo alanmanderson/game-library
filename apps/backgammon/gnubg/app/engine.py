@@ -494,18 +494,46 @@ def _steps_to_notation(steps: list[MoveStep], turn: str) -> str:
                     for s in steps)
 
 
-def _moves_match(a: list[MoveStep], b: list[MoveStep]) -> bool:
-    """Check if two move lists represent the same turn, ignoring order.
+def _collapse_chains(moves: list[MoveStep]) -> list[tuple[int, int]]:
+    """Collapse chained hops into (start, end) pairs.
 
-    In backgammon the order individual checker moves are applied doesn't
-    affect the final position (checkers are indistinguishable).  gnubg
-    lists moves highest-point-first while the game record preserves the
-    player's click order, so we compare as sorted (from, to) tuples.
+    When a single checker uses multiple dice the game engine records each
+    hop separately (``20/14, 14/8``) while gnubg may collapse them into a
+    single span (``20/8``).  Collapsing consecutive steps whose endpoints
+    connect makes both representations comparable.
     """
-    if len(a) != len(b):
-        return False
-    return (sorted((m.from_point, m.to_point) for m in a)
-            == sorted((m.from_point, m.to_point) for m in b))
+    if not moves:
+        return []
+    result: list[tuple[int, int]] = []
+    start = moves[0].from_point
+    end = moves[0].to_point
+    for m in moves[1:]:
+        if m.from_point == end:
+            end = m.to_point
+        else:
+            result.append((start, end))
+            start = m.from_point
+            end = m.to_point
+    result.append((start, end))
+    return result
+
+
+def _moves_match(a: list[MoveStep], b: list[MoveStep]) -> bool:
+    """Check if two move lists represent the same turn.
+
+    Handles three sources of mismatch between gnubg's canonical notation
+    and the game record:
+
+    1. **Order** — gnubg lists moves highest-point-first; the game record
+       preserves the player's click order.
+    2. **Chain granularity** — gnubg may collapse ``20/14/8`` (two hops)
+       into ``20/8`` (one span); the game engine always records each hop.
+    3. **Hit markers** — already stripped before reaching this function.
+
+    We collapse chains and compare the resulting (start, end) pairs as
+    sorted lists.
+    """
+    return sorted(_collapse_chains(a)) == sorted(_collapse_chains(b))
 
 
 def _apply_moves(board: Board, steps: list[MoveStep]) -> Board:

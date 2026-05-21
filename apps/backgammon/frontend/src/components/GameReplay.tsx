@@ -80,12 +80,21 @@ const QUALITY_CSS_CLASS: Record<MoveQuality, string> = {
 };
 
 /**
- * Normalise move notation for comparison: strip hit markers and sort
- * segments so move order doesn't matter (e.g. "18/13 24/20" matches
- * "24/20 18/13").
+ * Normalise move notation for comparison: strip hit markers, collapse
+ * chains (``20/14/8`` → ``20/8``), and sort so move order doesn't
+ * matter (e.g. "18/13 24/20" matches "24/20 18/13" and
+ * "13/7 13/7 20/14/8" matches "20/8 13/7 13/7").
  */
 function normaliseNotation(s: string): string {
-  return s.replace(/\*/g, "").trim().split(/\s+/).sort().join(" ");
+  const segments = s.replace(/\*/g, "").trim().split(/\s+/);
+  const collapsed: string[] = [];
+  for (const seg of segments) {
+    const parts = seg.split("/");
+    if (parts.length >= 2) {
+      collapsed.push(`${parts[0]}/${parts[parts.length - 1]}`);
+    }
+  }
+  return collapsed.sort().join(" ");
 }
 
 /** Classify a candidate move's quality based on its equity delta from best. */
