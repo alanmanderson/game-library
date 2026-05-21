@@ -116,12 +116,12 @@ alembic revision --autogenerate -m "description"  # Create new migration
 
 ### Current Production
 
-- **Cloud**: Azure (Visual Studio Enterprise subscription `1a020407-...`)
+- **Cloud**: Azure
 - **Region**: Canada Central (`canadacentral`)
-- **VM**: `vm-pinochle` (Standard_B2s_v2, Ubuntu 24.04), IP: `20.151.4.179`
-- **Database**: PostgreSQL 16 Flexible Server (`psql-pinochle-vs`, private networking)
+- **VM**: `vm-pinochle` (Standard_B2s_v2, Ubuntu 24.04)
+- **Database**: PostgreSQL 16 Flexible Server (private networking)
 - **Domain**: `pinochle.games.alanmanderson.com`
-- **SSH**: `ssh -i ~/.ssh/id_ed25519 azureuser@20.151.4.179`
+- **SSH**: `ssh -i ~/.ssh/id_ed25519 <SSH_USER>@<VM_IP>`
 
 ### Deployment Architecture
 
@@ -151,12 +151,12 @@ To redeploy application code to the VM:
 npm run build --workspace=web
 
 # Copy files to VM
-scp -i ~/.ssh/id_ed25519 -r web/dist azureuser@20.151.4.179:/opt/pinochle/web-dist
-scp -i ~/.ssh/id_ed25519 -r server azureuser@20.151.4.179:/opt/pinochle/server
-scp -i ~/.ssh/id_ed25519 Dockerfile docker-compose.yml Caddyfile azureuser@20.151.4.179:/opt/pinochle/
+scp -i ~/.ssh/id_ed25519 -r web/dist <SSH_USER>@<VM_IP>:/opt/pinochle/web-dist
+scp -i ~/.ssh/id_ed25519 -r server <SSH_USER>@<VM_IP>:/opt/pinochle/server
+scp -i ~/.ssh/id_ed25519 Dockerfile docker-compose.yml Caddyfile <SSH_USER>@<VM_IP>:/opt/pinochle/
 
 # Rebuild and restart on VM
-ssh -i ~/.ssh/id_ed25519 azureuser@20.151.4.179 \
+ssh -i ~/.ssh/id_ed25519 <SSH_USER>@<VM_IP> \
   "cd /opt/pinochle && docker build -t pinochle-server:latest . && docker compose up -d"
 ```
 

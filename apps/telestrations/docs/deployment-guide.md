@@ -255,7 +255,7 @@ The deploy workflow authenticates to Azure using a service principal. If one was
 az ad sp create-for-rbac \
   --name "telestrations-github-deploy" \
   --role contributor \
-  --scopes "/subscriptions/1a020407-3f63-418b-91be-af42a0a2cfef/resourceGroups/rg-telestrations" \
+  --scopes "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-telestrations" \
   --sdk-auth
 ```
 

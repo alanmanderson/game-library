@@ -47,7 +47,7 @@ A browser-based tycoon/idle game where players start with a tiny neighborhood le
 - E2E tests: `cd frontend && npx playwright test` (requires running backend + frontend)
 
 ## Azure Deployment
-- **Subscription**: 1a020407-3f63-418b-91be-af42a0a2cfef
+- **Subscription**: (set via `SUBSCRIPTION_ID` env var)
 - **Resource Group**: rg-lemonadestand (location: eastus)
 - **App Service Plan**: plan-lemonadestand (location: centralus, SKU: B1, Linux)
 - **Backend**: lemonade.games.alanmanderson.com (custom) → api-lemonadestand.azurewebsites.net (Azure default)
