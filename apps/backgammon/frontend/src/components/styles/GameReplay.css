@@ -1584,6 +1584,7 @@
   border-radius: 6px;
   width: 32px;
   height: 32px;
+  padding: 0;
   display: grid;
   place-items: center;
   cursor: pointer;
