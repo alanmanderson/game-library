@@ -10,13 +10,14 @@ allowed-tools:
 
 # Deploy to Production VM
 
-Deploy one or more services to the centralized game library VM at `20.83.116.73`.
+Deploy one or more services to the centralized game library VM.
 
 ## Connection
 
 ```bash
-SSH="ssh -o StrictHostKeyChecking=no -i /home/claude/.ssh/id_rsa azureuser@20.83.116.73"
-SCP="scp -o StrictHostKeyChecking=no -i /home/claude/.ssh/id_rsa"
+# VM_HOST and VM_USER are configured as GitHub secrets / environment variables
+SSH="ssh -i /home/claude/.ssh/id_rsa ${VM_USER:-azureuser}@${VM_HOST}"
+SCP="scp -i /home/claude/.ssh/id_rsa"
 ```
 
 VM layout:
@@ -69,7 +70,7 @@ tar czf /tmp/gamelibrary-deploy.tar.gz \
   --exclude='.env' --exclude='*.db' \
   apps/ infra/ services/
 
-$SCP /tmp/gamelibrary-deploy.tar.gz azureuser@20.83.116.73:/tmp/
+$SCP /tmp/gamelibrary-deploy.tar.gz ${VM_USER:-azureuser}@${VM_HOST}:/tmp/
 $SSH "tar xzf /tmp/gamelibrary-deploy.tar.gz -C /opt/gamelibrary"
 ```
 
