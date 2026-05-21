@@ -16,6 +16,7 @@ from app.schemas import (
     DeepDiveResponse,
     MoveAnalysis,
     MoveCandidate,
+    PassAndPlayCreate,
     PlayerResponse,
     PlayerPreferencesUpdate,
     TableCreate,
@@ -383,6 +384,30 @@ async def create_table(
         table.white_player = current_player
     elif table.black_player_id == current_player.id:
         table.black_player = current_player
+    return table
+
+
+@router.post("/tables/pass-and-play", response_model=TableResponse)
+async def create_pass_and_play(
+    data: PassAndPlayCreate,
+    current_player: Player = Depends(get_current_player),
+    db: AsyncSession = Depends(get_db),
+) -> Table:
+    """Create a pass-and-play game. Both players share one device."""
+    table = await game_manager.create_pass_and_play_table(
+        db,
+        current_player.id,
+        data.player2_name,
+        data.preferred_color,
+        data.match_points,
+        data.doubling_cube,
+        data.crawford_rule,
+    )
+    # Load player relationships for the response
+    if table.white_player_id:
+        table.white_player = await db.get(Player, table.white_player_id)
+    if table.black_player_id:
+        table.black_player = await db.get(Player, table.black_player_id)
     return table
 
 

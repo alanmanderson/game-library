@@ -248,6 +248,12 @@ function Home({ player, onPlayerUpdate, onSignOut }: HomeProps) {
               {creatingBotGame ? "Starting..." : "Play vs Bot"}
             </button>
             <button
+              className="play-action-pp"
+              onClick={() => navigate("/pass-and-play")}
+            >
+              Pass &amp; Play
+            </button>
+            <button
               className="play-action-secondary"
               onClick={handleCreateTable}
               disabled={creatingTable}
