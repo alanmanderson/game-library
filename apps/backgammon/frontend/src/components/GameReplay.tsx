@@ -47,41 +47,85 @@ function readStoredPlayerId(): string | null {
 /**
  * Display label for each move-quality level.
  *
- * Covers both the ML-native labels (`best`, `good`, `inaccuracy`, `mistake`,
- * `blunder`) and the GNU Backgammon native labels (`very_good`, `doubtful`,
- * `bad`, `very_bad`).
+ * Uses a 5-tier system: Best, Good, Doubtful, Mistake, Blunder.
+ * The old "inaccuracy" label maps to "Doubtful"; gnubg-native labels
+ * (`very_good`, `bad`, `very_bad`) map to the closest tier.
  */
 const QUALITY_LABEL: Record<MoveQuality, string> = {
   best: "Best",
   good: "Good",
-  inaccuracy: "Inaccuracy",
+  inaccuracy: "Doubtful",
   mistake: "Mistake",
   blunder: "Blunder",
-  very_good: "Very good",
+  very_good: "Best",
   doubtful: "Doubtful",
-  bad: "Bad",
-  very_bad: "Very bad",
+  bad: "Mistake",
+  very_bad: "Blunder",
 };
 
 /**
- * Map every quality label to an existing CSS colour class.
- *
- * gnubg-native labels reuse the closest matching ML colour: `very_good` → best,
- * `doubtful` → inaccuracy, `bad` → mistake, `very_bad` → blunder. This keeps
- * the palette tight and avoids inventing new colours for conceptually similar
- * buckets.
+ * Map every quality label to a CSS colour class matching the 5-tier system:
+ * best (gold), good (green), doubtful (amber), mistake (orange), blunder (red).
  */
 const QUALITY_CSS_CLASS: Record<MoveQuality, string> = {
   best: "best",
   good: "good",
-  inaccuracy: "inaccuracy",
+  inaccuracy: "doubtful",
   mistake: "mistake",
   blunder: "blunder",
   very_good: "best",
-  doubtful: "inaccuracy",
+  doubtful: "doubtful",
   bad: "mistake",
   very_bad: "blunder",
 };
+
+/** Classify a candidate move's quality based on its equity delta from best. */
+function classifyDelta(delta: number): string {
+  const d = Math.abs(delta);
+  if (d < 0.005) return "best";
+  if (d < 0.040) return "good";
+  if (d < 0.080) return "doubtful";
+  if (d < 0.160) return "mistake";
+  return "blunder";
+}
+
+/** CSS class for the equity delta text colour. */
+function deltaClass(delta: number): string {
+  const d = Math.abs(delta);
+  if (d < 0.040) return "";
+  if (d < 0.080) return "warn";
+  if (d < 0.160) return "bad";
+  return "blunder";
+}
+
+/** Format equity with sign prefix. */
+function formatEq(e: number): string {
+  return (e >= 0 ? "+" : "") + e.toFixed(3);
+}
+
+/** Format delta: 0 → "best", otherwise signed number. */
+function formatDelta(d: number): string {
+  if (Math.abs(d) < 0.001) return "best";
+  return (d > 0 ? "+" : "") + d.toFixed(3);
+}
+
+/** Quality chip: small coloured pill with dot indicator. */
+function QualityChip({ quality }: { quality: string }) {
+  const cssQ = QUALITY_CSS_CLASS[quality as MoveQuality] ?? quality;
+  return <span className={`qchip qchip--${cssQ}`}>{QUALITY_LABEL[quality as MoveQuality] ?? quality}</span>;
+}
+
+/** Equity bar: horizontal track showing equity relative to the best move. */
+function EquityBar({ delta, quality, max = 0.230 }: { delta: number; quality: string; max?: number }) {
+  const ratio = Math.max(0, 1 - Math.abs(delta) / max);
+  const width = `${(ratio * 100).toFixed(1)}%`;
+  const cssQ = QUALITY_CSS_CLASS[quality as MoveQuality] ?? quality;
+  return (
+    <div className="equity-track">
+      <div className={`equity-fill equity-fill--${cssQ}`} style={{ width }} />
+    </div>
+  );
+}
 
 /** Format a 0..1 probability as a percentage with one decimal place. */
 function formatPct(p: number | null | undefined): string | null {
@@ -587,6 +631,16 @@ function GameReplay() {
       )
     : null;
 
+  // Compute the max equity loss across candidates for the equity bar scale.
+  const equityBarMax = useMemo(() => {
+    if (!currentAnalysis?.top_moves?.length) return 0.230;
+    const maxDelta = Math.max(
+      ...currentAnalysis.top_moves.map((c) => Math.abs(c.equity_diff)),
+      0.05, // floor so the best-move bar doesn't look trivially narrow
+    );
+    return maxDelta;
+  }, [currentAnalysis]);
+
   // Pre-compute best-move arrows (must be a hook, so placed before early returns).
   // Arrows that exactly match a chosen-move arrow are filtered to prevent overlap.
   const bestMoveArrowsComputed = useMemo(() => {
@@ -731,6 +785,9 @@ function GameReplay() {
       : [replayDice.die1, replayDice.die2]
     : [];
 
+  // Dice values for the panel display.
+  const diceValues = currentMove ? parseDiceRoll(currentMove.dice_roll) : null;
+
   return (
     <div className={`replay-page${embed ? " replay-page--embed" : ""}`}>
       {/* Header (hidden in embed mode) */}
@@ -781,16 +838,58 @@ function GameReplay() {
         </div>
       )}
 
-      {/* Freshness banner */}
-      {!embed && analysis && analysis.status === "complete" && analysis.analysis_source && (
-        <div className="replay-freshness">
-          Analyzed by <strong>{analysis.analysis_source}</strong>
+      {/* Navigation bar with breadcrumb + move controls */}
+      {!embed && (
+        <div className="replay-nav-bar">
+          <div className="replay-nav-breadcrumb">
+            <span className="move-label replay-counter">
+              {moveIndex === 0
+                ? "Starting position"
+                : <>Move <strong>{moveIndex}</strong> of <strong>{totalMoves}</strong></>}
+            </span>
+          </div>
+          <div className="replay-nav-buttons">
+            <button className="nav-btn" onClick={() => { stopAutoPlay(); goTo(0); }} disabled={moveIndex === 0} title="First move" aria-label="Go to first move">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 12.5L6 8l6-4.5"/><path d="M4 3.5v9"/></svg>
+            </button>
+            <button className="nav-btn" onClick={() => { stopAutoPlay(); goTo(moveIndex - 1); }} disabled={moveIndex === 0} title="Previous move" aria-label="Previous move">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 12.5L4 8l6-4.5"/></svg>
+            </button>
+            {autoPlaying ? (
+              <button className="nav-btn nav-btn--play" onClick={stopAutoPlay} title="Pause" aria-label="Pause">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M5 3.5v9M11 3.5v9"/></svg>
+              </button>
+            ) : (
+              <button className="nav-btn nav-btn--play" onClick={startAutoPlay} disabled={moveIndex >= totalMoves} title="Auto-play" aria-label="Auto-play">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4.5 2.5l9 5.5-9 5.5z"/></svg>
+              </button>
+            )}
+            <button className="nav-btn" onClick={() => { stopAutoPlay(); goTo(moveIndex + 1); }} disabled={moveIndex >= totalMoves} title="Next move" aria-label="Next move">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3.5L12 8l-6 4.5"/></svg>
+            </button>
+            <button className="nav-btn" onClick={() => { stopAutoPlay(); goTo(totalMoves); }} disabled={moveIndex >= totalMoves} title="Go to last move" aria-label="Go to last move">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 3.5L10 8l-6 4.5"/><path d="M12 3.5v9"/></svg>
+            </button>
+
+            {/* Speed */}
+            <input
+              type="range"
+              min={SPEED_OFFSET - SPEED_MAX_MS}
+              max={SPEED_OFFSET - SPEED_MIN_MS}
+              step={100}
+              value={SPEED_OFFSET - playSpeed}
+              onChange={(e) => setPlaySpeed(SPEED_OFFSET - Number(e.target.value))}
+              style={{ width: 60, accentColor: "#d4a843", marginLeft: 4 }}
+              aria-label="Playback speed"
+              title={playSpeed <= 500 ? "Fast" : playSpeed >= 2500 ? "Slow" : "Normal"}
+            />
+          </div>
         </div>
       )}
 
       {/* Re-analysis progress card */}
       {!embed && analysis?.status === "running" && (
-        <div className="replay-progress-card">
+        <div className="replay-progress-card" style={{ maxWidth: 1200 }}>
           <div className="replay-progress-head">
             <div>
               <h4 className="replay-progress-title">
@@ -813,235 +912,252 @@ function GameReplay() {
           <div className="replay-progress-meta">
             <span>{analysis.moves_analysed} / {analysis.total_moves} moves scored</span>
           </div>
-          <div className="replay-progress-note">
-            <strong>Old results still visible</strong> &mdash; they&apos;ll swap in when the run completes.
-          </div>
         </div>
       )}
 
-      {/* Move counter */}
-      <div className="replay-counter">
-        {moveIndex === 0 ? (
-          <span>Starting position</span>
-        ) : (
-          <span>
-            Move <strong>{moveIndex}</strong> of <strong>{totalMoves}</strong>
-          </span>
-        )}
-      </div>
+      {/* Move counter (embed fallback — nav bar hidden in embed mode) */}
+      {embed && (
+        <div className="replay-counter">
+          {moveIndex === 0 ? (
+            <span>Starting position</span>
+          ) : (
+            <span>Move <strong>{moveIndex}</strong> of <strong>{totalMoves}</strong></span>
+          )}
+        </div>
+      )}
 
-      {/* Board */}
-      <div className={`replay-board-wrapper replay-board-wrapper--${viewColor}`}>
-        <Board
-          gameState={displayState}
-          myColor={viewColor}
-          selectedPoint={null}
-          validMoves={[]}
-          onPointClick={() => {}}
-          onBarClick={() => {}}
-          onBearOffClick={() => {}}
-          cubeValue={cubeValue}
-          cubeOwner={cubeOwner}
-          moveArrows={displayMoveArrows}
-          bestMoveArrows={displayBestMoveArrows}
-          arrowsMoverColor={movedByColor as "white" | "black"}
-        />
-        {replayDice && (
-          <div className="replay-dice-overlay">
-            <Dice
-              dice={replayDice}
-              remainingDice={remainingDiceForDisplay}
-              currentTurn={movedByColor}
-              openingRoll={openingRoll}
-              animate={false}
+      {/* ── Main grid: Board (left) + Analysis Panel (right) ─────────── */}
+      <div className="replay-main-grid">
+        {/* Left column: board + move info */}
+        <div className="replay-main-left">
+          <div className={`replay-board-wrapper replay-board-wrapper--${viewColor}`}>
+            <Board
+              gameState={displayState}
+              myColor={viewColor}
+              selectedPoint={null}
+              validMoves={[]}
+              onPointClick={() => {}}
+              onBarClick={() => {}}
+              onBearOffClick={() => {}}
+              cubeValue={cubeValue}
+              cubeOwner={cubeOwner}
+              moveArrows={displayMoveArrows}
+              bestMoveArrows={displayBestMoveArrows}
+              arrowsMoverColor={movedByColor as "white" | "black"}
+              labelPerspective={currentMove ? (movedByColor as "white" | "black") : viewColor}
             />
-          </div>
-        )}
-        {currentAnalysis && (
-          <div
-            className={`replay-board-analysis replay-board-analysis--${QUALITY_CSS_CLASS[currentAnalysis.quality]}`}
-            role="status"
-            aria-live="polite"
-          >
-            <span className="replay-board-analysis-quality">
-              {QUALITY_LABEL[currentAnalysis.quality]}
-            </span>
-            {currentWinPct && (
-              <span className="replay-board-analysis-prob">
-                {currentWinPct} win
-              </span>
+            {replayDice && (
+              <div className="replay-dice-overlay">
+                <Dice
+                  dice={replayDice}
+                  remainingDice={remainingDiceForDisplay}
+                  currentTurn={movedByColor}
+                  openingRoll={openingRoll}
+                  animate={false}
+                />
+              </div>
+            )}
+            {currentAnalysis && (
+              <div
+                className={`replay-board-analysis replay-board-analysis--${QUALITY_CSS_CLASS[currentAnalysis.quality]}`}
+                role="status"
+                aria-live="polite"
+              >
+                <span className="replay-board-analysis-quality">
+                  {QUALITY_LABEL[currentAnalysis.quality]}
+                </span>
+                {currentWinPct && (
+                  <span className="replay-board-analysis-prob">
+                    {currentWinPct} win
+                  </span>
+                )}
+              </div>
             )}
           </div>
-        )}
-      </div>
 
-      {/* Current move info */}
-      <div className="replay-move-info">
-        {currentMove ? (
-          <>
-            <span className={`replay-player-badge replay-player-${movedByColor}`}>
-              {movedBy ?? (movedByColor === "white" ? "White" : "Black")}
-            </span>
-            <span className="replay-notation">{notationToPlayerPerspective(currentMove.moves_notation, movedByColor as "white" | "black")}</span>
-            {currentAnalysis?.best_move_notation &&
-              currentAnalysis.quality !== "best" &&
-              currentAnalysis.quality !== "very_good" && (
-                <span className="replay-notation-best">
-                  best: {notationToPlayerPerspective(currentAnalysis.best_move_notation, movedByColor as "white" | "black")}
-                </span>
-              )}
-          </>
-        ) : (
-          <span className="replay-notation-empty">Game start</span>
-        )}
-      </div>
-
-      {/* Navigation controls */}
-      <div className="replay-controls">
-        <button
-          className="replay-btn"
-          onClick={() => { stopAutoPlay(); goTo(0); }}
-          disabled={moveIndex === 0}
-          title="First move"
-          aria-label="Go to first move"
-        >
-          ⏮
-        </button>
-        <button
-          className="replay-btn"
-          onClick={() => { stopAutoPlay(); goTo(moveIndex - 1); }}
-          disabled={moveIndex === 0}
-          title="Previous move"
-          aria-label="Previous move"
-        >
-          ◀
-        </button>
-
-        {autoPlaying ? (
-          <button
-            className="replay-btn replay-btn-play"
-            onClick={stopAutoPlay}
-            title="Pause auto-play"
-            aria-label="Pause"
-          >
-            ⏸
-          </button>
-        ) : (
-          <button
-            className="replay-btn replay-btn-play"
-            onClick={startAutoPlay}
-            disabled={moveIndex >= totalMoves}
-            title="Auto-play"
-            aria-label="Auto-play"
-          >
-            ▶
-          </button>
-        )}
-
-        <button
-          className="replay-btn"
-          onClick={() => { stopAutoPlay(); goTo(moveIndex + 1); }}
-          disabled={moveIndex >= totalMoves}
-          title="Next move"
-          aria-label="Next move"
-        >
-          ▶
-        </button>
-        <button
-          className="replay-btn"
-          onClick={() => { stopAutoPlay(); goTo(totalMoves); }}
-          disabled={moveIndex >= totalMoves}
-          title="Last move"
-          aria-label="Go to last move"
-        >
-          ⏭
-        </button>
-      </div>
-
-      {/* Deep-dive button + top candidate moves panel */}
-      {currentAnalysis && moveIndex > 0 && (
-        <div className="replay-deepdive-trigger">
-          <button
-            type="button"
-            className={`replay-deepdive-btn${deepDiveMoveNumber === moveIndex ? " replay-deepdive-btn--active" : ""}`}
-            onClick={() => handleDeepDive(moveIndex)}
-            disabled={deepDiveLoading && deepDiveMoveNumber === moveIndex}
-            title="Run maximum-depth analysis on this position"
-          >
-            {deepDiveLoading && deepDiveMoveNumber === moveIndex ? (
+          {/* Current move info */}
+          <div className="replay-move-info">
+            {currentMove ? (
               <>
-                <span className="replay-reanalyze-spin" />
-                Analyzing...
+                <span className={`replay-player-badge replay-player-${movedByColor}`}>
+                  {movedBy ?? (movedByColor === "white" ? "White" : "Black")}
+                </span>
+                <span className="replay-notation">{notationToPlayerPerspective(currentMove.moves_notation, movedByColor as "white" | "black")}</span>
+                {currentAnalysis?.best_move_notation &&
+                  currentAnalysis.quality !== "best" &&
+                  currentAnalysis.quality !== "very_good" && (
+                    <span className="replay-notation-best">
+                      best: {notationToPlayerPerspective(currentAnalysis.best_move_notation, movedByColor as "white" | "black")}
+                    </span>
+                  )}
               </>
             ) : (
-              <>
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <circle cx="7" cy="7" r="4.5"/>
-                  <path d="M14 14l-3.5-3.5M5 7h4M7 5v4"/>
-                </svg>
-                Deep-dive
-              </>
+              <span className="replay-notation-empty">Game start</span>
             )}
-          </button>
-        </div>
-      )}
-
-      {currentAnalysis?.top_moves && currentAnalysis.top_moves.length > 0 && moveIndex > 0 && (
-        <div className="replay-top-moves">
-          <div className="replay-top-moves-header">
-            Top moves for move {moveIndex} ({movedByColor === "white" ? "\u26AA" : "\u26AB"} {currentMove?.dice_roll})
           </div>
-          <table className="replay-top-moves-table">
-            <thead>
-              <tr>
-                <th className="replay-top-moves-th replay-top-moves-th--rank">#</th>
-                <th className="replay-top-moves-th replay-top-moves-th--notation">Move</th>
-                <th className="replay-top-moves-th replay-top-moves-th--equity">Equity</th>
-                <th className="replay-top-moves-th replay-top-moves-th--delta">{"\u0394"} Equity</th>
-              </tr>
-            </thead>
-            <tbody>
-              {currentAnalysis.top_moves.map((candidate, idx) => {
-                const isBest = candidate.rank === 1;
-                const isChosen = candidate.notation === (currentMove?.moves_notation ?? "")
-                  || (isBest && (currentAnalysis.quality === "best" || currentAnalysis.quality === "very_good"));
-                const isSelected = selectedCandidate === idx;
-                return (
-                  <tr
-                    key={candidate.rank}
-                    className={`replay-top-moves-row${isSelected ? " replay-top-moves-row--selected" : ""}${isChosen ? " replay-top-moves-row--chosen" : ""}${isBest ? " replay-top-moves-row--best" : ""}`}
-                    onClick={() => setSelectedCandidate(isSelected ? null : idx)}
-                    style={{ cursor: "pointer" }}
+
+          {/* Deep-dive panel (below board, full width) */}
+          {deepDiveData && deepDiveMoveNumber === moveIndex && currentMove && (
+            <DeepDivePanel
+              data={deepDiveData}
+              playedNotation={currentMove.moves_notation}
+              onClose={handleCloseDeepDive}
+            />
+          )}
+        </div>
+
+        {/* Right column: Compact analysis panel */}
+        <div className="ap">
+          {/* Panel header */}
+          <div className="ap-head">
+            <div className="left">
+              <span className="eyebrow">
+                {analysis?.analysis_source
+                  ? `Analysis · ${analysis.analysis_ply ?? 2}-ply`
+                  : "Position analysis"}
+              </span>
+              <h4 className="title">
+                {moveIndex === 0
+                  ? "Game start"
+                  : `${movedBy ?? (movedByColor === "white" ? "White" : "Black")} · ${currentMove?.dice_roll ?? ""}`}
+              </h4>
+            </div>
+            <div className="right">
+              {diceValues && (
+                <span className="ap-roll">
+                  <span className="ap-die">{diceValues.die1}</span>
+                  <span className="ap-die">{diceValues.die2}</span>
+                </span>
+              )}
+              {currentAnalysis && <QualityChip quality={currentAnalysis.quality} />}
+            </div>
+          </div>
+
+          {/* Played-move banner */}
+          {currentAnalysis && moveIndex > 0 && (
+            <div className="ap-played">
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span className="label">Played</span>
+                <span className="move">
+                  {notationToPlayerPerspective(currentAnalysis.moves_notation, movedByColor as "white" | "black")}
+                </span>
+              </div>
+              {currentAnalysis.equity_loss > 0.001 && (
+                <span className="equity-loss">
+                  <span className="neg">{"\u2212"}{currentAnalysis.equity_loss.toFixed(3)}</span>
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Ply selector */}
+          {!embed && (
+            <div className="scale-legend">
+              <div className="replay-ply-selector" role="radiogroup" aria-label="Analysis depth" style={{ marginRight: "auto" }}>
+                {([0, 2, 3] as const).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    className={`replay-ply-btn${analysisPly === p ? " replay-ply-btn--active" : ""}`}
+                    onClick={() => handlePlyChange(p)}
+                    disabled={analysisLoading}
+                    aria-pressed={analysisPly === p}
+                    title={
+                      p === 0 ? "Fast (neural net only)" :
+                      p === 2 ? "Standard (2-ply lookahead)" :
+                      "Deep (3-ply, slower)"
+                    }
                   >
-                    <td className="replay-top-moves-td replay-top-moves-td--rank">{candidate.rank}</td>
-                    <td className="replay-top-moves-td replay-top-moves-td--notation">
-                      {notationToPlayerPerspective(candidate.notation, movedByColor as "white" | "black")}
-                      {isChosen && <span className="replay-top-moves-played">{"\u2713"} Played</span>}
-                    </td>
-                    <td className="replay-top-moves-td replay-top-moves-td--equity">
-                      {candidate.equity >= 0 ? "+" : ""}{candidate.equity.toFixed(3)}
-                    </td>
-                    <td className={`replay-top-moves-td replay-top-moves-td--delta${candidate.equity_diff < -0.06 ? " replay-top-moves-td--bad" : candidate.equity_diff < -0.02 ? " replay-top-moves-td--warn" : ""}`}>
-                      {candidate.rank === 1 ? "\u2014" : candidate.equity_diff.toFixed(3)}
-                    </td>
-                  </tr>
+                    {p}-ply
+                  </button>
+                ))}
+              </div>
+              <span className="item"><span className="dot" style={{ background: "var(--q-best-bar)" }} />Best</span>
+              <span className="item"><span className="dot" style={{ background: "var(--q-good-bar)" }} />Good</span>
+              <span className="item"><span className="dot" style={{ background: "var(--q-doubtful-bar)" }} />Doubtful</span>
+              <span className="item"><span className="dot" style={{ background: "var(--q-mistake-bar)" }} />Mistake</span>
+              <span className="item"><span className="dot" style={{ background: "var(--q-blunder-bar)" }} />Blunder</span>
+            </div>
+          )}
+
+          {/* Loading / error / no data states */}
+          {analysisLoading && !analysis?.status && (
+            <div className="ap-status">
+              <span className="spin" />Analyzing{analysisPly >= 3 ? " (deep)" : ""}...
+            </div>
+          )}
+          {analysisError && !analysisLoading && (
+            <div className="ap-status" style={{ color: "var(--danger, #e74c3c)" }}>
+              {analysisError}
+            </div>
+          )}
+
+          {/* Candidate moves list */}
+          {currentAnalysis?.top_moves && currentAnalysis.top_moves.length > 0 && moveIndex > 0 && (
+            <div className="ap-list">
+              {currentAnalysis.top_moves.map((c, idx) => {
+                const candidateQ = classifyDelta(c.equity_diff);
+                const isSelected = selectedCandidate === idx;
+                const isPlayed = c.notation === (currentMove?.moves_notation ?? "");
+                return (
+                  <div
+                    key={c.rank}
+                    className={`ap-row${isSelected ? " is-selected" : ""}`}
+                    onClick={() => setSelectedCandidate(isSelected ? null : idx)}
+                  >
+                    <span className={`quality-bar qbar--${candidateQ}`} />
+                    <div className="move-body">
+                      <div className="move-line">
+                        <span className="notation">
+                          {notationToPlayerPerspective(c.notation, movedByColor as "white" | "black")}
+                        </span>
+                        <QualityChip quality={candidateQ} />
+                        {isPlayed && <span className="played-tag">played</span>}
+                      </div>
+                      <EquityBar delta={c.equity_diff} quality={candidateQ} max={equityBarMax} />
+                    </div>
+                    <div className="equity">
+                      <span className="num">{formatEq(c.equity)}</span>
+                      <span className={`delta ${deltaClass(c.equity_diff)}`}>
+                        {formatDelta(c.equity_diff)}
+                      </span>
+                    </div>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
+            </div>
+          )}
+
+          {/* Empty state when no top moves */}
+          {moveIndex > 0 && currentAnalysis && (!currentAnalysis.top_moves || currentAnalysis.top_moves.length === 0) && (
+            <div className="ap-status">No candidate moves available for this position.</div>
+          )}
+          {moveIndex === 0 && (
+            <div className="ap-status">Navigate to a move to see analysis.</div>
+          )}
+
+          {/* Panel footer */}
+          <div className="ap-foot">
+            <span>
+              {analysis?.analysis_source ?? (analysisSource === "gnubg" ? "gnubg" : "analysis")}
+              {analysis?.analysis_ply != null ? ` · ${analysis.analysis_ply}-ply` : ""}
+            </span>
+            <div className="right">
+              {currentAnalysis && moveIndex > 0 && (
+                <button
+                  onClick={() => handleDeepDive(moveIndex)}
+                  disabled={deepDiveLoading && deepDiveMoveNumber === moveIndex}
+                  title="Run maximum-depth analysis"
+                >
+                  {deepDiveLoading && deepDiveMoveNumber === moveIndex ? "..." : "Deep-dive"}
+                </button>
+              )}
+            </div>
+          </div>
         </div>
-      )}
+      </div>
 
-      {/* Deep-dive panel */}
-      {deepDiveData && deepDiveMoveNumber === moveIndex && currentMove && (
-        <DeepDivePanel
-          data={deepDiveData}
-          playedNotation={currentMove.moves_notation}
-          onClose={handleCloseDeepDive}
-        />
-      )}
-
-      {/* Analysis toggle + ply selector */}
+      {/* ── Full analysis panel (game summary, key moments, move list) ── */}
       {!embed && (
         <div className="replay-analysis-controls">
           <button
@@ -1053,86 +1169,45 @@ function GameReplay() {
           >
             {analysisOpen ? "▼ Hide analysis" : "▶ Show move analysis"}
           </button>
-          <div className="replay-ply-selector" role="radiogroup" aria-label="Analysis depth">
-            <span className="replay-ply-label">Depth:</span>
-            {([0, 2, 3] as const).map((p) => (
-              <button
-                key={p}
-                type="button"
-                className={`replay-ply-btn${analysisPly === p ? " replay-ply-btn--active" : ""}`}
-                onClick={() => handlePlyChange(p)}
-                disabled={analysisLoading}
-                aria-pressed={analysisPly === p}
-                title={
-                  p === 0 ? "Fast (neural net only)" :
-                  p === 2 ? "Standard (2-ply lookahead)" :
-                  "Deep (3-ply, slower)"
-                }
-              >
-                {p}-ply
-              </button>
-            ))}
-          </div>
         </div>
       )}
 
       {analysisOpen && (
         <div id="replay-analysis-panel" className="replay-analysis">
-          {/* Progress bar for background analysis */}
           {analysis?.status === "running" && (
             <div className="replay-analysis-status">
               <div>Deep analysis in progress… {analysis.progress != null ? `${Math.round(analysis.progress * 100)}%` : ""}</div>
               {analysis.progress != null && (
                 <div className="replay-analysis-progress-bar">
-                  <div
-                    className="replay-analysis-progress-fill"
-                    style={{ width: `${analysis.progress * 100}%` }}
-                  />
+                  <div className="replay-analysis-progress-fill" style={{ width: `${analysis.progress * 100}%` }} />
                 </div>
               )}
               <div className="replay-analysis-progress-detail">
-                {analysis.moves_analysed} of {analysis.total_moves} moves analysed (polling every 60s)
+                {analysis.moves_analysed} of {analysis.total_moves} moves analysed
               </div>
             </div>
           )}
-          {/* Failed state with retry */}
           {analysis?.status === "failed" && !analysisLoading && (
             <div className="replay-analysis-status replay-analysis-status--error">
               Deep analysis failed.{" "}
-              <button
-                type="button"
-                className="replay-analysis-retry-btn"
-                onClick={() => fetchAnalysis(analysisPly, true)}
-              >
-                Retry
-              </button>
+              <button type="button" className="replay-analysis-retry-btn" onClick={() => fetchAnalysis(analysisPly, true)}>Retry</button>
             </div>
           )}
-          {/* Initial loading (no status yet) */}
           {analysisLoading && !analysis?.status && (
             <div className="replay-analysis-status">
-              Analysing game{analysisPly >= 3 ? " (deep analysis, this may take a while)" : ""}…
+              Analysing game{analysisPly >= 3 ? " (deep, may take a while)" : ""}…
             </div>
           )}
           {analysisError && !analysisLoading && (
-            <div className="replay-analysis-status replay-analysis-status--error">
-              {analysisError}
-            </div>
+            <div className="replay-analysis-status replay-analysis-status--error">{analysisError}</div>
           )}
-          {/* Show results: complete analysis, or partial results while running */}
           {analysis && analysis.status !== "failed" && analysis.move_analyses.length > 0 && (
             <>
-              {analysis.analysis_source && analysis.status === "complete" && (
-                <div className="replay-analysis-banner replay-analysis-banner--source">
-                  Analyzed by {analysis.analysis_source}
-                </div>
-              )}
               {!analysis.analysis_source && analysisSource !== "gnubg" && !analysis.ml_available && (
                 <div className="replay-analysis-banner">
                   ML model unavailable — showing pip-count fallback analysis.
                 </div>
               )}
-
               {playerSummaries && (
                 <div className="replay-analysis-section">
                   <h3 className="replay-analysis-heading">Game summary</h3>
@@ -1141,55 +1216,26 @@ function GameReplay() {
                       const s = playerSummaries[c];
                       if (!s || s.totalMoves === 0) return null;
                       const avgLoss = s.totalEquityLoss / s.totalMoves;
-                      const qualityOrder = [
-                        "Best",
-                        "Very good",
-                        "Good",
-                        "Inaccuracy",
-                        "Doubtful",
-                        "Mistake",
-                        "Bad",
-                        "Blunder",
-                        "Very bad",
-                      ];
+                      const qualityOrder = ["Best", "Good", "Doubtful", "Mistake", "Blunder"];
                       return (
                         <div key={c} className="replay-summary-player">
-                          <span
-                            className={`replay-player-badge replay-player-${c}`}
-                          >
-                            {s.nickname}
-                          </span>
+                          <span className={`replay-player-badge replay-player-${c}`}>{s.nickname}</span>
                           <div className="replay-summary-stat">
-                            <span className="replay-summary-label">
-                              Avg error
-                            </span>
-                            <span className="replay-summary-value">
-                              {avgLoss.toFixed(3)}
-                            </span>
+                            <span className="replay-summary-label">Avg error</span>
+                            <span className="replay-summary-value">{avgLoss.toFixed(3)}</span>
                           </div>
                           <div className="replay-summary-stat">
-                            <span className="replay-summary-label">
-                              Total loss
-                            </span>
-                            <span className="replay-summary-value">
-                              {s.totalEquityLoss.toFixed(2)}
-                            </span>
+                            <span className="replay-summary-label">Total loss</span>
+                            <span className="replay-summary-value">{s.totalEquityLoss.toFixed(2)}</span>
                           </div>
                           <div className="replay-summary-qualities">
                             {qualityOrder.map((label) => {
                               const count = s.qualityCounts[label];
                               if (!count) return null;
-                              const cssKey = Object.entries(QUALITY_LABEL).find(
-                                ([, v]) => v === label,
-                              )?.[0] as MoveQuality | undefined;
-                              const css = cssKey
-                                ? QUALITY_CSS_CLASS[cssKey]
-                                : "good";
+                              const cssKey = Object.entries(QUALITY_LABEL).find(([, v]) => v === label)?.[0] as MoveQuality | undefined;
+                              const css = cssKey ? QUALITY_CSS_CLASS[cssKey] : "good";
                               return (
-                                <span
-                                  key={label}
-                                  className={`replay-summary-quality replay-quality--${css}`}
-                                >
+                                <span key={label} className={`replay-summary-quality replay-quality--${css}`}>
                                   {count} {label}
                                 </span>
                               );
@@ -1211,22 +1257,14 @@ function GameReplay() {
                         <button
                           type="button"
                           className="replay-key-moment"
-                          onClick={() => {
-                            stopAutoPlay();
-                            goTo(m.move_number);
-                          }}
+                          onClick={() => { stopAutoPlay(); goTo(m.move_number); }}
                         >
-                          <span
-                            className={`replay-quality replay-quality--${QUALITY_CSS_CLASS[m.quality]}`}
-                          >
-                            {QUALITY_LABEL[m.quality]}
-                          </span>
+                          <QualityChip quality={m.quality} />
                           <span className="replay-key-moment-move">
-                            Move {m.move_number} · {m.dice_roll} ·{" "}
-                            {notationToPlayerPerspective(m.moves_notation, m.player_color)}
+                            Move {m.move_number} · {m.dice_roll} · {notationToPlayerPerspective(m.moves_notation, m.player_color)}
                           </span>
                           <span className="replay-key-moment-loss">
-                            −{m.equity_loss.toFixed(2)}
+                            {"\u2212"}{m.equity_loss.toFixed(3)}
                           </span>
                         </button>
                       </li>
@@ -1238,77 +1276,50 @@ function GameReplay() {
               <div className="replay-analysis-section">
                 <h3 className="replay-analysis-heading">
                   Move list ({analysis.moves_analysed}
-                  {analysis.total_moves > analysis.moves_analysed
-                    ? ` of ${analysis.total_moves}`
-                    : ""}
-                  )
+                  {analysis.total_moves > analysis.moves_analysed ? ` of ${analysis.total_moves}` : ""})
                 </h3>
-                {analysisSource === "gnubg" && !analysis.analysis_source && (
-                  <p
-                    className="replay-analysis-attribution"
-                    title="Each move is evaluated by the gnubg engine. Win probabilities reflect the chance the mover wins from that position."
-                  >
+                {analysis.analysis_source && analysis.status === "complete" && (
+                  <p className="replay-analysis-attribution">
+                    Analyzed by {analysis.analysis_source}
+                  </p>
+                )}
+                {!analysis.analysis_source && analysisSource === "gnubg" && (
+                  <p className="replay-analysis-attribution">
                     Analyzed by GNU Backgammon
                   </p>
                 )}
                 <ul className="replay-move-list">
                   {analysis.move_analyses.map((m) => {
-                    const chosenPct = formatPct(
-                      m.chosen_win_prob ?? m.chosen_probs?.win,
-                    );
-                    const bestPct = formatPct(
-                      m.best_win_prob ?? m.best_probs?.win,
-                    );
+                    const chosenPct = formatPct(m.chosen_win_prob ?? m.chosen_probs?.win);
+                    const bestPct = formatPct(m.best_win_prob ?? m.best_probs?.win);
                     const hasProbs = chosenPct !== null || bestPct !== null;
-                    const hasDetails =
-                      !!m.chosen_probs || !!m.best_probs;
+                    const hasDetails = !!m.chosen_probs || !!m.best_probs;
                     const isExpanded = expandedMoves.has(m.move_number);
-                    // Collapse the "chosen == best" case into a single line:
-                    // when the player played the top move, showing two identical
-                    // rows duplicates the same number. A move is considered the
-                    // top pick if it's labelled best/very_good AND either there's
-                    // no distinct best-move notation or the equity loss is
-                    // effectively zero.
                     const chosenIsBest =
-                      chosenPct !== null &&
-                      bestPct !== null &&
+                      chosenPct !== null && bestPct !== null &&
                       (m.quality === "best" || m.quality === "very_good") &&
                       (m.best_move_notation == null || m.equity_loss < 0.001);
                     return (
-                      <li
-                        key={m.move_number}
-                        className={`replay-move-item${m.move_number === moveIndex ? " replay-move-item--active" : ""}`}
-                      >
+                      <li key={m.move_number} className={`replay-move-item${m.move_number === moveIndex ? " replay-move-item--active" : ""}`}>
                         <button
                           type="button"
                           className="replay-move-item-btn"
-                          onClick={() => {
-                            stopAutoPlay();
-                            goTo(m.move_number);
-                          }}
+                          onClick={() => { stopAutoPlay(); goTo(m.move_number); }}
                         >
-                          <span className="replay-move-item-num">
-                            {m.move_number}
-                          </span>
-                          <span
-                            className={`replay-quality replay-quality--${QUALITY_CSS_CLASS[m.quality]}`}
-                            title={`Equity loss: ${m.equity_loss.toFixed(3)}`}
-                          >
-                            {QUALITY_LABEL[m.quality]}
-                          </span>
+                          <span className="replay-move-item-num">{m.move_number}</span>
+                          <QualityChip quality={m.quality} />
                           <span className="replay-move-item-player">
-                            {m.player_color === "white" ? "⚪" : "⚫"} {m.dice_roll}
+                            {m.player_color === "white" ? "\u26AA" : "\u26AB"} {m.dice_roll}
                           </span>
                           <span className="replay-move-item-notation">
                             {notationToPlayerPerspective(m.moves_notation, m.player_color)}
                           </span>
-                          {m.quality !== "best" && m.best_move_notation && (
+                          {m.quality !== "best" && m.quality !== "very_good" && m.best_move_notation && (
                             <span className="replay-move-item-best">
                               best: {notationToPlayerPerspective(m.best_move_notation, m.player_color)}
                             </span>
                           )}
                         </button>
-
                         {hasProbs && (
                           <div className="replay-move-probs">
                             {chosenIsBest ? (
@@ -1316,74 +1327,45 @@ function GameReplay() {
                                 <span className="replay-move-probs-notation">
                                   {notationToPlayerPerspective(m.moves_notation, m.player_color)}
                                 </span>
-                                <span className="replay-move-probs-pct replay-move-probs-pct--chosen">
-                                  {chosenPct} win
-                                </span>
-                                <span className="replay-move-probs-label replay-move-probs-label--best">
-                                  Best
-                                </span>
+                                <span className="replay-move-probs-pct replay-move-probs-pct--chosen">{chosenPct} win</span>
+                                <span className="replay-move-probs-label replay-move-probs-label--best">Best</span>
                               </span>
                             ) : (
                               <>
                                 {chosenPct && (
                                   <span className="replay-move-probs-row">
-                                    <span className="replay-move-probs-label">
-                                      Chosen
-                                    </span>
-                                    <span className="replay-move-probs-notation">
-                                      {notationToPlayerPerspective(m.moves_notation, m.player_color)}
-                                    </span>
-                                    <span className="replay-move-probs-pct replay-move-probs-pct--chosen">
-                                      {chosenPct} win
-                                    </span>
+                                    <span className="replay-move-probs-label">Chosen</span>
+                                    <span className="replay-move-probs-notation">{notationToPlayerPerspective(m.moves_notation, m.player_color)}</span>
+                                    <span className="replay-move-probs-pct replay-move-probs-pct--chosen">{chosenPct} win</span>
                                   </span>
                                 )}
-                                {bestPct &&
-                                  (m.quality !== "best" || chosenPct !== bestPct) && (
-                                    <span className="replay-move-probs-row">
-                                      <span className="replay-move-probs-label replay-move-probs-label--best">
-                                        Best
-                                      </span>
-                                      <span className="replay-move-probs-notation">
-                                        {notationToPlayerPerspective(m.best_move_notation ?? m.moves_notation, m.player_color)}
-                                      </span>
-                                      <span className="replay-move-probs-pct replay-move-probs-pct--best">
-                                        {bestPct} win
-                                      </span>
-                                    </span>
-                                  )}
+                                {bestPct && (m.quality !== "best" || chosenPct !== bestPct) && (
+                                  <span className="replay-move-probs-row">
+                                    <span className="replay-move-probs-label replay-move-probs-label--best">Best</span>
+                                    <span className="replay-move-probs-notation">{notationToPlayerPerspective(m.best_move_notation ?? m.moves_notation, m.player_color)}</span>
+                                    <span className="replay-move-probs-pct replay-move-probs-pct--best">{bestPct} win</span>
+                                  </span>
+                                )}
                               </>
                             )}
                             {!chosenIsBest && (
-                              <span className="replay-move-probs-delta">
-                                Δ equity −{m.equity_loss.toFixed(3)}
-                              </span>
+                              <span className="replay-move-probs-delta">{"\u0394"} equity {"\u2212"}{m.equity_loss.toFixed(3)}</span>
                             )}
                             {hasDetails && (
                               <button
                                 type="button"
                                 className={`replay-move-probs-toggle${isExpanded ? " replay-move-probs-toggle--open" : ""}`}
                                 aria-expanded={isExpanded}
-                                aria-label={
-                                  isExpanded
-                                    ? `Hide gammon breakdown for move ${m.move_number}`
-                                    : `Show gammon breakdown for move ${m.move_number}`
-                                }
-                                onClick={() =>
-                                  toggleMoveDetails(m.move_number)
-                                }
+                                aria-label={isExpanded ? `Hide gammon breakdown for move ${m.move_number}` : `Show gammon breakdown for move ${m.move_number}`}
+                                onClick={() => toggleMoveDetails(m.move_number)}
                               >
-                                {isExpanded ? "▾" : "▸"} details
+                                {isExpanded ? "\u25BE" : "\u25B8"} details
                               </button>
                             )}
                           </div>
                         )}
-
                         {isExpanded && hasDetails && (
-                          <MoveProbsBreakdown
-                            chosen={m.chosen_probs ?? null}
-                            best={m.best_probs ?? null}
-                          />
+                          <MoveProbsBreakdown chosen={m.chosen_probs ?? null} best={m.best_probs ?? null} />
                         )}
                       </li>
                     );
@@ -1394,27 +1376,6 @@ function GameReplay() {
           )}
         </div>
       )}
-
-      {/* Speed control */}
-      <div className="replay-speed">
-        <label htmlFor="replay-speed-slider" className="replay-speed-label">
-          Speed
-        </label>
-        <input
-          id="replay-speed-slider"
-          type="range"
-          min={SPEED_OFFSET - SPEED_MAX_MS}
-          max={SPEED_OFFSET - SPEED_MIN_MS}
-          step={100}
-          value={SPEED_OFFSET - playSpeed} /* invert so right = faster */
-          onChange={(e) => setPlaySpeed(SPEED_OFFSET - Number(e.target.value))}
-          className="replay-speed-slider"
-          aria-label="Auto-play speed"
-        />
-        <span className="replay-speed-hint">
-          {playSpeed <= 500 ? "Fast" : playSpeed >= 2500 ? "Slow" : "Normal"}
-        </span>
-      </div>
 
       {/* Re-analyze modal */}
       {showReanalyzeModal && (

@@ -532,12 +532,12 @@ describe("GameReplay – analysis panel", () => {
       expect(screen.getByText(/52\.3% win/)).toBeInTheDocument();
       expect(screen.getByText(/61\.3% win/)).toBeInTheDocument();
     });
-    // Chosen / Best row labels
-    expect(screen.getByText("Chosen")).toBeInTheDocument();
-    expect(screen.getByText("Best")).toBeInTheDocument();
+    // Chosen / Best row labels (may appear multiple times due to sidebar legend)
+    expect(screen.getAllByText("Chosen").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Best").length).toBeGreaterThan(0);
   });
 
-  it("renders gnubg-native quality labels like 'Very bad'", async () => {
+  it("renders gnubg-native quality labels mapped to 5-tier system", async () => {
     vi.mocked(api.getReplay).mockResolvedValue(replayWithMoves);
     vi.mocked(api.getAnalysis).mockResolvedValue({
       table_id: "TABLE001",
@@ -571,8 +571,8 @@ describe("GameReplay – analysis panel", () => {
     fireEvent.click(screen.getByRole("button", { name: /next move/i }));
 
     await waitFor(() => {
-      // The gnubg-native "Very bad" label should render as-is
-      expect(screen.getAllByText(/very bad/i).length).toBeGreaterThan(0);
+      // gnubg "very_bad" maps to "Blunder" in the 5-tier quality system
+      expect(screen.getAllByText(/blunder/i).length).toBeGreaterThan(0);
     });
   });
 
@@ -645,7 +645,8 @@ describe("GameReplay – analysis panel", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/analysis crashed/i)).toBeInTheDocument();
+      // Error may appear in both sidebar and full panel
+      expect(screen.getAllByText(/analysis crashed/i).length).toBeGreaterThan(0);
     });
   });
 });

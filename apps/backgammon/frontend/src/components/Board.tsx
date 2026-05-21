@@ -28,6 +28,8 @@ interface BoardProps {
   bestMoveArrows?: ParsedMove[];
   /** Colour of the player whose move the arrows represent (needed to resolve bar/off positions). */
   arrowsMoverColor?: Color;
+  /** Override perspective for point labels (e.g. show mover's numbering during replay). Defaults to myColor. */
+  labelPerspective?: Color;
   /** Board theme ID (e.g. "classic", "dark-marble"). Defaults to "classic". */
   boardTheme?: string;
   /** Checker style ID (e.g. "classic", "marble"). Defaults to "classic". */
@@ -80,6 +82,7 @@ function Board({
   moveArrows,
   bestMoveArrows,
   arrowsMoverColor,
+  labelPerspective,
   boardTheme,
   checkerStyle,
 }: BoardProps) {
@@ -803,7 +806,7 @@ function Board({
           fontFamily="monospace"
           fontWeight="600"
         >
-          {pointToDisplayNumber(point, myColor)}
+          {pointToDisplayNumber(point, labelPerspective ?? myColor)}
         </text>,
       );
     }
