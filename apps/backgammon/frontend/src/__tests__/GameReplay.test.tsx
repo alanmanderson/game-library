@@ -567,6 +567,7 @@ describe("GameReplay – analysis panel", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /show move analysis/i }),
     );
+    // Move 1 renders the per-move gnubg quality badge ("Very bad") deterministically.
     fireEvent.click(screen.getByRole("button", { name: /next move/i }));
 
     await waitFor(() => {
