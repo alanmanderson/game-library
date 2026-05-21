@@ -156,6 +156,7 @@ export interface Table {
   black_time_remaining_ms?: number | null;
   spectator_count?: number;
   is_ranked?: boolean;
+  game_mode?: string;
 }
 
 /** A public table shown in the game lobby. */

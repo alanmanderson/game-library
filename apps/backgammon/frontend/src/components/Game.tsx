@@ -78,11 +78,15 @@ function Game() {
     rollDice: actions.rollDice, endTurn: actions.endTurn,
     undoTurn: actions.undoTurn, offerDouble: actions.offerDouble,
     requestHint: actions.requestHint,
+    isPassAndPlay: table?.game_mode === "pass_and_play",
   });
 
-  const isMyTurn = gameState?.current_turn === myColor;
+  const isPassAndPlay = table?.game_mode === "pass_and_play";
+  const isMyTurn = isPassAndPlay || gameState?.current_turn === myColor;
   const isMovingPhase = gameState?.status === "moving";
   const validMoves = gameState?.valid_moves ?? [];
+  // In pass-and-play the host controls both sides; use current_turn for move mechanics.
+  const movingColor = isPassAndPlay ? gameState?.current_turn ?? myColor : myColor;
   const noOffer = !gameState?.double_offered && !gameState?.resign_offered;
   const showResignButton = isMyTurn && gameState?.status === "rolling" && noOffer;
 
@@ -113,29 +117,29 @@ function Game() {
 
   const handlePointClick = useCallback(
     (point: number) => {
-      if (!isMyTurn || !isMovingPhase || !myColor || !gameState || moveInFlight) return;
+      if (!isMyTurn || !isMovingPhase || !movingColor || !gameState || moveInFlight) return;
       const movesFromPoint = validMoves.filter((m) => m.from_point === point);
       if (movesFromPoint.length === 0) return;
-      const move = findPreferredMove(movesFromPoint, diceOrder, gameState.remaining_dice, myColor);
+      const move = findPreferredMove(movesFromPoint, diceOrder, gameState.remaining_dice, movingColor);
       if (move) {
         userChoseMove.current = true;
         actions.makeMove(move.from_point, move.to_point);
       }
     },
-    [isMyTurn, isMovingPhase, myColor, gameState, validMoves, diceOrder, actions, moveInFlight],
+    [isMyTurn, isMovingPhase, movingColor, gameState, validMoves, diceOrder, actions, moveInFlight],
   );
 
   const handleBarClick = useCallback(() => {
-    if (!isMyTurn || !isMovingPhase || !myColor || !gameState || moveInFlight) return;
-    const barPoint = myColor === "white" ? 25 : 0;
+    if (!isMyTurn || !isMovingPhase || !movingColor || !gameState || moveInFlight) return;
+    const barPoint = movingColor === "white" ? 25 : 0;
     const movesFromBar = validMoves.filter((m) => m.from_point === barPoint);
     if (movesFromBar.length === 0) return;
-    const move = findPreferredMove(movesFromBar, diceOrder, gameState.remaining_dice, myColor);
+    const move = findPreferredMove(movesFromBar, diceOrder, gameState.remaining_dice, movingColor);
     if (move) {
       userChoseMove.current = true;
       actions.makeMove(move.from_point, move.to_point);
     }
-  }, [isMyTurn, isMovingPhase, myColor, gameState, validMoves, diceOrder, actions, moveInFlight]);
+  }, [isMyTurn, isMovingPhase, movingColor, gameState, validMoves, diceOrder, actions, moveInFlight]);
 
   const handleBearOffClick = useCallback(() => {
     // Bear-off is handled by clicking the checker directly in the new one-click mechanic.
@@ -389,7 +393,7 @@ function Game() {
             <Board gameState={gameState} myColor={myColor} selectedPoint={selectedPoint} validMoves={isMyTurn ? validMoves : []} onPointClick={handlePointClick} onBarClick={handleBarClick} onBearOffClick={handleBearOffClick} cubeValue={gameState.cube_value} cubeOwner={gameState.cube_owner} animatingMove={animatingMove} hintMoves={hintMoves} moveArrows={previousMoveArrows} arrowsMoverColor={gameState.last_turn_color as Color | undefined} boardTheme={myPlayer?.board_theme} checkerStyle={myPlayer?.checker_style} />
             <div className="board-overlay">
               <Dice dice={gameState.dice} remainingDice={gameState.remaining_dice} currentTurn={diceColor} openingRoll={gameState.opening_roll} diceOrder={isMyTurn && isMovingPhase ? diceOrder : undefined} onSwap={isMyTurn && isMovingPhase ? swapDice : undefined} />
-              <GameControls gameState={gameState} myColor={myColor} opponentName={opponentName} onRollDice={actions.rollDice} onEndTurn={actions.endTurn} onUndoTurn={actions.undoTurn} onOfferDouble={actions.offerDouble} onAcceptDouble={actions.acceptDouble} onDeclineDouble={actions.declineDouble} onRequestHint={actions.requestHint} onAcceptResign={actions.acceptResign} onRejectResign={actions.rejectResign} hintsRemaining={hintsRemaining} hintsEnabled={hintsEnabled} />
+              <GameControls gameState={gameState} myColor={myColor} opponentName={opponentName} onRollDice={actions.rollDice} onEndTurn={actions.endTurn} onUndoTurn={actions.undoTurn} onOfferDouble={actions.offerDouble} onAcceptDouble={actions.acceptDouble} onDeclineDouble={actions.declineDouble} onRequestHint={actions.requestHint} onAcceptResign={actions.acceptResign} onRejectResign={actions.rejectResign} hintsRemaining={hintsRemaining} hintsEnabled={hintsEnabled} isPassAndPlay={isPassAndPlay} />
             </div>
             {gameState.status === "waiting" && (
               <WaitingOverlay tableId={tableId!} />

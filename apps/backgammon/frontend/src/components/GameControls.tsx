@@ -17,6 +17,7 @@ interface GameControlsProps {
   opponentName: string;
   hintsRemaining: number;
   hintsEnabled: boolean;
+  isPassAndPlay?: boolean;
 }
 
 function GameControls({
@@ -34,8 +35,9 @@ function GameControls({
   opponentName,
   hintsRemaining,
   hintsEnabled,
+  isPassAndPlay,
 }: GameControlsProps) {
-  const isMyTurn = gameState.current_turn === myColor;
+  const isMyTurn = isPassAndPlay || gameState.current_turn === myColor;
 
   const statusInfo = useMemo(() => {
     if (gameState.status === "waiting") {
