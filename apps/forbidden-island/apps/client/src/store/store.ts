@@ -213,19 +213,6 @@ export const useStore = create<Store>((set, get) => ({
     switch (msg.type) {
       case 'lobby:identity':
         set({ playerId: msg.playerId, secret: msg.secret });
-        // Auto-reconnect to an in-progress game if rejoin info exists
-        {
-          const rejoin = loadRejoinInfo();
-          if (rejoin) {
-            const { send } = get();
-            send({
-              type: 'game:reconnect',
-              gameId: rejoin.gameId,
-              playerId: rejoin.playerId,
-              secret: rejoin.secret,
-            });
-          }
-        }
         break;
 
       case 'lobby:created':
