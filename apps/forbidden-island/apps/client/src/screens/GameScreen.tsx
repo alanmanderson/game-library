@@ -45,6 +45,8 @@ export function GameScreen() {
   const setActiveMode = useStore((s) => s.setActiveActionMode);
   const setSelectedTile = useStore((s) => s.setSelectedTile);
   const setValidTargets = useStore((s) => s.setValidTargets);
+  const rejoinInfo = useStore((s) => s.rejoinInfo);
+  const connectionStatus = useStore((s) => s.connectionStatus);
 
   // Overlay + animation state
   const activeOverlay = useStore((s) => s.activeOverlay);
@@ -70,6 +72,35 @@ export function GameScreen() {
 
   // Block user interactions while animating or overlay is active
   const inputBlocked = isAnimating || activeOverlay !== null;
+
+  // While reconnecting after a page refresh, show a loading screen
+  if (!gameState) {
+    return (
+      <ScreenBg>
+        <div style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          height: '100%', gap: 16,
+        }}>
+          <BrandMark size="md" />
+          {rejoinInfo ? (
+            <>
+              <div className="fi-display-i" style={{ fontSize: 18, color: 'var(--c-sand)', marginTop: 16 }}>
+                {connectionStatus === 'connected' ? 'Reconnecting to expedition...' : 'Connecting...'}
+              </div>
+              <div style={{
+                width: 10, height: 10, borderRadius: '50%',
+                background: 'var(--c-brassHi)', animation: 'fi-pulse 1.2s ease-in-out infinite',
+              }} />
+            </>
+          ) : (
+            <div className="fi-display-i" style={{ fontSize: 16, color: 'var(--c-sand2)', marginTop: 16 }}>
+              No active game found.
+            </div>
+          )}
+        </div>
+      </ScreenBg>
+    );
+  }
 
   const handleActionSelect = useCallback((id: string) => {
     if (inputBlocked) return;
