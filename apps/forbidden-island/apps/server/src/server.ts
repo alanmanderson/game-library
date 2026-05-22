@@ -9,6 +9,7 @@ import { RoomManager } from './ws/rooms.js';
 import { createWebSocketHandler } from './ws/handler.js';
 import { registerLobbyRoutes } from './lobby/routes.js';
 import { LogService } from './logservice.js';
+import { GameStore } from './persistence/game-store.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -40,8 +41,16 @@ export async function createServer() {
     done();
   });
 
-  // Room manager -- single instance, holds all game state in memory
+  // Room manager -- single instance, persists game state to PostgreSQL
   const roomManager = new RoomManager();
+
+  const dbUrl = process.env.DATABASE_URL;
+  if (dbUrl) {
+    const store = new GameStore(dbUrl);
+    await roomManager.initStore(store);
+  } else {
+    console.warn('DATABASE_URL not set — game state will not be persisted across restarts');
+  }
 
   // WebSocket route
   const wsHandler = createWebSocketHandler(roomManager);
