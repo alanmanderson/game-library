@@ -83,7 +83,7 @@ export function setupGameCodeActions(container: HTMLElement): void {
               if (ok) {
                 showToast('Link copied!');
               } else {
-                showToast(`Couldn't copy — please copy manually: ${code}`);
+                showToast(`Couldn't copy — please copy manually: ${shareUrl}`);
               }
             }
           }
@@ -98,7 +98,7 @@ export function setupGameCodeActions(container: HTMLElement): void {
           if (ok) {
             showToast('Link copied!');
           } else {
-            showToast(`Couldn't copy — please copy manually: ${code}`);
+            showToast(`Couldn't copy — please copy manually: ${shareUrl}`);
           }
         }
       }
