@@ -172,5 +172,6 @@ export function setupGame(input: SetupInput): GameState {
     floodCardsDrawn: 0,
     navigatorMovesRemaining: 0,
     navigatorTargetPlayerId: null,
+    soloPlayerId: null,
   };
 }

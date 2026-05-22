@@ -26,7 +26,8 @@ export function DiscardOverlay() {
   const hand: TreasureCardType[] = discardingPlayer.hand ?? [];
   const handCount = hand.length;
   const myId = gameState?.myPlayerId;
-  const isMe = discardingId === myId;
+  const isSolo = !!gameState?.soloPlayerId;
+  const isMe = isSolo || discardingId === myId;
 
   function handleDiscard(card: TreasureCardType) {
     if (!isMe) return;

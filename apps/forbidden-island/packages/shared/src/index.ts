@@ -17,7 +17,7 @@ export type { ClientMessage, ServerMessage } from './types/protocol.js';
 export type {
   LobbyCreateMessage, LobbyJoinMessage, LobbyLeaveMessage, LobbyStartMessage,
   LobbySetDifficultyMessage, LobbySelectRoleMessage,
-  GameActionMessage, GameReconnectMessage,
+  GameActionMessage, GameReconnectMessage, LobbyCreateSoloMessage,
   LobbyIdentityMessage, LobbyCreatedMessage, LobbyUpdatedMessage, LobbyErrorMessage,
   LobbyGameListUpdatedMessage,
   GameStartedMessage, GameStateMessage, GameFloodRevealMessage, GameTileSunkMessage,

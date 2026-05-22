@@ -315,12 +315,15 @@ function advanceToNextTurn(state: GameState): GameState {
  * Hides other players' hands (shows count only) and deck contents.
  */
 export function toClientState(state: GameState, playerId: string): ClientGameState {
+  const isSolo = state.soloPlayerId === playerId;
+
   const clientPlayers: ClientPlayerView[] = state.players.map((p) => ({
     id: p.id,
     name: p.name,
     role: p.role,
     position: p.position,
-    hand: p.id === playerId ? p.hand : null,
+    // In solo mode, reveal all hands so the player can manage all adventurers
+    hand: (isSolo || p.id === playerId) ? p.hand : null,
     handCount: p.hand.length,
     isConnected: p.isConnected,
   }));
@@ -356,6 +359,7 @@ export function toClientState(state: GameState, playerId: string): ClientGameSta
     floodCardsDrawn: state.floodCardsDrawn,
     navigatorMovesRemaining: state.navigatorMovesRemaining,
     navigatorTargetPlayerId: state.navigatorTargetPlayerId,
+    soloPlayerId: state.soloPlayerId,
   };
 }
 

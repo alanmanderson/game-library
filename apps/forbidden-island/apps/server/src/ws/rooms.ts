@@ -9,6 +9,7 @@ import {
 import { generateGameId, generatePlayerId, generateSecret } from '../utils/id.js';
 import { setupGame } from '../engine/board-setup.js';
 import { processAction, toClientState, skipDisconnectedTurn } from '../engine/game-engine.js';
+import { shuffle } from '../utils/shuffle.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -142,6 +143,9 @@ export class RoomManager {
         break;
       case 'lobby:select_role':
         this.handleSelectRole(ws, client, message.role);
+        break;
+      case 'lobby:create_solo':
+        this.handleCreateSolo(ws, client, message.playerName, message.difficulty, message.playerCount);
         break;
       case 'game:action':
         this.handleGameAction(ws, client, message.action);
@@ -313,17 +317,20 @@ export class RoomManager {
       return;
     }
 
-    const allHaveRoles = players.every((p) => p.role !== null);
-    if (!allHaveRoles) {
-      this.send(ws, { type: 'lobby:error', message: 'All players must select a role.' });
-      return;
-    }
+    // Randomly assign roles to all players
+    const allRoles: RoleName[] = ['explorer', 'diver', 'engineer', 'pilot', 'messenger', 'navigator'];
+    const shuffledRoles = shuffle(allRoles);
+    const assignedPlayers = players.map((p, i) => ({
+      ...p,
+      role: shuffledRoles[i],
+    }));
+    room.lobby.players = assignedPlayers;
 
     // Setup game
     const gameState = setupGame({
       gameId,
       difficulty: room.lobby.difficulty,
-      playerInfos: players.map((p) => ({
+      playerInfos: assignedPlayers.map((p) => ({
         id: p.id,
         name: p.name,
         role: p.role!,
@@ -371,36 +378,127 @@ export class RoomManager {
   }
 
   private handleSelectRole(
+    _ws: WebSocket,
+    _client: ClientInfo,
+    _role: RoleName,
+  ): void {
+    // Roles are randomly assigned at game start — manual selection is disabled.
+  }
+
+  // ─── Solo game creation ───────────────────────────────────────────
+
+  private static readonly SOLO_PLAYER_NAMES = [
+    'Captain Ava', 'Dr. Chen', 'Commander Reef', 'Navigator Kai',
+  ];
+
+  private handleCreateSolo(
     ws: WebSocket,
     client: ClientInfo,
-    role: RoleName,
+    playerName: string,
+    difficulty: Difficulty,
+    playerCount: number,
   ): void {
-    const { gameId, playerId } = client;
-    if (!gameId) return;
-
-    const room = this.games.get(gameId);
-    if (!room || room.state) return;
-
-    // Check if role is already taken by another player
-    const roleTaken = room.lobby.players.some(
-      (p) => p.role === role && p.id !== playerId,
-    );
-    if (roleTaken) {
-      this.send(ws, { type: 'lobby:error', message: 'Role already taken.' });
+    const trimmedName = playerName.trim().slice(0, 20);
+    if (!trimmedName) {
+      this.send(ws, { type: 'lobby:error', message: 'Name is required.' });
       return;
     }
 
-    room.lobby.players = room.lobby.players.map((p) =>
-      p.id === playerId ? { ...p, role } : p,
-    );
+    if (playerCount < 2 || playerCount > 4) {
+      this.send(ws, { type: 'lobby:error', message: 'Player count must be 2-4.' });
+      return;
+    }
 
-    this.broadcastToGame(gameId, {
-      type: 'lobby:updated',
-      lobbyState: room.lobby,
+    const gameId = generateGameId();
+    const soloPlayerId = client.playerId;
+
+    client.playerName = trimmedName;
+    client.gameId = gameId;
+
+    // Generate virtual player IDs for each adventurer
+    const virtualPlayerIds = Array.from({ length: playerCount }, () => generatePlayerId());
+
+    // Randomly assign roles
+    const allRoles: RoleName[] = ['explorer', 'diver', 'engineer', 'pilot', 'messenger', 'navigator'];
+    const shuffledRoles = shuffle(allRoles).slice(0, playerCount);
+
+    // Build player names: first player uses the real name, rest get NPC names
+    const soloNames = [trimmedName, ...RoomManager.SOLO_PLAYER_NAMES];
+
+    const playerInfos = virtualPlayerIds.map((id, i) => ({
+      id,
+      name: soloNames[i],
+      role: shuffledRoles[i],
+    }));
+
+    // Build lobby state (for bookkeeping)
+    const lobby: LobbyState = {
+      gameId,
+      hostId: soloPlayerId,
+      difficulty,
+      players: playerInfos.map((p, i) => ({
+        id: p.id,
+        name: p.name,
+        role: p.role,
+        isHost: i === 0,
+        isConnected: true,
+      })),
+      maxPlayers: playerCount,
+    };
+
+    // Setup the game immediately
+    const gameState = setupGame({
+      gameId,
+      difficulty,
+      playerInfos,
     });
+    gameState.soloPlayerId = soloPlayerId;
+
+    const room: GameRoom = {
+      gameId,
+      lobby,
+      state: gameState,
+      playerSecrets: new Map([[soloPlayerId, client.secret]]),
+      disconnectTimers: new Map(),
+      gcTimer: null,
+      createdAt: Date.now(),
+    };
+
+    this.games.set(gameId, room);
+
+    // Send game started directly (skip lobby phase)
+    this.send(ws, {
+      type: 'game:started',
+      gameState: toClientState(gameState, soloPlayerId),
+    });
+
+    this.broadcastGameList();
   }
 
   // ─── Game action handler ──────────────────────────────────────────
+
+  /**
+   * In solo mode, determine which game player is acting based on the action
+   * and current game phase. The solo player controls all adventurers.
+   */
+  private resolveSoloActingPlayer(state: GameState, action: GameAction): string {
+    // Discard phase → the player who must discard
+    if (action.type === 'discard' && state.discardingPlayerId) {
+      return state.discardingPlayerId;
+    }
+    // Swim phase → the player who must swim
+    if (action.type === 'swim' && state.swimmingPlayerId) {
+      return state.swimmingPlayerId;
+    }
+    // Special cards → find who owns the card
+    if (action.type === 'play_helicopter_lift' || action.type === 'play_sandbags') {
+      const cardId = action.cardId;
+      const owner = state.players.find((p) => p.hand.some((c) => c.id === cardId));
+      if (owner) return owner.id;
+    }
+    // Default: current turn player
+    return state.players[state.currentPlayerIndex].id;
+  }
 
   private handleGameAction(
     ws: WebSocket,
@@ -413,7 +511,13 @@ export class RoomManager {
     const room = this.games.get(gameId);
     if (!room || !room.state) return;
 
-    const result = processAction(room.state, playerId, action);
+    // In solo mode, map the solo player's real ID to the appropriate game player
+    let actingPlayerId = playerId;
+    if (room.state.soloPlayerId && room.state.soloPlayerId === playerId) {
+      actingPlayerId = this.resolveSoloActingPlayer(room.state, action);
+    }
+
+    const result = processAction(room.state, actingPlayerId, action);
     room.state = result.state;
 
     // Broadcast animation events first
@@ -474,10 +578,12 @@ export class RoomManager {
 
     // Mark player as connected
     if (room.state) {
+      const isSolo = room.state.soloPlayerId === reconnectPlayerId;
       room.state = {
         ...room.state,
         players: room.state.players.map((p) =>
-          p.id === reconnectPlayerId ? { ...p, isConnected: true } : p,
+          // In solo mode, reconnecting the solo player reconnects all virtual players
+          (isSolo || p.id === reconnectPlayerId) ? { ...p, isConnected: true } : p,
         ),
       };
 
@@ -549,6 +655,15 @@ export class RoomManager {
     const room = this.games.get(gameId);
     if (!room) return;
 
+    // Solo mode: send only to the solo player
+    if (room.state?.soloPlayerId) {
+      const ws = this.playerToWs.get(room.state.soloPlayerId);
+      if (ws) {
+        this.send(ws, message);
+      }
+      return;
+    }
+
     const playerIds = room.state
       ? room.state.players.map((p) => p.id)
       : room.lobby.players.map((p) => p.id);
@@ -564,6 +679,18 @@ export class RoomManager {
   private broadcastGameState(gameId: string): void {
     const room = this.games.get(gameId);
     if (!room || !room.state) return;
+
+    // Solo mode: send state to the solo player directly
+    if (room.state.soloPlayerId) {
+      const ws = this.playerToWs.get(room.state.soloPlayerId);
+      if (ws) {
+        this.send(ws, {
+          type: 'game:state',
+          gameState: toClientState(room.state, room.state.soloPlayerId),
+        });
+      }
+      return;
+    }
 
     for (const player of room.state.players) {
       const ws = this.playerToWs.get(player.id);

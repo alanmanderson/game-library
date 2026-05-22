@@ -251,8 +251,9 @@ export function useValidTargets(actionMode: string | null): Record<string, strin
     const currentPlayer = players[currentPlayerIndex];
     if (!currentPlayer) return {};
 
-    // Only compute for the local player's turn
-    if (currentPlayer.id !== gameState.myPlayerId) return {};
+    // Only compute for the local player's turn (in solo mode, all turns are ours)
+    const isSolo = !!gameState.soloPlayerId;
+    if (!isSolo && currentPlayer.id !== gameState.myPlayerId) return {};
 
     switch (actionMode) {
       case 'move':
