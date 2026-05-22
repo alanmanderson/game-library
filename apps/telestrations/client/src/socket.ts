@@ -65,6 +65,13 @@ function recordRecentJoin(playerId: string): void {
   recentJoins.set(playerId, t);
 }
 
+function clearDebounceState(): void {
+  for (const t of pendingLeaveToasts.values()) clearTimeout(t);
+  pendingLeaveToasts.clear();
+  for (const t of recentJoins.values()) clearTimeout(t);
+  recentJoins.clear();
+}
+
 // ===== Connection =====
 
 export function connectSocket(
@@ -77,6 +84,8 @@ export function connectSocket(
     socket.removeAllListeners();
     socket.disconnect();
   }
+
+  clearDebounceState();
 
   socket = io(window.location.origin, {
     auth: {
@@ -458,6 +467,12 @@ function handlePlayerLeft(data: PlayerLeftPayload): void {
     return;
   }
 
+  // If a join event for this player already arrived (join-before-leave ordering),
+  // suppress the leave toast and skip state mutation — the player is already back.
+  if (hasRecentJoin(data.playerId)) {
+    return;
+  }
+
   if (data.removedFromGame) {
     setState({
       players: state.players.filter((p) => p.id !== data.playerId),
@@ -468,12 +483,6 @@ function handlePlayerLeft(data: PlayerLeftPayload): void {
         p.id === data.playerId ? { ...p, isConnected: false } : p
       ),
     });
-  }
-
-  // If a join event for this player already arrived (join-before-leave ordering),
-  // suppress the leave toast entirely — the player is already back.
-  if (hasRecentJoin(data.playerId)) {
-    return;
   }
 
   // Delay the leave toast so a quickly arriving join event can cancel it.
