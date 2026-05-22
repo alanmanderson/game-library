@@ -1,4 +1,5 @@
 import { useMemo, useCallback, useEffect, type ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { ScreenBg } from '../components/ui/ScreenBg';
 import { BrandMark } from '../components/ui/BrandMark';
@@ -37,6 +38,7 @@ import type { GameLogEntry } from '@forbidden-island/shared/types/game';
 import type { TreasureCard as TreasureCardType } from '@forbidden-island/shared/types/cards';
 
 export function GameScreen() {
+  const navigate = useNavigate();
   const breakpoint = useBreakpoint();
   const gameState = useStore((s) => s.gameState);
   const activeMode = useStore((s) => s.activeActionMode);
@@ -73,7 +75,14 @@ export function GameScreen() {
   // Block user interactions while animating or overlay is active
   const inputBlocked = isAnimating || activeOverlay !== null;
 
-  // While reconnecting after a page refresh, show a loading screen
+  // While reconnecting after a page refresh, show a loading screen.
+  // If reconnect failed (no rejoinInfo + connected), redirect home.
+  useEffect(() => {
+    if (!gameState && !rejoinInfo && connectionStatus === 'connected') {
+      navigate('/', { replace: true });
+    }
+  }, [gameState, rejoinInfo, connectionStatus, navigate]);
+
   if (!gameState) {
     return (
       <ScreenBg>
@@ -82,21 +91,13 @@ export function GameScreen() {
           height: '100%', gap: 16,
         }}>
           <BrandMark size="md" />
-          {rejoinInfo ? (
-            <>
-              <div className="fi-display-i" style={{ fontSize: 18, color: 'var(--c-sand)', marginTop: 16 }}>
-                {connectionStatus === 'connected' ? 'Reconnecting to expedition...' : 'Connecting...'}
-              </div>
-              <div style={{
-                width: 10, height: 10, borderRadius: '50%',
-                background: 'var(--c-brassHi)', animation: 'fi-pulse 1.2s ease-in-out infinite',
-              }} />
-            </>
-          ) : (
-            <div className="fi-display-i" style={{ fontSize: 16, color: 'var(--c-sand2)', marginTop: 16 }}>
-              No active game found.
-            </div>
-          )}
+          <div className="fi-display-i" style={{ fontSize: 18, color: 'var(--c-sand)', marginTop: 16 }}>
+            {connectionStatus === 'connected' ? 'Reconnecting to expedition...' : 'Connecting...'}
+          </div>
+          <div style={{
+            width: 10, height: 10, borderRadius: '50%',
+            background: 'var(--c-brassHi)', animation: 'fi-pulse 1.2s ease-in-out infinite',
+          }} />
         </div>
       </ScreenBg>
     );

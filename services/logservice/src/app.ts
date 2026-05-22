@@ -46,6 +46,14 @@ export function createApp(): express.Application {
   );
 
   app.use(express.json({ limit: '1mb' }));
+  // Accept text/plain as JSON too — browser sendBeacon uses text/plain to avoid CORS preflight
+  app.use(express.text({ limit: '1mb', type: 'text/plain' }));
+  app.use((req: Request, _res: Response, next: () => void) => {
+    if (typeof req.body === 'string' && req.body.startsWith('{')) {
+      try { req.body = JSON.parse(req.body); } catch { /* leave as-is */ }
+    }
+    next();
+  });
 
   // --- POST /api/ingest ---
   app.post('/api/ingest', (req: Request, res: Response) => {
