@@ -53,6 +53,7 @@ export interface GameState {
   floodCardsDrawn: number;
   navigatorMovesRemaining: number;
   navigatorTargetPlayerId: string | null;
+  soloPlayerId: string | null;
 }
 
 export interface ClientGameState {
@@ -80,4 +81,5 @@ export interface ClientGameState {
   floodCardsDrawn: number;
   navigatorMovesRemaining: number;
   navigatorTargetPlayerId: string | null;
+  soloPlayerId: string | null;
 }

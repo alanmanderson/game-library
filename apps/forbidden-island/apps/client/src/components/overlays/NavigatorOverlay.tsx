@@ -20,6 +20,8 @@ export function NavigatorOverlay() {
   const { dispatch } = useActions();
 
   const myId = gameState?.myPlayerId;
+  const isSolo = !!gameState?.soloPlayerId;
+  const currentPlayer = gameState ? gameState.players[gameState.currentPlayerIndex] : null;
   const [selectedPawnId, setSelectedPawnId] = useState<string | null>(
     overlayData.navigatorTargetPlayerId ?? null
   );
@@ -27,11 +29,12 @@ export function NavigatorOverlay() {
     overlayData.navigatorHops ?? []
   );
 
-  // Other players (not the navigator)
+  // Other players (not the navigator / current player)
+  const navigatorId = isSolo ? currentPlayer?.id : myId;
   const otherPlayers = useMemo(() => {
     if (!gameState?.players) return [];
-    return gameState.players.filter((p: ClientPlayerView) => p.id !== myId);
-  }, [gameState?.players, myId]);
+    return gameState.players.filter((p: ClientPlayerView) => p.id !== navigatorId);
+  }, [gameState?.players, navigatorId]);
 
   const selectedPlayer = gameState?.players.find(
     (p: ClientPlayerView) => p.id === selectedPawnId

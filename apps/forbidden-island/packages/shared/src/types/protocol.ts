@@ -50,6 +50,13 @@ export interface GameReconnectMessage {
   secret: string;
 }
 
+export interface LobbyCreateSoloMessage {
+  type: 'lobby:create_solo';
+  playerName: string;
+  difficulty: Difficulty;
+  playerCount: number;
+}
+
 export type ClientMessage =
   | LobbyCreateMessage
   | LobbyJoinMessage
@@ -58,7 +65,8 @@ export type ClientMessage =
   | LobbySetDifficultyMessage
   | LobbySelectRoleMessage
   | GameActionMessage
-  | GameReconnectMessage;
+  | GameReconnectMessage
+  | LobbyCreateSoloMessage;
 
 // ─── Server -> Client ────────────────────────────────────────────────────
 

@@ -62,10 +62,11 @@ export function GameScreen() {
   const validTargets = useStore((s) => s.validTargets);
 
   const myId = gameState?.myPlayerId;
+  const isSolo = !!gameState?.soloPlayerId;
   const currentPlayerIdx = gameState?.currentPlayerIndex ?? 0;
   const currentPlayer = gameState?.players?.[currentPlayerIdx];
-  const isMyTurn = currentPlayer?.id === myId;
-  const me = gameState?.players?.find((p: ClientPlayerView) => p.id === myId);
+  const isMyTurn = isSolo || currentPlayer?.id === myId;
+  const me = isSolo ? currentPlayer : gameState?.players?.find((p: ClientPlayerView) => p.id === myId);
 
   // Block user interactions while animating or overlay is active
   const inputBlocked = isAnimating || activeOverlay !== null;
@@ -190,6 +191,7 @@ function DesktopGameLayout({
   inputBlocked: boolean;
 }) {
   const gameState = useStore((s) => s.gameState);
+  const isSolo = !!gameState?.soloPlayerId;
   const activeMode = useStore((s) => s.activeActionMode);
   const selectedTile = useStore((s) => s.selectedTile);
 
@@ -213,9 +215,10 @@ function DesktopGameLayout({
   const myId = gameState?.myPlayerId;
   const currentPlayerIdx = gameState?.currentPlayerIndex ?? 0;
   const currentPlayer = gameState?.players?.[currentPlayerIdx];
-  const isMyTurn = currentPlayer?.id === myId;
-  const me = gameState?.players?.find((p: ClientPlayerView) => p.id === myId);
-  const myHand = me?.hand || [];
+  const isMyTurn = isSolo || currentPlayer?.id === myId;
+  const me = isSolo ? currentPlayer : gameState?.players?.find((p: ClientPlayerView) => p.id === myId);
+  // In solo mode, show the current player's hand as "your" hand
+  const myHand = isSolo ? (currentPlayer?.hand || []) : (me?.hand || []);
   const phase = gameState?.phase ?? 'action';
   const actionsRemaining = gameState?.actionsRemaining ?? 3;
 
@@ -350,14 +353,50 @@ function DesktopGameLayout({
           {/* Special card bar for off-turn play */}
           <SpecialCardBar />
 
-          <Frame tone="ink2" padded={false} style={{ padding: 14 }}>
-            <div className="fi-cap" style={{ marginBottom: 10 }}>Your Hand - {myHand.length} / 5</div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {myHand.map((h: TreasureCardType, i: number) => (
-                <TreasureCard key={h.id || i} type={h.type} width={84} height={120} />
-              ))}
-            </div>
-          </Frame>
+          {/* In solo mode, show all players' hands; in multiplayer, show only your hand */}
+          {isSolo ? (
+            <Frame tone="ink2" padded={false} style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 380, overflowY: 'auto' }}>
+              {gameState?.players.map((p: ClientPlayerView, pi: number) => {
+                const isCurrent = pi === currentPlayerIdx;
+                return (
+                  <div key={p.id} style={{
+                    padding: '8px 10px', borderRadius: 8,
+                    background: isCurrent ? 'rgba(232,196,122,.08)' : 'transparent',
+                    border: isCurrent ? '1px solid rgba(232,196,122,.25)' : '1px solid transparent',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                      <div className="fi-cap" style={{ fontSize: 9 }}>
+                        {p.name} - {p.role.toUpperCase()}
+                      </div>
+                      <div className="fi-mono" style={{ fontSize: 9, color: 'var(--c-sand2)' }}>
+                        {(p.hand?.length ?? p.handCount)} / 5
+                      </div>
+                      {isCurrent && (
+                        <span className="fi-mono" style={{ fontSize: 8, color: 'var(--c-brassHi)', letterSpacing: '.1em' }}>ACTIVE</span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      {(p.hand ?? []).map((h: TreasureCardType, i: number) => (
+                        <TreasureCard key={h.id || i} type={h.type} width={58} height={82} />
+                      ))}
+                      {(!p.hand || p.hand.length === 0) && (
+                        <div className="fi-mono" style={{ fontSize: 9, color: 'var(--c-sand2)', padding: '4px 0' }}>NO CARDS</div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </Frame>
+          ) : (
+            <Frame tone="ink2" padded={false} style={{ padding: 14 }}>
+              <div className="fi-cap" style={{ marginBottom: 10 }}>Your Hand - {myHand.length} / 5</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {myHand.map((h: TreasureCardType, i: number) => (
+                  <TreasureCard key={h.id || i} type={h.type} width={84} height={120} />
+                ))}
+              </div>
+            </Frame>
+          )}
           <Frame tone="ink2" padded={false} style={{ padding: 14 }}>
             <div className="fi-cap" style={{ marginBottom: 10 }}>Decks</div>
             <div style={{ display: 'flex', gap: 18, justifyContent: 'space-around' }}>

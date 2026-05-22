@@ -23,9 +23,19 @@ export function HelicopterLiftOverlay() {
   const cardId = overlayData.heliCardId ?? '';
   const selectedPlayerIds = overlayData.heliSelectedPlayerIds ?? [];
   const myId = gameState?.myPlayerId;
+  const isSolo = !!gameState?.soloPlayerId;
 
-  // Find the player who is playing the card (me)
-  const me = gameState?.players.find((p: ClientPlayerView) => p.id === myId);
+  // Find the player who owns the helicopter card
+  // In solo mode, search all players' hands since they're all controlled by the solo player
+  const me = useMemo(() => {
+    if (!gameState?.players) return null;
+    if (isSolo) {
+      return gameState.players.find((p: ClientPlayerView) =>
+        p.hand?.some((c) => c.id === cardId)
+      ) ?? null;
+    }
+    return gameState.players.find((p: ClientPlayerView) => p.id === myId) ?? null;
+  }, [gameState?.players, myId, isSolo, cardId]);
   const myTileId = useMemo(() => {
     if (!me || !gameState?.tiles) return null;
     const t = gameState.tiles.find(
