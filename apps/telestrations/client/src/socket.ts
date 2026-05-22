@@ -20,6 +20,58 @@ import { showToast } from './app';
 
 let socket: Socket | null = null;
 
+// ===== Player join/leave toast debouncing =====
+//
+// When a player reconnects, Socket.IO may emit game:player-left (old socket)
+// and game:player-joined (new socket) in either order within a ~500ms window.
+// To prevent duplicate or contradictory toasts, we:
+//   1. Delay leave toasts by RECONNECT_DEBOUNCE_MS.
+//   2. Track recently joined players so an arriving leave toast can be suppressed.
+//
+// Either ordering is handled:
+//   leave → join: pending leave timeout is cancelled; one "reconnected" toast shown.
+//   join → leave: join records a recent-join marker; arriving leave is suppressed.
+
+const RECONNECT_DEBOUNCE_MS = 500;
+
+/** Pending leave toast timeouts, keyed by playerId. */
+const pendingLeaveToasts = new Map<string, ReturnType<typeof setTimeout>>();
+
+/** Players who recently joined, keyed by playerId → expiry timestamp. */
+const recentJoins = new Map<string, ReturnType<typeof setTimeout>>();
+
+function cancelPendingLeaveToast(playerId: string): boolean {
+  const t = pendingLeaveToasts.get(playerId);
+  if (t !== undefined) {
+    clearTimeout(t);
+    pendingLeaveToasts.delete(playerId);
+    return true;
+  }
+  return false;
+}
+
+function hasRecentJoin(playerId: string): boolean {
+  return recentJoins.has(playerId);
+}
+
+function recordRecentJoin(playerId: string): void {
+  // Clear any existing marker first
+  const existing = recentJoins.get(playerId);
+  if (existing !== undefined) clearTimeout(existing);
+
+  const t = setTimeout(() => {
+    recentJoins.delete(playerId);
+  }, RECONNECT_DEBOUNCE_MS);
+  recentJoins.set(playerId, t);
+}
+
+function clearDebounceState(): void {
+  for (const t of pendingLeaveToasts.values()) clearTimeout(t);
+  pendingLeaveToasts.clear();
+  for (const t of recentJoins.values()) clearTimeout(t);
+  recentJoins.clear();
+}
+
 // ===== Connection =====
 
 export function connectSocket(
@@ -32,6 +84,8 @@ export function connectSocket(
     socket.removeAllListeners();
     socket.disconnect();
   }
+
+  clearDebounceState();
 
   socket = io(window.location.origin, {
     auth: {
@@ -380,7 +434,12 @@ function handlePlayerJoined(data: PlayerJoinedPayload): void {
     });
   }
 
-  if (data.isReconnect) {
+  // Debounce reconnect toasts: if a leave toast is pending for this player,
+  // cancel it and always show "reconnected" — the player cycled right back.
+  const hadPendingLeave = cancelPendingLeaveToast(data.player.id);
+  recordRecentJoin(data.player.id);
+
+  if (hadPendingLeave || data.isReconnect) {
     showToast(`${data.player.displayName} reconnected`);
   } else {
     showToast(`${data.player.displayName} joined`);
@@ -391,7 +450,8 @@ function handlePlayerLeft(data: PlayerLeftPayload): void {
   const state = getState();
 
   if (data.playerId === state.playerId && data.reason === 'kicked') {
-    // We were kicked
+    // We were kicked — cancel any pending toast for ourselves and act immediately.
+    cancelPendingLeaveToast(data.playerId);
     clearSession();
     setState({
       screen: 'landing',
@@ -407,6 +467,12 @@ function handlePlayerLeft(data: PlayerLeftPayload): void {
     return;
   }
 
+  // If a join event for this player already arrived (join-before-leave ordering),
+  // suppress the leave toast and skip state mutation — the player is already back.
+  if (hasRecentJoin(data.playerId)) {
+    return;
+  }
+
   if (data.removedFromGame) {
     setState({
       players: state.players.filter((p) => p.id !== data.playerId),
@@ -419,10 +485,17 @@ function handlePlayerLeft(data: PlayerLeftPayload): void {
     });
   }
 
+  // Delay the leave toast so a quickly arriving join event can cancel it.
   const verb = data.reason === 'kicked' ? 'was removed' :
     data.reason === 'disconnected' ? 'disconnected' :
     data.reason === 'timeout' ? 'timed out' : 'left';
-  showToast(`${data.displayName} ${verb}`);
+
+  const t = setTimeout(() => {
+    pendingLeaveToasts.delete(data.playerId);
+    showToast(`${data.displayName} ${verb}`);
+  }, RECONNECT_DEBOUNCE_MS);
+
+  pendingLeaveToasts.set(data.playerId, t);
 }
 
 function handleHostChanged(data: HostChangedPayload): void {
