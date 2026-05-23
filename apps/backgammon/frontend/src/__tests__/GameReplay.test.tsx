@@ -20,6 +20,7 @@ vi.mock("../services/api", () => ({
   getReplay: vi.fn(),
   getAnalysis: vi.fn(),
   exportGame: vi.fn(),
+  retryMoveAnalysis: vi.fn(),
 }));
 
 import * as api from "../services/api";
@@ -427,7 +428,10 @@ describe("GameReplay – analysis panel", () => {
     const blunderDots = document.querySelectorAll('.qdot--blunder');
     expect(blunderDots.length).toBeGreaterThan(0);
     // best_move_notation "8/4 6/4" for Black is mirrored to "17/21 19/21"
-    expect(screen.getByText(/best: 17\/21 19\/21/)).toBeInTheDocument();
+    // Rendered as a Best pill + notation inside .replay-move-item-best
+    const bestRow = document.querySelector('.replay-move-item-best');
+    expect(bestRow).toBeInTheDocument();
+    expect(bestRow!.textContent).toMatch(/17\/21 19\/21/);
   });
 
   it("shows the 'Analyzed by GNU Backgammon' banner when source is gnubg", async () => {
