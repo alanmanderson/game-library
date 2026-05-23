@@ -814,9 +814,15 @@
 }
 
 .replay-move-item-best {
-  color: var(--text-secondary, #9a9ab0);
+  grid-column: 1 / -1;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding-left: 2.6rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.78rem;
-  font-style: italic;
+  font-weight: 600;
+  color: var(--text-primary, #e8e8e8);
 }
 
 @media (max-width: 768px) {
@@ -870,8 +876,8 @@
 }
 
 .replay-move-probs-label--best {
-  background: rgba(212, 168, 67, 0.18);
-  color: var(--accent, #d4a843);
+  background: var(--q-best-bg, rgba(46, 204, 113, 0.14));
+  color: var(--q-best-fg, #2ecc71);
 }
 
 .replay-move-probs-notation {
@@ -889,7 +895,7 @@
 }
 
 .replay-move-probs-pct--best {
-  color: var(--accent, #d4a843);
+  color: var(--q-best-fg, #2ecc71);
 }
 
 .replay-move-probs-delta {

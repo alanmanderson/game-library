@@ -1798,7 +1798,8 @@ function GameReplay() {
                           </span>
                           {m.quality !== "best" && m.quality !== "very_good" && m.best_move_notation && (
                             <span className="replay-move-item-best">
-                              best: {notationToPlayerPerspective(m.best_move_notation, m.player_color)}
+                              <span className="replay-move-probs-label replay-move-probs-label--best">Best</span>
+                              {notationToPlayerPerspective(m.best_move_notation, m.player_color)}
                             </span>
                           )}
                         </button>
