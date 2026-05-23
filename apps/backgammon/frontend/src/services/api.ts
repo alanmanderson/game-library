@@ -19,6 +19,7 @@ import type {
   LeaderboardData,
   ReplayData,
   AnalysisData,
+  MoveAnalysis,
   DeepDiveResult,
   Season,
   PlayerSeasonHistoryEntry,
@@ -322,6 +323,14 @@ export function getAnalysis(tableId: string, limit = 100, ply = 2, force = false
 export function getPositionDeepDive(tableId: string, moveNumber: number): Promise<DeepDiveResult> {
   return request<DeepDiveResult>(
     `/api/tables/${tableId}/analysis/deepdive/${moveNumber}`,
+  );
+}
+
+/** Retry gnubg analysis for a single move that previously failed. */
+export function retryMoveAnalysis(tableId: string, moveNumber: number): Promise<MoveAnalysis> {
+  return request<MoveAnalysis>(
+    `/api/tables/${tableId}/analysis/retry/${moveNumber}`,
+    { method: "POST" },
   );
 }
 

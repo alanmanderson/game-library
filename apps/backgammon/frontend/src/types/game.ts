@@ -320,7 +320,7 @@ export interface MoveAnalysis {
   /** Convenience scalar for the chosen move's win probability. */
   chosen_win_prob?: number | null;
   /** Which evaluator produced this row — drives the "Analyzed by…" banner. */
-  source?: "gnubg" | "ml" | "heuristic" | null;
+  source?: "gnubg" | "ml" | "heuristic" | "unavailable" | null;
   /** Top candidate moves ranked by equity (up to 5). */
   top_moves?: MoveCandidate[] | null;
 }
