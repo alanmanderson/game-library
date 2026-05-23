@@ -405,10 +405,9 @@ class GnubgEngine:
 
         best = best_resp.best
 
-        chosen_notation = _steps_to_notation(req.chosen_moves, req.turn)
         chosen_candidate: Optional[Candidate] = None
         for c in best_resp.candidates:
-            if _normalise_notation(c.notation) == _normalise_notation(chosen_notation):
+            if _moves_match(c.moves, req.chosen_moves):
                 chosen_candidate = c
                 break
 
@@ -423,6 +422,7 @@ class GnubgEngine:
             post = applied.model_copy(update={"turn": _opposite(req.turn)})
             post_eval = await self.evaluate(post)
             # Flip probs/equity to the mover's perspective.
+            chosen_notation = _steps_to_notation(req.chosen_moves, req.turn)
             chosen_candidate = Candidate(
                 moves=list(req.chosen_moves),
                 notation=chosen_notation,
@@ -495,8 +495,80 @@ def _steps_to_notation(steps: list[MoveStep], turn: str) -> str:
                     for s in steps)
 
 
-def _normalise_notation(s: str) -> str:
-    return " ".join(s.replace("*", "").split()).lower()
+def _collapse_chains(moves: list[MoveStep]) -> list[tuple[int, int]]:
+    """Collapse chained hops into (start, end) pairs.
+
+    When a single checker uses multiple dice the game engine records each
+    hop separately (``20/14, 14/8``) while gnubg may collapse them into a
+    single span (``20/8``).  Collapsing consecutive steps whose endpoints
+    connect makes both representations comparable.
+
+    Two passes:
+
+    1. **Sequential** — collapse adjacent steps whose endpoints connect.
+    2. **Transitive** — merge any remaining pair whose ``end`` matches
+       another pair's ``start``, regardless of order.  This handles the
+       bearing-off case where the player records ``5/off 6/5`` (two
+       different checkers) while gnubg collapses it to ``6/off`` (one
+       checker chain ``6/5/off``).  Both produce the same board state
+       because all checkers of the same colour are interchangeable.
+    """
+    if not moves:
+        return []
+
+    # -- Pass 1: sequential collapse --
+    result: list[tuple[int, int]] = []
+    start = moves[0].from_point
+    end = moves[0].to_point
+    for m in moves[1:]:
+        if m.from_point == end:
+            end = m.to_point
+        else:
+            result.append((start, end))
+            start = m.from_point
+            end = m.to_point
+    result.append((start, end))
+
+    # -- Pass 2: transitive merge --
+    # Repeatedly merge any pair (A→X) with (X→B) into (A→B).
+    changed = True
+    while changed:
+        changed = False
+        for i in range(len(result)):
+            for j in range(len(result)):
+                if i != j and result[i][1] == result[j][0]:
+                    merged = (result[i][0], result[j][1])
+                    result = [result[k] for k in range(len(result))
+                              if k != i and k != j]
+                    result.append(merged)
+                    changed = True
+                    break
+            if changed:
+                break
+
+    return result
+
+
+def _moves_match(a: list[MoveStep], b: list[MoveStep]) -> bool:
+    """Check if two move lists represent the same turn.
+
+    Handles four sources of mismatch between gnubg's canonical notation
+    and the game record:
+
+    1. **Order** — gnubg lists moves highest-point-first; the game record
+       preserves the player's click order.
+    2. **Chain granularity** — gnubg may collapse ``20/14/8`` (two hops)
+       into ``20/8`` (one span); the game engine always records each hop.
+    3. **Cross-checker chains** — the player may bear off one checker and
+       move another to the vacated point (``5/off 6/5``), while gnubg
+       chains them as one checker (``6/off``).  Both produce the same
+       board, so the transitive merge in ``_collapse_chains`` unifies them.
+    4. **Hit markers** — already stripped before reaching this function.
+
+    We collapse chains (including transitive merges) and compare the
+    resulting (start, end) pairs as sorted lists.
+    """
+    return sorted(_collapse_chains(a)) == sorted(_collapse_chains(b))
 
 
 def _apply_moves(board: Board, steps: list[MoveStep]) -> Board:
