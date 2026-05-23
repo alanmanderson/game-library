@@ -14,6 +14,7 @@ interface UseGameKeyboardOptions {
   undoTurn: () => void;
   offerDouble: () => void;
   requestHint?: () => void;
+  isPassAndPlay?: boolean;
 }
 
 export function useGameKeyboard({
@@ -29,6 +30,7 @@ export function useGameKeyboard({
   undoTurn,
   offerDouble,
   requestHint,
+  isPassAndPlay,
 }: UseGameKeyboardOptions) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -40,7 +42,7 @@ export function useGameKeyboard({
         return;
       }
       if (!gameState || !myColor) return;
-      const isTurn = gameState.current_turn === myColor;
+      const isTurn = isPassAndPlay || gameState.current_turn === myColor;
 
       switch (e.key) {
         case "r": case "R":
@@ -81,5 +83,5 @@ export function useGameKeyboard({
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [showShortcutHelp, gameState, myColor, selectedPoint, rollDice, endTurn, undoTurn, offerDouble, requestHint, setSelectedPoint, setMoveHistoryOpen, setShowShortcutHelp]);
+  }, [showShortcutHelp, gameState, myColor, selectedPoint, rollDice, endTurn, undoTurn, offerDouble, requestHint, setSelectedPoint, setMoveHistoryOpen, setShowShortcutHelp, isPassAndPlay]);
 }

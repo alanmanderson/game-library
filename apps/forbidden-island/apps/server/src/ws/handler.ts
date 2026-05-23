@@ -84,6 +84,12 @@ const ClientMessageSchema = z.discriminatedUnion('type', [
     playerId: z.string(),
     secret: z.string(),
   }),
+  z.object({
+    type: z.literal('lobby:create_solo'),
+    playerName: z.string().min(1).max(20),
+    difficulty: DifficultySchema,
+    playerCount: z.number().int().min(2).max(4),
+  }),
 ]);
 
 // ─── Handler ────────────────────────────────────────────────────────────

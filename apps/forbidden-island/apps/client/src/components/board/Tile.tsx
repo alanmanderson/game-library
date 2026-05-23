@@ -90,20 +90,29 @@ export function Tile({
             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <TileGlyph kind={t.glyph} size={Math.round(size * 0.42)} />
             </div>
-            {/* flood blue wash */}
+            {/* flood blue wash — strong blue tint to clearly signal danger */}
             {isFlooded && (
-              <div style={{
-                position: 'absolute', inset: 0,
-                background: 'linear-gradient(180deg, rgba(58,151,168,.25) 0%, rgba(26,77,90,.65) 100%)',
-                mixBlendMode: 'multiply',
-              }}>
-                <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.7 }}>
-                  <path d="M-5 75 Q15 65 35 75 T75 75 T115 75" stroke="rgba(150,210,220,.7)" strokeWidth=".8" fill="none" />
-                  <path d="M-5 85 Q15 75 35 85 T75 85 T115 85" stroke="rgba(150,210,220,.5)" strokeWidth=".8" fill="none" />
+              <>
+                {/* Base blue overlay */}
+                <div style={{
+                  position: 'absolute', inset: 0,
+                  background: 'linear-gradient(170deg, rgba(30,100,140,.45) 0%, rgba(15,55,80,.75) 100%)',
+                  mixBlendMode: 'multiply',
+                }} />
+                {/* Extra blue color wash on top for saturation */}
+                <div style={{
+                  position: 'absolute', inset: 0,
+                  background: 'linear-gradient(180deg, rgba(40,130,180,.2) 0%, rgba(20,80,120,.35) 100%)',
+                }} />
+                {/* Water surface ripples */}
+                <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.8 }}>
+                  <path d="M-5 60 Q10 52 25 60 T55 60 T85 60 T115 60" stroke="rgba(120,200,220,.6)" strokeWidth="1.2" fill="none" />
+                  <path d="M-10 72 Q10 64 30 72 T70 72 T110 72" stroke="rgba(100,190,210,.5)" strokeWidth="1" fill="none" />
+                  <path d="M-5 84 Q15 76 35 84 T75 84 T115 84" stroke="rgba(80,170,200,.4)" strokeWidth=".8" fill="none" />
                 </svg>
-              </div>
+              </>
             )}
-            {isFlooded && <CrackOverlay severity={0.4} />}
+            {isFlooded && <CrackOverlay severity={0.5} color="rgba(5,30,45,.85)" />}
 
             {/* gate badge */}
             {t.gate && (

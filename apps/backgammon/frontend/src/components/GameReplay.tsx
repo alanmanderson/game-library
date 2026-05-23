@@ -12,7 +12,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
 import type {
   AnalysisData,
   DeepDiveResult,
@@ -23,7 +23,7 @@ import type {
   ReplayData,
   ReplayMoveRecord,
 } from "../types/game";
-import { getAnalysis, getPositionDeepDive, getReplay } from "../services/api";
+import { getAnalysis, getPositionDeepDive, getReplay, exportGame } from "../services/api";
 import Board from "./Board";
 import Dice from "./Dice";
 import ReanalyzeModal from "./ReanalyzeModal";
@@ -79,6 +79,24 @@ const QUALITY_CSS_CLASS: Record<MoveQuality, string> = {
   very_bad: "blunder",
 };
 
+/**
+ * Normalise move notation for comparison: strip hit markers, collapse
+ * chains (``20/14/8`` → ``20/8``), and sort so move order doesn't
+ * matter (e.g. "18/13 24/20" matches "24/20 18/13" and
+ * "13/7 13/7 20/14/8" matches "20/8 13/7 13/7").
+ */
+function normaliseNotation(s: string): string {
+  const segments = s.replace(/\*/g, "").trim().split(/\s+/);
+  const collapsed: string[] = [];
+  for (const seg of segments) {
+    const parts = seg.split("/");
+    if (parts.length >= 2) {
+      collapsed.push(`${parts[0]}/${parts[parts.length - 1]}`);
+    }
+  }
+  return collapsed.sort().join(" ");
+}
+
 /** Classify a candidate move's quality based on its equity delta from best. */
 function classifyDelta(delta: number): string {
   const d = Math.abs(delta);
@@ -109,10 +127,43 @@ function formatDelta(d: number): string {
   return (d > 0 ? "+" : "") + d.toFixed(3);
 }
 
-/** Quality chip: small coloured pill with dot indicator. */
+/** Classify luck value into a tier. */
+type LuckTier = "very_lucky" | "lucky" | "none" | "unlucky" | "very_unlucky";
+function classifyLuck(luck: number): LuckTier {
+  if (luck > 0.06) return "very_lucky";
+  if (luck > 0.02) return "lucky";
+  if (luck > -0.02) return "none";
+  if (luck > -0.06) return "unlucky";
+  return "very_unlucky";
+}
+
+/** Format luck value with sign. */
+function formatLuck(luck: number): string {
+  return (luck >= 0 ? "+" : "") + luck.toFixed(3);
+}
+
+/** Luck pill: clover + numeric luck value. */
+function LuckPill({ luck }: { luck: number }) {
+  const tier = classifyLuck(luck);
+  if (tier === "none") return null;
+  return (
+    <span className={`luck-pill luck-pill--${tier}`} title={`Dice luck: ${formatLuck(luck)}`}>
+      {"\u2618"}{formatLuck(luck)}
+    </span>
+  );
+}
+
+/** Per-move luck data. */
+interface MoveLuck {
+  move_number: number;
+  player_color: "white" | "black";
+  luck: number;
+}
+
+/** Quality chip: small coloured dot indicator. */
 function QualityChip({ quality }: { quality: string }) {
   const cssQ = QUALITY_CSS_CLASS[quality as MoveQuality] ?? quality;
-  return <span className={`qchip qchip--${cssQ}`}>{QUALITY_LABEL[quality as MoveQuality] ?? quality}</span>;
+  return <span className={`qdot qdot--${cssQ}`} title={QUALITY_LABEL[quality as MoveQuality] ?? quality} />;
 }
 
 /** Equity bar: horizontal track showing equity relative to the best move. */
@@ -242,6 +293,38 @@ function MoveProbsBreakdown({
   );
 }
 
+/* ── Inline SVG icons for header controls ────────────────────────────── */
+const ReanalyzeSvg = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M14 2v4h-4"/><path d="M2 14v-4h4"/><path d="M13.5 6A6 6 0 0 0 3.4 4.4M2.5 10a6 6 0 0 0 10.1 1.6"/>
+  </svg>
+);
+const ShareSvg = () => (
+  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true">
+    <rect x="6" y="6" width="11" height="11" rx="1.8"/><path d="M13 6V4.2A1.2 1.2 0 0 0 11.8 3H4.2A1.2 1.2 0 0 0 3 4.2v7.6A1.2 1.2 0 0 0 4.2 13H6"/>
+  </svg>
+);
+const CheckSvg = () => (
+  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M4 10.5l4 4 8-9"/>
+  </svg>
+);
+const DownloadSvg = () => (
+  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M10 3v10M6 9.5l4 4 4-4"/><path d="M3 14v2a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2"/>
+  </svg>
+);
+const GearSvg = () => (
+  <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+    <path d="M11.078 0l.855 3.424a7.28 7.28 0 011.804 1.042l3.358-1.052 1.078 1.867-2.5 2.375a7.4 7.4 0 010 2.088l2.5 2.375-1.078 1.867-3.358-1.052a7.28 7.28 0 01-1.804 1.042L11.078 18H8.922l-.855-3.424a7.28 7.28 0 01-1.804-1.042L2.905 14.586l-1.078-1.867 2.5-2.375a7.4 7.4 0 010-2.088L1.827 5.88l1.078-1.867 3.358 1.052A7.28 7.28 0 018.067 4.024L8.922 0h2.156zM10 6.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5z"/>
+  </svg>
+);
+const HomeSvg = () => (
+  <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+    <path d="M10 1.2L0.6 9.2l1.4 1.65L3 10.05V18a1 1 0 0 0 1 1h3.5v-5.5h5V19H16a1 1 0 0 0 1-1v-7.95l1 0.8 1.4-1.65L10 1.2z"/>
+  </svg>
+);
+
 function GameReplay() {
   const { tableId } = useParams<{ tableId: string }>();
   const navigate = useNavigate();
@@ -261,8 +344,7 @@ function GameReplay() {
   const [playSpeed, setPlaySpeed] = useState(1500); // ms between moves
   const autoPlayRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Analysis panel state
-  const [analysisOpen, setAnalysisOpen] = useState(false);
+  // Analysis panel state (always visible in replay)
   const [analysis, setAnalysis] = useState<AnalysisData | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
@@ -275,8 +357,16 @@ function GameReplay() {
   /** gnubg evaluation depth: 0 (fast), 2 (standard), 3 (deep/slow). */
   const [analysisPly, setAnalysisPly] = useState<0 | 2 | 3>(2);
 
+  /** Color filter for stepping through moves: only step through white, black, or both. */
+  type ColorFilter = "white" | "black" | "both";
+  const [colorFilter, setColorFilter] = useState<ColorFilter>("both");
+
   // Re-analyze modal state
   const [showReanalyzeModal, setShowReanalyzeModal] = useState(false);
+
+  // Header settings dropdown
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsRef = useRef<HTMLDivElement>(null);
 
   // Deep-dive state
   const [deepDiveData, setDeepDiveData] = useState<DeepDiveResult | null>(null);
@@ -367,6 +457,49 @@ function GameReplay() {
     [totalMoves],
   );
 
+  // Helper: determine a move's color from its player_nickname.
+  const getMoveColor = useCallback(
+    (move: ReplayMoveRecord): "white" | "black" =>
+      move.player_nickname === replayData?.white_player_nickname ? "white" : "black",
+    [replayData],
+  );
+
+  // Filtered move indices for stepping (null = no filter / show all).
+  const filteredMoveIndices = useMemo<number[] | null>(() => {
+    if (!replayData || colorFilter === "both") return null;
+    const indices: number[] = [0]; // always include starting position
+    for (let i = 0; i < replayData.moves.length; i++) {
+      if (getMoveColor(replayData.moves[i]) === colorFilter) {
+        indices.push(i + 1); // moveIndex is 1-based
+      }
+    }
+    return indices;
+  }, [replayData, colorFilter, getMoveColor]);
+
+  // Filtered navigation helpers.
+  const goToNextFiltered = useCallback(() => {
+    if (!filteredMoveIndices) { goTo(moveIndex + 1); return; }
+    const next = filteredMoveIndices.find((i) => i > moveIndex);
+    if (next !== undefined) goTo(next);
+  }, [moveIndex, filteredMoveIndices, goTo]);
+
+  const goToPrevFiltered = useCallback(() => {
+    if (!filteredMoveIndices) { goTo(moveIndex - 1); return; }
+    for (let i = filteredMoveIndices.length - 1; i >= 0; i--) {
+      if (filteredMoveIndices[i] < moveIndex) { goTo(filteredMoveIndices[i]); return; }
+    }
+  }, [moveIndex, filteredMoveIndices, goTo]);
+
+  const isAtFilteredEnd = useMemo(() => {
+    if (!filteredMoveIndices) return moveIndex >= totalMoves;
+    return !filteredMoveIndices.some((i) => i > moveIndex);
+  }, [moveIndex, totalMoves, filteredMoveIndices]);
+
+  const isAtFilteredStart = useMemo(() => {
+    if (!filteredMoveIndices) return moveIndex === 0;
+    return !filteredMoveIndices.some((i) => i < moveIndex);
+  }, [moveIndex, filteredMoveIndices]);
+
   const stopAutoPlay = useCallback(() => {
     if (autoPlayRef.current) {
       clearInterval(autoPlayRef.current);
@@ -380,15 +513,17 @@ function GameReplay() {
     setAutoPlaying(true);
     autoPlayRef.current = setInterval(() => {
       setMoveIndex((prev) => {
-        const next = prev + 1;
-        if (next >= totalMoves) {
-          stopAutoPlay();
-          return totalMoves;
+        if (!filteredMoveIndices) {
+          const next = prev + 1;
+          if (next >= totalMoves) { stopAutoPlay(); return totalMoves; }
+          return next;
         }
+        const next = filteredMoveIndices.find((i) => i > prev);
+        if (next === undefined) { stopAutoPlay(); return prev; }
         return next;
       });
     }, playSpeed);
-  }, [playSpeed, totalMoves, stopAutoPlay]);
+  }, [playSpeed, totalMoves, stopAutoPlay, filteredMoveIndices]);
 
   // Restart timer when speed changes while auto-playing
   useEffect(() => {
@@ -398,12 +533,12 @@ function GameReplay() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playSpeed]);
 
-  // Stop auto-play when reaching the end
+  // Stop auto-play when reaching the filtered end
   useEffect(() => {
-    if (autoPlaying && moveIndex >= totalMoves) {
+    if (autoPlaying && isAtFilteredEnd) {
       stopAutoPlay();
     }
-  }, [autoPlaying, moveIndex, totalMoves, stopAutoPlay]);
+  }, [autoPlaying, isAtFilteredEnd, stopAutoPlay]);
 
   // Reset selected candidate when the viewed move changes.
   useEffect(() => setSelectedCandidate(null), [moveIndex]);
@@ -414,16 +549,16 @@ function GameReplay() {
       if (e.key === "ArrowLeft") {
         e.preventDefault();
         stopAutoPlay();
-        goTo(moveIndex - 1);
+        goToPrevFiltered();
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
         stopAutoPlay();
-        goTo(moveIndex + 1);
+        goToNextFiltered();
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [moveIndex, goTo, stopAutoPlay]);
+  }, [goToNextFiltered, goToPrevFiltered, stopAutoPlay]);
 
   /** Stop any active analysis poll. */
   const stopPolling = useCallback(() => {
@@ -475,12 +610,23 @@ function GameReplay() {
     }
   }, [analysis, tableId, stopPolling, startPolling]);
 
-  // Fetch analysis as soon as the replay loads so the on-board quality
-  // indicator is available without requiring the user to open the panel.
+  // Fetch analysis as soon as the replay loads.
   useEffect(() => {
     if (!replayData) return;
     fetchAnalysis(analysisPly);
   }, [replayData]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-expand: when analysis finishes, navigate to move 1 and expand its details.
+  const hasAutoExpanded = useRef(false);
+  useEffect(() => {
+    if (hasAutoExpanded.current) return;
+    if (!analysis || analysis.status === "running") return;
+    if (analysis.move_analyses.length === 0) return;
+    hasAutoExpanded.current = true;
+    const firstMove = analysis.move_analyses[0].move_number;
+    goTo(firstMove);
+    setExpandedMoves(new Set([firstMove]));
+  }, [analysis, goTo]);
 
   // Re-fetch when ply changes.
   const handlePlyChange = useCallback((newPly: 0 | 2 | 3) => {
@@ -490,11 +636,7 @@ function GameReplay() {
     fetchAnalysis(newPly, true);
   }, [fetchAnalysis, stopPolling]);
 
-  const handleToggleAnalysis = useCallback(async () => {
-    const next = !analysisOpen;
-    setAnalysisOpen(next);
-    if (next) await fetchAnalysis(analysisPly);
-  }, [analysisOpen, fetchAnalysis, analysisPly]);
+  // Analysis is always visible - no toggle needed.
 
   /** Re-analyze with force flag. */
   const handleReanalyze = useCallback(async (ply: 0 | 2 | 3) => {
@@ -504,7 +646,6 @@ function GameReplay() {
     setAnalysis(null);
     setAnalysisLoading(true);
     setAnalysisError(null);
-    setAnalysisOpen(true);
     try {
       const data = await getAnalysis(tableId!, 100, ply, true);
       setAnalysis(data);
@@ -609,6 +750,46 @@ function GameReplay() {
     return summaries;
   }, [analysis, replayData]);
 
+  // ── Luck computation ──────────────────────────────────────────────────
+  // luck = best_equity_with_dice - expected_equity_before_roll
+  // expected_equity_before_roll ≈ -(equity_after of previous move)
+  const luckData = useMemo<MoveLuck[]>(() => {
+    if (!analysis?.move_analyses?.length) return [];
+    const moves = analysis.move_analyses;
+    return moves.map((m, i) => {
+      const prevEquityAfter = i > 0 ? moves[i - 1].equity_after : 0;
+      const luck = m.best_equity - (-prevEquityAfter);
+      return { move_number: m.move_number, player_color: m.player_color, luck };
+    });
+  }, [analysis]);
+
+  const luckByMove = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const l of luckData) map.set(l.move_number, l.luck);
+    return map;
+  }, [luckData]);
+
+  // Per-player total luck for the game summary.
+  const luckSummary = useMemo(() => {
+    const totals: Record<string, number> = { white: 0, black: 0 };
+    for (const l of luckData) totals[l.player_color] = (totals[l.player_color] ?? 0) + l.luck;
+    return totals;
+  }, [luckData]);
+
+  // ── Win probability series for chart ──────────────────────────────────
+  // Track white's win probability throughout the game.
+  const winProbSeries = useMemo<{ move: number; whiteWin: number }[]>(() => {
+    if (!analysis?.move_analyses?.length) return [];
+    return analysis.move_analyses
+      .filter((m) => m.chosen_win_prob != null || m.chosen_probs?.win != null)
+      .map((m) => {
+        const p = m.chosen_win_prob ?? m.chosen_probs?.win ?? 0.5;
+        // chosen_win_prob is from the mover's perspective. Normalise to white's POV.
+        const whiteWin = m.player_color === "white" ? p : 1 - p;
+        return { move: m.move_number, whiteWin };
+      });
+  }, [analysis]);
+
   // Orient the board to the logged-in player's perspective when they were
   // one of the two seats. Fall back to white for spectators/unauthed viewers.
   const storedPlayerId = useMemo(() => readStoredPlayerId(), []);
@@ -616,6 +797,13 @@ function GameReplay() {
     storedPlayerId && replayData?.black_player_id === storedPlayerId
       ? "black"
       : "white";
+
+  // Default the color filter to the logged-in player's color once replay loads.
+  useEffect(() => {
+    if (!replayData || !storedPlayerId) return;
+    if (replayData.white_player_id === storedPlayerId) setColorFilter("white");
+    else if (replayData.black_player_id === storedPlayerId) setColorFilter("black");
+  }, [replayData, storedPlayerId]);
 
   // Analysis entry for the move we just reached (moveIndex === move_number).
   const currentAnalysis = useMemo<MoveAnalysis | null>(() => {
@@ -694,6 +882,35 @@ function GameReplay() {
       setTimeout(() => setCopied(false), 2000);
     } catch {
       setCopied(false);
+    }
+  }, [tableId]);
+
+  // Close settings menu when clicking outside
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
+        setSettingsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [settingsOpen]);
+
+  /** Trigger a browser download of the .mat file. */
+  const handleExport = useCallback(async () => {
+    if (!tableId) return;
+    try {
+      const text = await exportGame(tableId);
+      const blob = new Blob([text], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `game_${tableId}.mat`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // silently fail — export is best-effort
     }
   }, [tableId]);
 
@@ -793,47 +1010,81 @@ function GameReplay() {
       {/* Header (hidden in embed mode) */}
       {!embed && (
         <div className="replay-header">
-          <button className="replay-back-btn" onClick={() => navigate(-1)}>
-            ← Back
-          </button>
           <h2 className="replay-title">
             {replayData.white_player_nickname ?? "White"} vs{" "}
             {replayData.black_player_nickname ?? "Black"}
           </h2>
-          <div className="replay-header-actions">
+          <div className="header-controls">
             {analysis?.status === "running" ? (
               <button
                 type="button"
-                className="replay-reanalyze-btn replay-reanalyze-btn--running"
+                className="hc-btn hc-btn--running"
                 disabled
+                title={`Re-analyzing \u00b7 ${analysis.progress != null ? `${Math.round(analysis.progress * 100)}%` : "..."}`}
               >
                 <span className="replay-reanalyze-spin" />
-                Re-analyzing &middot; {analysis.progress != null ? `${Math.round(analysis.progress * 100)}%` : "..."}
               </button>
             ) : (
               <button
                 type="button"
-                className="replay-reanalyze-btn"
+                className="hc-btn"
                 onClick={() => setShowReanalyzeModal(true)}
-                title="Re-analyze this game with different settings"
+                title="Re-analyze"
+                aria-label="Re-analyze"
               >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M14 2v4h-4"/>
-                  <path d="M2 14v-4h4"/>
-                  <path d="M13.5 6A6 6 0 0 0 3.4 4.4M2.5 10a6 6 0 0 0 10.1 1.6"/>
-                </svg>
-                Re-analyze
+                <ReanalyzeSvg />
               </button>
             )}
             <button
               type="button"
-              className={`replay-share-btn${copied ? " replay-share-btn--copied" : ""}`}
+              className={`hc-btn${copied ? " hc-btn--copied" : ""}`}
               onClick={handleCopyShareLink}
+              title={copied ? "Copied!" : "Copy share link"}
               aria-label="Copy share link"
-              title="Copy a public link to this replay"
             >
-              {copied ? "✓ Copied!" : "🔗 Share"}
+              {copied ? <CheckSvg /> : <ShareSvg />}
             </button>
+            <button
+              type="button"
+              className="hc-btn"
+              onClick={handleExport}
+              title="Download .mat file"
+              aria-label="Download .mat file"
+            >
+              <DownloadSvg />
+            </button>
+            <div className="settings-wrapper" ref={settingsRef}>
+              <button
+                className="hc-btn"
+                onClick={() => setSettingsOpen((p) => !p)}
+                title="Settings"
+                aria-label="Settings"
+              >
+                <GearSvg />
+              </button>
+              {settingsOpen && (
+                <div className="settings-menu">
+                  <span className="settings-label">Show moves for</span>
+                  <div className="replay-color-filter" role="radiogroup" aria-label="Filter moves by player">
+                    {(["white", "black", "both"] as const).map((f) => (
+                      <button
+                        key={f}
+                        className={`color-filter-btn${colorFilter === f ? " color-filter-btn--active" : ""}${f !== "both" ? ` color-filter-btn--${f}` : ""}`}
+                        onClick={() => setColorFilter(f)}
+                        role="radio"
+                        aria-checked={colorFilter === f}
+                        title={f === "both" ? "Show all moves" : `Show only ${f} moves`}
+                      >
+                        {f === "white" ? "\u26AA" : f === "black" ? "\u26AB" : "Both"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <Link to="/" className="hc-btn hc-btn--home" title="Home" aria-label="Home">
+              <HomeSvg />
+            </Link>
           </div>
         </div>
       )}
@@ -849,10 +1100,10 @@ function GameReplay() {
             </span>
           </div>
           <div className="replay-nav-buttons">
-            <button className="nav-btn" onClick={() => { stopAutoPlay(); goTo(0); }} disabled={moveIndex === 0} title="First move" aria-label="Go to first move">
+            <button className="nav-btn" onClick={() => { stopAutoPlay(); goTo(0); }} disabled={isAtFilteredStart} title="First move" aria-label="Go to first move">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 12.5L6 8l6-4.5"/><path d="M4 3.5v9"/></svg>
             </button>
-            <button className="nav-btn" onClick={() => { stopAutoPlay(); goTo(moveIndex - 1); }} disabled={moveIndex === 0} title="Previous move" aria-label="Previous move">
+            <button className="nav-btn" onClick={() => { stopAutoPlay(); goToPrevFiltered(); }} disabled={isAtFilteredStart} title="Previous move" aria-label="Previous move">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 12.5L4 8l6-4.5"/></svg>
             </button>
             {autoPlaying ? (
@@ -860,16 +1111,32 @@ function GameReplay() {
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M5 3.5v9M11 3.5v9"/></svg>
               </button>
             ) : (
-              <button className="nav-btn nav-btn--play" onClick={startAutoPlay} disabled={moveIndex >= totalMoves} title="Auto-play" aria-label="Auto-play">
+              <button className="nav-btn nav-btn--play" onClick={startAutoPlay} disabled={isAtFilteredEnd} title="Auto-play" aria-label="Auto-play">
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4.5 2.5l9 5.5-9 5.5z"/></svg>
               </button>
             )}
-            <button className="nav-btn" onClick={() => { stopAutoPlay(); goTo(moveIndex + 1); }} disabled={moveIndex >= totalMoves} title="Next move" aria-label="Next move">
+            <button className="nav-btn" onClick={() => { stopAutoPlay(); goToNextFiltered(); }} disabled={isAtFilteredEnd} title="Next move" aria-label="Next move">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3.5L12 8l-6 4.5"/></svg>
             </button>
-            <button className="nav-btn" onClick={() => { stopAutoPlay(); goTo(totalMoves); }} disabled={moveIndex >= totalMoves} title="Go to last move" aria-label="Go to last move">
+            <button className="nav-btn" onClick={() => { stopAutoPlay(); goTo(totalMoves); }} disabled={isAtFilteredEnd} title="Go to last move" aria-label="Go to last move">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 3.5L10 8l-6 4.5"/><path d="M12 3.5v9"/></svg>
             </button>
+
+            {/* Color filter toggle */}
+            <div className="replay-color-filter" role="radiogroup" aria-label="Filter moves by player">
+              {(["white", "black", "both"] as const).map((f) => (
+                <button
+                  key={f}
+                  className={`color-filter-btn${colorFilter === f ? " color-filter-btn--active" : ""}${f !== "both" ? ` color-filter-btn--${f}` : ""}`}
+                  onClick={() => setColorFilter(f)}
+                  role="radio"
+                  aria-checked={colorFilter === f}
+                  title={f === "both" ? "Show all moves" : `Show only ${f} moves`}
+                >
+                  {f === "white" ? "\u26AA" : f === "black" ? "\u26AB" : "Both"}
+                </button>
+              ))}
+            </div>
 
             {/* Speed */}
             <input
@@ -963,6 +1230,7 @@ function GameReplay() {
               const pillWinPct = selectedCand
                 ? formatPct(selectedCand.probs?.win)
                 : currentWinPct;
+              const moveLuck = luckByMove.get(moveIndex) ?? null;
               return (
                 <div
                   className={`replay-board-analysis replay-board-analysis--${QUALITY_CSS_CLASS[pillQuality as MoveQuality] ?? pillQuality}`}
@@ -970,11 +1238,12 @@ function GameReplay() {
                   aria-live="polite"
                 >
                   <span className="replay-board-analysis-quality">
-                    {QUALITY_LABEL[pillQuality as MoveQuality] ?? pillQuality}
+                    <QualityChip quality={pillQuality} />
+                    {pillWinPct && <>{" "}{pillWinPct} win</>}
                   </span>
-                  {pillWinPct && (
+                  {moveLuck !== null && classifyLuck(moveLuck) !== "none" && (
                     <span className="replay-board-analysis-prob">
-                      {pillWinPct} win
+                      <LuckPill luck={moveLuck} />
                     </span>
                   )}
                 </div>
@@ -1105,7 +1374,7 @@ function GameReplay() {
               {currentAnalysis.top_moves.map((c, idx) => {
                 const candidateQ = classifyDelta(c.equity_diff);
                 const isSelected = selectedCandidate === idx;
-                const isPlayed = c.notation.replace(/\*/g, "") === (currentMove?.moves_notation ?? "").replace(/\*/g, "");
+                const isPlayed = normaliseNotation(c.notation) === normaliseNotation(currentMove?.moves_notation ?? "");
                 return (
                   <div
                     key={c.rank}
@@ -1164,22 +1433,8 @@ function GameReplay() {
         </div>
       </div>
 
-      {/* ── Full analysis panel (game summary, key moments, move list) ── */}
+      {/* ── Full analysis panel (always visible in replay) ── */}
       {!embed && (
-        <div className="replay-analysis-controls">
-          <button
-            type="button"
-            className={`replay-analysis-toggle${analysisOpen ? " replay-analysis-toggle--open" : ""}`}
-            onClick={handleToggleAnalysis}
-            aria-expanded={analysisOpen}
-            aria-controls="replay-analysis-panel"
-          >
-            {analysisOpen ? "▼ Hide analysis" : "▶ Show move analysis"}
-          </button>
-        </div>
-      )}
-
-      {analysisOpen && (
         <div id="replay-analysis-panel" className="replay-analysis">
           {analysis?.status === "running" && (
             <div className="replay-analysis-status">
@@ -1248,9 +1503,107 @@ function GameReplay() {
                               );
                             })}
                           </div>
+                          {luckSummary[c] !== 0 && (
+                            <div className="replay-summary-stat">
+                              <span className="replay-summary-label">{"\u2618"} Luck</span>
+                              <span className="replay-summary-value">
+                                <LuckPill luck={luckSummary[c]} />
+                              </span>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
+                  </div>
+                </div>
+              )}
+
+              {/* Win probability chart */}
+              {winProbSeries.length > 1 && (
+                <div className="replay-analysis-section">
+                  <h3 className="replay-analysis-heading">Win probability</h3>
+                  <div className="wp-chart-wrap">
+                    <svg
+                      viewBox={`0 0 ${Math.max(300, winProbSeries.length * 6 + 60)} 160`}
+                      preserveAspectRatio="xMidYMid meet"
+                    >
+                      {(() => {
+                        const W = Math.max(300, winProbSeries.length * 6 + 60);
+                        const H = 160;
+                        const pad = { top: 15, right: 15, bottom: 25, left: 40 };
+                        const cw = W - pad.left - pad.right;
+                        const ch = H - pad.top - pad.bottom;
+                        const maxMove = winProbSeries[winProbSeries.length - 1].move;
+                        const x = (m: number) => pad.left + (m / maxMove) * cw;
+                        const y = (p: number) => pad.top + (1 - p) * ch;
+
+                        // Build the line path
+                        const linePts = winProbSeries.map((d) => `${x(d.move).toFixed(1)},${y(d.whiteWin).toFixed(1)}`);
+                        const linePath = `M${linePts.join("L")}`;
+                        // Fill areas: above 50% = white advantage, below = black
+                        const fillPath = `M${x(winProbSeries[0].move).toFixed(1)},${y(0.5).toFixed(1)}L${linePts.join("L")}L${x(maxMove).toFixed(1)},${y(0.5).toFixed(1)}Z`;
+
+                        return (
+                          <g>
+                            {/* Grid lines */}
+                            {[0, 0.25, 0.5, 0.75, 1].map((p) => (
+                              <g key={p}>
+                                <line x1={pad.left} x2={W - pad.right} y1={y(p)} y2={y(p)}
+                                  stroke="rgba(255,255,255,0.08)" strokeWidth="1" />
+                                <text x={pad.left - 4} y={y(p) + 3.5} textAnchor="end"
+                                  fill="rgba(255,255,255,0.35)" fontSize="9">
+                                  {(p * 100).toFixed(0)}%
+                                </text>
+                              </g>
+                            ))}
+                            {/* 50% midline */}
+                            <line x1={pad.left} x2={W - pad.right} y1={y(0.5)} y2={y(0.5)}
+                              stroke="rgba(255,255,255,0.2)" strokeWidth="1" strokeDasharray="4 3" />
+                            {/* Filled area */}
+                            <clipPath id="wp-above">
+                              <rect x={pad.left} y={pad.top} width={cw} height={ch / 2} />
+                            </clipPath>
+                            <clipPath id="wp-below">
+                              <rect x={pad.left} y={y(0.5)} width={cw} height={ch / 2} />
+                            </clipPath>
+                            <path d={fillPath} fill="rgba(255,255,255,0.06)" clipPath="url(#wp-above)" />
+                            <path d={fillPath} fill="rgba(100,100,120,0.08)" clipPath="url(#wp-below)" />
+                            {/* Line */}
+                            <path d={linePath} fill="none" stroke="var(--accent, #d4a843)" strokeWidth="1.5" strokeLinejoin="round" />
+                            {/* X-axis label */}
+                            <text x={pad.left + cw / 2} y={H - 3} textAnchor="middle"
+                              fill="rgba(255,255,255,0.35)" fontSize="9">
+                              Move
+                            </text>
+                            {/* Click targets */}
+                            {winProbSeries.map((d) => (
+                              <rect key={d.move} className="wp-chart-hit-area"
+                                x={x(d.move) - 3} y={pad.top} width={6} height={ch}
+                                fill="transparent"
+                                onClick={() => { stopAutoPlay(); goTo(d.move); }}
+                              />
+                            ))}
+                            {/* Current position marker */}
+                            {winProbSeries.find((d) => d.move === moveIndex) && (() => {
+                              const d = winProbSeries.find((d) => d.move === moveIndex)!;
+                              return (
+                                <>
+                                  <line x1={x(d.move)} x2={x(d.move)} y1={pad.top} y2={pad.top + ch}
+                                    stroke="var(--accent, #d4a843)" strokeWidth="1" opacity="0.5" />
+                                  <circle cx={x(d.move)} cy={y(d.whiteWin)} r="3.5"
+                                    fill="var(--accent, #d4a843)" stroke="#1a1a2e" strokeWidth="1.5" />
+                                </>
+                              );
+                            })()}
+                            {/* Player labels */}
+                            <text x={W - pad.right} y={pad.top + 10} textAnchor="end"
+                              fill="rgba(255,255,255,0.4)" fontSize="8">White</text>
+                            <text x={W - pad.right} y={pad.top + ch - 4} textAnchor="end"
+                              fill="rgba(255,255,255,0.4)" fontSize="8">Black</text>
+                          </g>
+                        );
+                      })()}
+                    </svg>
                   </div>
                 </div>
               )}
@@ -1296,7 +1649,7 @@ function GameReplay() {
                   </p>
                 )}
                 <ul className="replay-move-list">
-                  {analysis.move_analyses.map((m) => {
+                  {analysis.move_analyses.filter((m) => colorFilter === "both" || m.player_color === colorFilter).map((m) => {
                     const chosenPct = formatPct(m.chosen_win_prob ?? m.chosen_probs?.win);
                     const bestPct = formatPct(m.best_win_prob ?? m.best_probs?.win);
                     const hasProbs = chosenPct !== null || bestPct !== null;
@@ -1318,6 +1671,7 @@ function GameReplay() {
                           <span className="replay-move-item-player">
                             {m.player_color === "white" ? "\u26AA" : "\u26AB"} {m.dice_roll}
                           </span>
+                          {(() => { const ml = luckByMove.get(m.move_number); return ml != null ? <LuckPill luck={ml} /> : null; })()}
                           <span className="replay-move-item-notation">
                             {notationToPlayerPerspective(m.moves_notation, m.player_color)}
                           </span>

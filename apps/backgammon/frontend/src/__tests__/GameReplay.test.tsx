@@ -19,6 +19,7 @@ import type { ReplayData } from "../types/game";
 vi.mock("../services/api", () => ({
   getReplay: vi.fn(),
   getAnalysis: vi.fn(),
+  exportGame: vi.fn(),
 }));
 
 import * as api from "../services/api";
@@ -320,8 +321,9 @@ describe("GameReplay – share link", () => {
     expect(calledWith.endsWith("/replay/TABLE001")).toBe(true);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /copy share link/i })).toHaveTextContent(
-        /copied/i,
+      expect(screen.getByRole("button", { name: /copy share link/i })).toHaveAttribute(
+        "title",
+        "Copied!",
       );
     });
   });
@@ -372,17 +374,7 @@ describe("GameReplay – OG meta tags", () => {
 });
 
 describe("GameReplay – analysis panel", () => {
-  it("shows the toggle button but no panel by default", async () => {
-    vi.mocked(api.getReplay).mockResolvedValue(replayWithMoves);
-    renderReplay("TABLE001");
-    await waitFor(() => screen.getByText("Starting position"));
-    expect(
-      screen.getByRole("button", { name: /show move analysis/i }),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/analysing game/i)).not.toBeInTheDocument();
-  });
-
-  it("fetches and renders analysis when the panel is opened", async () => {
+  it("fetches and renders analysis (always visible)", async () => {
     vi.mocked(api.getReplay).mockResolvedValue(replayWithMoves);
     vi.mocked(api.getAnalysis).mockResolvedValue({
       table_id: "TABLE001",
@@ -422,9 +414,6 @@ describe("GameReplay – analysis panel", () => {
     renderReplay("TABLE001");
     await waitFor(() => screen.getByText("Starting position"));
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /show move analysis/i }),
-    );
 
     await waitFor(() => {
       expect(api.getAnalysis).toHaveBeenCalledWith("TABLE001", 100, 2);
@@ -434,8 +423,9 @@ describe("GameReplay – analysis panel", () => {
       expect(screen.getByText(/key moments/i)).toBeInTheDocument();
     });
 
-    // The blunder should show up in both the key-moments and move list
-    expect(screen.getAllByText(/blunder/i).length).toBeGreaterThan(0);
+    // The blunder should show up as a quality dot (title attribute) and in key moments
+    const blunderDots = document.querySelectorAll('.qdot--blunder');
+    expect(blunderDots.length).toBeGreaterThan(0);
     // best_move_notation "8/4 6/4" for Black is mirrored to "17/21 19/21"
     expect(screen.getByText(/best: 17\/21 19\/21/)).toBeInTheDocument();
   });
@@ -483,9 +473,6 @@ describe("GameReplay – analysis panel", () => {
 
     renderReplay("TABLE001");
     await waitFor(() => screen.getByText("Starting position"));
-    fireEvent.click(
-      screen.getByRole("button", { name: /show move analysis/i }),
-    );
 
     await waitFor(() => {
       expect(
@@ -523,9 +510,6 @@ describe("GameReplay – analysis panel", () => {
 
     renderReplay("TABLE001");
     await waitFor(() => screen.getByText("Starting position"));
-    fireEvent.click(
-      screen.getByRole("button", { name: /show move analysis/i }),
-    );
 
     await waitFor(() => {
       // Chosen and best win percentages should both appear
@@ -564,15 +548,14 @@ describe("GameReplay – analysis panel", () => {
 
     renderReplay("TABLE001");
     await waitFor(() => screen.getByText("Starting position"));
-    fireEvent.click(
-      screen.getByRole("button", { name: /show move analysis/i }),
-    );
-    // Move 1 renders the per-move gnubg quality badge ("Very bad") deterministically.
+    // Move 1: navigate to it and verify the quality dot has the blunder title
     fireEvent.click(screen.getByRole("button", { name: /next move/i }));
 
     await waitFor(() => {
       // gnubg "very_bad" maps to "Blunder" in the 5-tier quality system
-      expect(screen.getAllByText(/blunder/i).length).toBeGreaterThan(0);
+      // Quality dots now use title attributes instead of visible text
+      const dots = document.querySelectorAll('.qdot--blunder');
+      expect(dots.length).toBeGreaterThan(0);
     });
   });
 
@@ -619,15 +602,9 @@ describe("GameReplay – analysis panel", () => {
 
     renderReplay("TABLE001");
     await waitFor(() => screen.getByText("Starting position"));
-    fireEvent.click(
-      screen.getByRole("button", { name: /show move analysis/i }),
-    );
 
-    const toggle = await screen.findByRole("button", {
-      name: /show gammon breakdown/i,
-    });
-    fireEvent.click(toggle);
-
+    // The auto-expand effect navigates to move 1 and expands its details.
+    // Wait for the gammon breakdown table to appear.
     await waitFor(() => {
       expect(screen.getByText("Win (gammon)")).toBeInTheDocument();
       expect(screen.getByText("Lose (bg)")).toBeInTheDocument();
@@ -640,9 +617,6 @@ describe("GameReplay – analysis panel", () => {
     renderReplay("TABLE001");
     await waitFor(() => screen.getByText("Starting position"));
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /show move analysis/i }),
-    );
 
     await waitFor(() => {
       // Error may appear in both sidebar and full panel

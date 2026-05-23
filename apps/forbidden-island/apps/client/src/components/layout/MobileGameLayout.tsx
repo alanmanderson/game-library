@@ -55,11 +55,12 @@ export function MobileGameLayout({ validTargets, onActionSelect, onTileClick }: 
   }, [gameState?.tiles]);
 
   const myId = gameState?.myPlayerId;
+  const isSolo = !!gameState?.soloPlayerId;
   const currentPlayerIdx = gameState?.currentPlayerIndex ?? 0;
   const currentPlayer = gameState?.players[currentPlayerIdx];
-  const isMyTurn = currentPlayer?.id === myId;
-  const me = gameState?.players.find((p: ClientPlayerView) => p.id === myId);
-  const myHand = me?.hand || [];
+  const isMyTurn = isSolo || currentPlayer?.id === myId;
+  const me = isSolo ? currentPlayer : gameState?.players.find((p: ClientPlayerView) => p.id === myId);
+  const myHand = isSolo ? (currentPlayer?.hand || []) : (me?.hand || []);
   const phase = gameState?.phase ?? 'action';
   const actionsRemaining = gameState?.actionsRemaining ?? 3;
   const waterLevel = gameState?.waterLevel ?? 2;

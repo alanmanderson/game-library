@@ -53,9 +53,13 @@ export function setupGameCodeActions(container: HTMLElement): void {
         await navigator.clipboard.writeText(code);
         showToast('Game code copied!');
       } catch {
-        // Fallback
-        fallbackCopy(code);
-        showToast('Game code copied!');
+        // Fallback for browsers that block the Clipboard API
+        const ok = fallbackCopy(code);
+        if (ok) {
+          showToast('Game code copied!');
+        } else {
+          showToast(`Couldn't copy — please copy manually: ${code}`);
+        }
       }
     }
 
@@ -75,8 +79,12 @@ export function setupGameCodeActions(container: HTMLElement): void {
               await navigator.clipboard.writeText(shareUrl);
               showToast('Link copied!');
             } catch {
-              fallbackCopy(shareUrl);
-              showToast('Link copied!');
+              const ok = fallbackCopy(shareUrl);
+              if (ok) {
+                showToast('Link copied!');
+              } else {
+                showToast(`Couldn't copy — please copy manually: ${shareUrl}`);
+              }
             }
           }
         }
@@ -86,25 +94,31 @@ export function setupGameCodeActions(container: HTMLElement): void {
           await navigator.clipboard.writeText(shareUrl);
           showToast('Link copied!');
         } catch {
-          fallbackCopy(shareUrl);
-          showToast('Link copied!');
+          const ok = fallbackCopy(shareUrl);
+          if (ok) {
+            showToast('Link copied!');
+          } else {
+            showToast(`Couldn't copy — please copy manually: ${shareUrl}`);
+          }
         }
       }
     }
   }, { signal });
 }
 
-function fallbackCopy(text: string): void {
+function fallbackCopy(text: string): boolean {
   const textarea = document.createElement('textarea');
   textarea.value = text;
   textarea.style.position = 'fixed';
   textarea.style.opacity = '0';
   document.body.appendChild(textarea);
   textarea.select();
+  let success = false;
   try {
-    document.execCommand('copy');
+    success = document.execCommand('copy');
   } catch {
-    // ignore
+    // execCommand not supported; success stays false
   }
   document.body.removeChild(textarea);
+  return success;
 }

@@ -68,7 +68,9 @@ function flush(): void {
   }
 
   try {
-    const sent = navigator.sendBeacon(getEndpoint(), new Blob([payload], { type: 'application/json' }));
+    // Use text/plain to avoid CORS preflight with sendBeacon.
+    // The log service accepts JSON regardless of Content-Type.
+    const sent = navigator.sendBeacon(getEndpoint(), new Blob([payload], { type: 'text/plain' }));
     if (!sent) {
       fetch(getEndpoint(), {
         method: 'POST',

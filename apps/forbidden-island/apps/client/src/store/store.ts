@@ -232,6 +232,11 @@ export const useStore = create<Store>((set, get) => ({
 
       case 'lobby:error':
         console.error('[lobby:error]', msg.message);
+        // If reconnect failed (game not found / invalid credentials), clear stale rejoin info
+        if (msg.message === 'Game not found.' || msg.message === 'Invalid credentials.') {
+          set({ rejoinInfo: null });
+          saveRejoinInfo(null);
+        }
         break;
 
       case 'lobby:game_list_updated':
@@ -366,7 +371,8 @@ export const useStore = create<Store>((set, get) => ({
 
       case 'game:won':
       case 'game:lost':
-        set({ gameState: msg.gameState, activeOverlay: null, overlayData: {}, animationQueue: [], currentAnimation: null, isAnimating: false });
+        set({ gameState: msg.gameState, activeOverlay: null, overlayData: {}, animationQueue: [], currentAnimation: null, isAnimating: false, rejoinInfo: null });
+        saveRejoinInfo(null);
         break;
 
       case 'game:player_disconnected':

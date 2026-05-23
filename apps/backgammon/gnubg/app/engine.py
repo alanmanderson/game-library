@@ -113,8 +113,9 @@ class GnubgEngine:
         await self._raw_command("set output cubeful on")
         await self._raw_command("set output matchpc off")
         await self._raw_command("set output winpc off")
-        # Use full chain notation (e.g. "13/7/4") instead of shorthand ("13/4")
-        await self._raw_command("set output shortmoves off")
+        # Note: gnubg may collapse chain moves (e.g. "13/4" instead of
+        # "13/7/4").  The bot_service scoring handles this by collapsing
+        # the engine's enumerated turns before comparing.
 
         # Set 2-ply evaluation for both chequer play and cube decisions
         await self._raw_command("set evaluation chequer ply 2")
@@ -425,7 +426,7 @@ class GnubgEngine:
             chosen_notation = _steps_to_notation(req.chosen_moves, req.turn)
             chosen_candidate = Candidate(
                 moves=list(req.chosen_moves),
-                notation=chosen_notation,
+                notation=_steps_to_notation(req.chosen_moves, req.turn),
                 equity=-post_eval.equity,
                 probs=_flip_probs(post_eval.probs),
             )

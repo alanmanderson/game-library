@@ -21,7 +21,8 @@ export function SwimOverlay() {
   );
 
   const myId = gameState?.myPlayerId;
-  const isMe = swimmingId === myId;
+  const isSolo = !!gameState?.soloPlayerId;
+  const isMe = isSolo || swimmingId === myId;
 
   // Derive tiles
   const tiles = useMemo(() => {

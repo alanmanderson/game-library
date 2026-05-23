@@ -12,24 +12,31 @@ interface SpecialCardBarProps {
  * Floating bar shown to non-current players who hold Helicopter Lift or
  * Sandbags cards. These special cards can be played at any time, even on
  * another player's turn.
+ *
+ * In solo mode, shows special cards from ALL players' hands.
  */
 export function SpecialCardBar({ style }: SpecialCardBarProps) {
-  const { myHand, isMyTurn } = useGameState();
+  const { myHand, isMyTurn, isSolo, gameState } = useGameState();
   const openOverlay = useStore((s) => s.openOverlay);
   const activeOverlay = useStore((s) => s.activeOverlay);
 
-  // Only show for non-current players, or when it's your turn but you might want to play specials
-  // The bar is most useful off-turn, but we show it when the user has special cards
-  const specialCards = myHand.filter(
-    (c: TreasureCardType) => c.type === 'helicopter_lift' || c.type === 'sandbags'
-  );
+  // In solo mode, gather special cards from all players' hands
+  const specialCards: TreasureCardType[] = isSolo
+    ? (gameState?.players ?? []).flatMap((p) =>
+        (p.hand ?? []).filter(
+          (c: TreasureCardType) => c.type === 'helicopter_lift' || c.type === 'sandbags'
+        )
+      )
+    : myHand.filter(
+        (c: TreasureCardType) => c.type === 'helicopter_lift' || c.type === 'sandbags'
+      );
 
   // Don't show if there's already an overlay open or no special cards
   if (specialCards.length === 0 || activeOverlay !== null) return null;
 
-  // Don't show during own turn's action phase (they can use the normal action flow)
-  // But do show during other phases or other players' turns
-  if (isMyTurn) return null;
+  // In multiplayer, don't show during own turn's action phase
+  // In solo mode, always show (since you control all players)
+  if (!isSolo && isMyTurn) return null;
 
   function handleCardClick(card: TreasureCardType) {
     if (card.type === 'helicopter_lift') {

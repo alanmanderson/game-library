@@ -5,9 +5,6 @@ import { BrandMark } from '../components/ui/BrandMark';
 import { Frame } from '../components/ui/Frame';
 import { Button } from '../components/ui/Button';
 import { Pill } from '../components/ui/Pill';
-import { PlayerPawn } from '../components/board/PlayerPawn';
-import { RoleCard } from '../components/players/RoleCard';
-import { ROLES } from '../data/roles';
 import { useStore } from '../store/store';
 import type { LobbyPlayer } from '@forbidden-island/shared/types/lobby';
 import type { Difficulty } from '@forbidden-island/shared/types/game';
@@ -29,20 +26,10 @@ export function LobbyScreen() {
 
   const players = lobby?.players || [];
   const isHost = players.find((p: LobbyPlayer) => p.id === myId)?.isHost ?? false;
-  const allRolesSelected = players.every((p: LobbyPlayer) => p.role !== null);
-  const canStart = players.length >= 2 && allRolesSelected;
-  const claimedRoles: Record<string, string> = {};
-  players.forEach((p: LobbyPlayer) => {
-    if (p.role) claimedRoles[p.role] = p.name;
-  });
-  const _myRole = players.find((p: LobbyPlayer) => p.id === myId)?.role;
+  const canStart = players.length >= 2;
 
   // build 4 slots
   const slots = [...Array(4)].map((_, i) => players[i] || null);
-
-  function handleSelectRole(roleId: string) {
-    send({ type: 'lobby:select_role', role: roleId as any });
-  }
 
   function handleStart() {
     send({ type: 'lobby:start' });
@@ -60,7 +47,7 @@ export function LobbyScreen() {
 
   return (
     <ScreenBg>
-      <div style={{ maxWidth: 1080, margin: '0 auto', padding: '34px 48px', display: 'flex', flexDirection: 'column', gap: 22 }}>
+      <div style={{ maxWidth: 800, margin: '0 auto', padding: '34px 48px', display: 'flex', flexDirection: 'column', gap: 22 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <BrandMark size="md" />
           <Button kind="ghost" size="sm" onClick={handleLeave}>Leave Expedition</Button>
@@ -96,87 +83,68 @@ export function LobbyScreen() {
           </div>
         </Frame>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 22 }}>
-          {/* Player slots */}
-          <Frame tone="ink2" padded={false} style={{ padding: 18 }}>
-            <div className="fi-cap" style={{ marginBottom: 10 }}>Crew</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {slots.map((s, i) => (
-                <div key={i} style={{
-                  display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '10px 12px', borderRadius: 10,
-                  background: s ? 'rgba(8,22,28,.55)' : 'transparent',
-                  border: `1px ${s ? 'solid' : 'dashed'} ${s ? 'rgba(202,160,82,.18)' : 'rgba(202,160,82,.25)'}`,
-                }}>
-                  {s ? (
-                    <>
-                      {s.role && <PlayerPawn role={s.role} kind="portrait" size={38} isActive={s.id === myId} />}
-                      {!s.role && (
-                        <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(8,22,28,.6)', border: '1px dashed rgba(202,160,82,.4)' }} />
-                      )}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                          <div className="fi-display" style={{ fontSize: 16, color: 'var(--c-parch)' }}>{s.name}</div>
-                          {s.isHost && <Pill tone="brass">Host</Pill>}
-                          {s.id === myId && <Pill tone="sand">You</Pill>}
-                        </div>
-                        <div className="fi-mono" style={{ fontSize: 9.5, color: 'var(--c-sand2)', marginTop: 2, letterSpacing: '.1em' }}>
-                          {s.role ? s.role.toUpperCase() : 'CHOOSING ROLE...'}
-                        </div>
+        {/* Player slots */}
+        <Frame tone="ink2" padded={false} style={{ padding: 18 }}>
+          <div className="fi-cap" style={{ marginBottom: 10 }}>Crew</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {slots.map((s, i) => (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '10px 12px', borderRadius: 10,
+                background: s ? 'rgba(8,22,28,.55)' : 'transparent',
+                border: `1px ${s ? 'solid' : 'dashed'} ${s ? 'rgba(202,160,82,.18)' : 'rgba(202,160,82,.25)'}`,
+              }}>
+                {s ? (
+                  <>
+                    <div style={{
+                      width: 38, height: 38, borderRadius: '50%',
+                      background: 'rgba(8,22,28,.6)', border: '1px solid rgba(202,160,82,.3)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 18, color: 'var(--c-brass)',
+                    }}>
+                      {s.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                        <div className="fi-display" style={{ fontSize: 16, color: 'var(--c-parch)' }}>{s.name}</div>
+                        {s.isHost && <Pill tone="brass">Host</Pill>}
+                        {s.id === myId && <Pill tone="sand">You</Pill>}
                       </div>
-                      {s.role && (
-                        <div style={{
-                          width: 20, height: 20, borderRadius: '50%',
-                          background: 'rgba(94,138,58,.2)', border: '1px solid var(--c-leaf)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          color: 'var(--c-leaf)', fontSize: 13,
-                        }}>&#10003;</div>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <div style={{
-                        width: 38, height: 38, borderRadius: '50%',
-                        background: 'rgba(8,22,28,.6)', border: '1px dashed rgba(202,160,82,.4)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      }}>
-                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--c-brass)', animation: 'fi-pulse 1.4s ease-in-out infinite' }} />
+                      <div className="fi-mono" style={{ fontSize: 9.5, color: 'var(--c-sand2)', marginTop: 2, letterSpacing: '.1em' }}>
+                        ROLE ASSIGNED AT START
                       </div>
-                      <div style={{ flex: 1 }}>
-                        <div className="fi-display-i" style={{ fontSize: 14, color: 'var(--c-sand2)' }}>Awaiting player...</div>
-                        <div className="fi-mono" style={{ fontSize: 9.5, color: 'var(--c-sand2)', opacity: 0.7, marginTop: 2 }}>SLOT {i + 1}</div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              ))}
+                    </div>
+                    <div style={{
+                      width: 20, height: 20, borderRadius: '50%',
+                      background: 'rgba(94,138,58,.2)', border: '1px solid var(--c-leaf)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: 'var(--c-leaf)', fontSize: 13,
+                    }}>&#10003;</div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{
+                      width: 38, height: 38, borderRadius: '50%',
+                      background: 'rgba(8,22,28,.6)', border: '1px dashed rgba(202,160,82,.4)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--c-brass)', animation: 'fi-pulse 1.4s ease-in-out infinite' }} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div className="fi-display-i" style={{ fontSize: 14, color: 'var(--c-sand2)' }}>Awaiting player...</div>
+                      <div className="fi-mono" style={{ fontSize: 9.5, color: 'var(--c-sand2)', opacity: 0.7, marginTop: 2 }}>SLOT {i + 1}</div>
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 14, padding: '10px 14px', borderRadius: 8, background: 'rgba(58,151,168,.08)', border: '1px solid rgba(58,151,168,.2)' }}>
+            <div className="fi-mono" style={{ fontSize: 10, color: 'var(--c-seaHi)', letterSpacing: '.1em', lineHeight: 1.5 }}>
+              ROLES WILL BE RANDOMLY ASSIGNED WHEN THE EXPEDITION BEGINS
             </div>
-          </Frame>
-          {/* Role selection */}
-          <Frame tone="ink2" padded={false} style={{ padding: 18 }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
-              <div className="fi-cap">Choose Your Role</div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              {ROLES.map((r) => {
-                const c = claimedRoles[r.id];
-                const isMe = c ? (players.find((p: LobbyPlayer) => p.role === r.id)?.id === myId) : false;
-                return (
-                  <RoleCard
-                    key={r.id}
-                    role={r.id}
-                    pawnKind="portrait"
-                    selected={isMe}
-                    claimedBy={c || null}
-                    isMe={isMe}
-                    available={!c || isMe}
-                    onClick={() => handleSelectRole(r.id)}
-                  />
-                );
-              })}
-            </div>
-          </Frame>
-        </div>
+          </div>
+        </Frame>
 
         {/* host controls */}
         {isHost && (

@@ -123,8 +123,11 @@ services:
         GIT_SHA: ${GIT_SHA}
     environment:
       PORT: "3000"
+      DATABASE_URL: ${FORBIDDEN_ISLAND_DATABASE_URL}
       LOG_SERVICE_URL: http://logservice:3100/api/ingest
       LOG_SERVICE_API_KEY: ${LOG_SERVICE_API_KEY}
+    depends_on:
+      - postgres
     restart: unless-stopped
 
   lemonadestand:
