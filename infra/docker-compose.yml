@@ -1,3 +1,8 @@
+x-logging: &default-logging
+  driver: journald
+  options:
+    tag: "{{.Name}}"
+
 services:
   caddy:
     image: caddy:2
@@ -8,6 +13,7 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - caddy_data:/data
       - ../apps/landing:/srv/landing:ro
+    logging: *default-logging
     restart: unless-stopped
     depends_on:
       - ai-pinochle
@@ -26,6 +32,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql
+    logging: *default-logging
     restart: unless-stopped
 
   logservice:
@@ -36,6 +43,7 @@ services:
       DB_PATH: /data/logs.db
     volumes:
       - logservice_data:/data
+    logging: *default-logging
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3100/api/health"]
@@ -69,10 +77,12 @@ services:
       LOG_SERVICE_API_KEY: ${LOG_SERVICE_API_KEY}
     depends_on:
       - postgres
+    logging: *default-logging
     restart: unless-stopped
 
   gnubg:
     build: ../apps/backgammon/gnubg
+    logging: *default-logging
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=2)"]
@@ -98,6 +108,7 @@ services:
     depends_on:
       - postgres
       - gnubg
+    logging: *default-logging
     restart: unless-stopped
 
   bughouse:
@@ -114,6 +125,7 @@ services:
       LOG_SERVICE_API_KEY: ${LOG_SERVICE_API_KEY}
     depends_on:
       - postgres
+    logging: *default-logging
     restart: unless-stopped
 
   forbidden-island:
@@ -128,6 +140,7 @@ services:
       LOG_SERVICE_API_KEY: ${LOG_SERVICE_API_KEY}
     depends_on:
       - postgres
+    logging: *default-logging
     restart: unless-stopped
 
   lemonadestand:
@@ -142,6 +155,7 @@ services:
       Google__ClientId: ${GOOGLE_CLIENT_ID}
       LOG_SERVICE_URL: http://logservice:3100/api/ingest
       LOG_SERVICE_API_KEY: ${LOG_SERVICE_API_KEY}
+    logging: *default-logging
     restart: unless-stopped
 
   spades:
@@ -154,6 +168,7 @@ services:
       PORT: "5000"
       LOG_SERVICE_URL: http://logservice:3100/api/ingest
       LOG_SERVICE_API_KEY: ${LOG_SERVICE_API_KEY}
+    logging: *default-logging
     restart: unless-stopped
 
   telestrations:
@@ -165,6 +180,7 @@ services:
       PORT: "8080"
       LOG_SERVICE_URL: http://logservice:3100/api/ingest
       LOG_SERVICE_API_KEY: ${LOG_SERVICE_API_KEY}
+    logging: *default-logging
     restart: unless-stopped
 
 volumes:
