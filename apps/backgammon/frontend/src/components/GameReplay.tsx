@@ -344,6 +344,9 @@ function GameReplay() {
   const [playSpeed, setPlaySpeed] = useState(1500); // ms between moves
   const autoPlayRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Chart tab state
+  const [chartTab, setChartTab] = useState<"winProb" | "luck">("winProb");
+
   // Analysis panel state (always visible in replay)
   const [analysis, setAnalysis] = useState<AnalysisData | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
@@ -789,6 +792,20 @@ function GameReplay() {
         return { move: m.move_number, whiteWin };
       });
   }, [analysis]);
+
+  // ── Cumulative luck series for chart ──────────────────────────────────
+  const cumulativeLuckSeries = useMemo<{ move: number; white: number; black: number }[]>(() => {
+    if (!luckData.length) return [];
+    const series: { move: number; white: number; black: number }[] = [];
+    let whiteCum = 0;
+    let blackCum = 0;
+    for (const l of luckData) {
+      if (l.player_color === "white") whiteCum += l.luck;
+      else blackCum += l.luck;
+      series.push({ move: l.move_number, white: whiteCum, black: blackCum });
+    }
+    return series;
+  }, [luckData]);
 
   // Orient the board to the logged-in player's perspective when they were
   // one of the two seats. Fall back to white for spectators/unauthed viewers.
@@ -1518,10 +1535,27 @@ function GameReplay() {
                 </div>
               )}
 
-              {/* Win probability chart */}
+              {/* Win probability / Luck chart with tabs */}
               {winProbSeries.length > 1 && (
                 <div className="replay-analysis-section">
-                  <h3 className="replay-analysis-heading">Win probability</h3>
+                  <div className="chart-tabs">
+                    <button
+                      type="button"
+                      className={`chart-tab${chartTab === "winProb" ? " chart-tab--active" : ""}`}
+                      onClick={() => setChartTab("winProb")}
+                    >
+                      Win probability
+                    </button>
+                    <button
+                      type="button"
+                      className={`chart-tab${chartTab === "luck" ? " chart-tab--active" : ""}`}
+                      onClick={() => setChartTab("luck")}
+                    >
+                      Luck over time
+                    </button>
+                  </div>
+
+                  {chartTab === "winProb" && (
                   <div className="wp-chart-wrap">
                     <svg
                       viewBox={`0 0 ${Math.max(300, winProbSeries.length * 6 + 60)} 160`}
@@ -1605,6 +1639,93 @@ function GameReplay() {
                       })()}
                     </svg>
                   </div>
+                  )}
+
+                  {chartTab === "luck" && cumulativeLuckSeries.length > 1 && (
+                  <div className="wp-chart-wrap">
+                    <svg
+                      viewBox={`0 0 ${Math.max(300, cumulativeLuckSeries.length * 6 + 60)} 160`}
+                      preserveAspectRatio="xMidYMid meet"
+                    >
+                      {(() => {
+                        const W = Math.max(300, cumulativeLuckSeries.length * 6 + 60);
+                        const H = 160;
+                        const pad = { top: 15, right: 15, bottom: 25, left: 40 };
+                        const cw = W - pad.left - pad.right;
+                        const ch = H - pad.top - pad.bottom;
+                        const maxMove = cumulativeLuckSeries[cumulativeLuckSeries.length - 1].move;
+                        const x = (m: number) => pad.left + (m / maxMove) * cw;
+
+                        // Determine y-axis range symmetrically around 0
+                        let maxAbs = 0;
+                        for (const d of cumulativeLuckSeries) {
+                          maxAbs = Math.max(maxAbs, Math.abs(d.white), Math.abs(d.black));
+                        }
+                        maxAbs = Math.max(maxAbs, 0.1); // minimum range
+                        const yRange = maxAbs * 1.15; // padding
+                        const y = (v: number) => pad.top + ((yRange - v) / (2 * yRange)) * ch;
+
+                        // Grid lines
+                        const gridValues = [-yRange, -yRange / 2, 0, yRange / 2, yRange];
+
+                        // Build line paths
+                        const whitePts = cumulativeLuckSeries.map((d) => `${x(d.move).toFixed(1)},${y(d.white).toFixed(1)}`);
+                        const blackPts = cumulativeLuckSeries.map((d) => `${x(d.move).toFixed(1)},${y(d.black).toFixed(1)}`);
+                        const whiteLinePath = `M${whitePts.join("L")}`;
+                        const blackLinePath = `M${blackPts.join("L")}`;
+
+                        return (
+                          <g>
+                            {/* Grid lines */}
+                            {gridValues.map((v) => (
+                              <g key={v}>
+                                <line x1={pad.left} x2={W - pad.right} y1={y(v)} y2={y(v)}
+                                  stroke="rgba(255,255,255,0.08)" strokeWidth="1" />
+                                <text x={pad.left - 4} y={y(v) + 3.5} textAnchor="end"
+                                  fill="rgba(255,255,255,0.35)" fontSize="9">
+                                  {v === 0 ? "0" : (v > 0 ? "+" : "") + v.toFixed(2)}
+                                </text>
+                              </g>
+                            ))}
+                            {/* Zero line */}
+                            <line x1={pad.left} x2={W - pad.right} y1={y(0)} y2={y(0)}
+                              stroke="rgba(255,255,255,0.2)" strokeWidth="1" strokeDasharray="4 3" />
+                            {/* White player line */}
+                            <path d={whiteLinePath} fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.5" strokeLinejoin="round" />
+                            {/* Black player line */}
+                            <path d={blackLinePath} fill="none" stroke="rgba(60,60,60,0.9)" strokeWidth="1.5" strokeLinejoin="round" />
+                            {/* X-axis label */}
+                            <text x={pad.left + cw / 2} y={H - 3} textAnchor="middle"
+                              fill="rgba(255,255,255,0.35)" fontSize="9">
+                              Move
+                            </text>
+                            {/* Click targets */}
+                            {cumulativeLuckSeries.map((d) => (
+                              <rect key={d.move} className="wp-chart-hit-area"
+                                x={x(d.move) - 3} y={pad.top} width={6} height={ch}
+                                fill="transparent"
+                                onClick={() => { stopAutoPlay(); goTo(d.move); }}
+                              />
+                            ))}
+                            {/* Current position marker */}
+                            {cumulativeLuckSeries.find((d) => d.move === moveIndex) && (() => {
+                              const d = cumulativeLuckSeries.find((d) => d.move === moveIndex)!;
+                              return (
+                                <line x1={x(d.move)} x2={x(d.move)} y1={pad.top} y2={pad.top + ch}
+                                  stroke="var(--accent, #d4a843)" strokeWidth="1" opacity="0.5" />
+                              );
+                            })()}
+                            {/* Player labels */}
+                            <text x={W - pad.right} y={pad.top + 10} textAnchor="end"
+                              fill="rgba(255,255,255,0.7)" fontSize="8">White</text>
+                            <text x={W - pad.right} y={pad.top + ch - 4} textAnchor="end"
+                              fill="rgba(150,150,150,0.7)" fontSize="8">Black</text>
+                          </g>
+                        );
+                      })()}
+                    </svg>
+                  </div>
+                  )}
                 </div>
               )}
 

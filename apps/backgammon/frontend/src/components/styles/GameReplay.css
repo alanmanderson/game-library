@@ -659,6 +659,39 @@
 .wp-chart-hit-area { cursor: pointer; }
 .wp-chart-hit-area:hover ~ .wp-chart-hover-line { display: block; }
 
+/* ── Chart tabs ──────────────────────────────────────────────────────── */
+.chart-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 0.25rem;
+}
+.chart-tab {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-secondary, #9a9ab0);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: none;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.chart-tab:first-child {
+  border-radius: 6px 0 0 0;
+}
+.chart-tab:last-child {
+  border-radius: 0 6px 0 0;
+}
+.chart-tab:hover:not(.chart-tab--active) {
+  color: var(--text-primary, #e8e8e8);
+  background: rgba(255, 255, 255, 0.04);
+}
+.chart-tab--active {
+  color: var(--accent, #d4a843);
+  background: rgba(212, 168, 67, 0.08);
+  border-color: rgba(212, 168, 67, 0.25);
+}
+
 /* Legacy .replay-quality alias — keeps summary/key-moments working */
 .replay-quality {
   display: inline-block;
