@@ -693,6 +693,39 @@
   border-color: rgba(212, 168, 67, 0.25);
 }
 
+/* ── Chart tabs ──────────────────────────────────────────────────────── */
+.chart-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 0.25rem;
+}
+.chart-tab {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-secondary, #9a9ab0);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: none;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.chart-tab:first-child {
+  border-radius: 6px 0 0 0;
+}
+.chart-tab:last-child {
+  border-radius: 0 6px 0 0;
+}
+.chart-tab:hover:not(.chart-tab--active) {
+  color: var(--text-primary, #e8e8e8);
+  background: rgba(255, 255, 255, 0.04);
+}
+.chart-tab--active {
+  color: var(--accent, #d4a843);
+  background: rgba(212, 168, 67, 0.08);
+  border-color: rgba(212, 168, 67, 0.25);
+}
+
 /* Legacy .replay-quality alias — keeps summary/key-moments working */
 .replay-quality {
   display: inline-block;
@@ -815,9 +848,15 @@
 }
 
 .replay-move-item-best {
-  color: var(--text-secondary, #9a9ab0);
+  grid-column: 1 / -1;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding-left: 2.6rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.78rem;
-  font-style: italic;
+  font-weight: 600;
+  color: var(--text-primary, #e8e8e8);
 }
 
 @media (max-width: 768px) {
@@ -871,8 +910,8 @@
 }
 
 .replay-move-probs-label--best {
-  background: rgba(212, 168, 67, 0.18);
-  color: var(--accent, #d4a843);
+  background: var(--q-best-bg, rgba(46, 204, 113, 0.14));
+  color: var(--q-best-fg, #2ecc71);
 }
 
 .replay-move-probs-notation {
@@ -890,7 +929,7 @@
 }
 
 .replay-move-probs-pct--best {
-  color: var(--accent, #d4a843);
+  color: var(--q-best-fg, #2ecc71);
 }
 
 .replay-move-probs-delta {
@@ -921,6 +960,43 @@
 .replay-move-probs-toggle--open {
   border-color: var(--accent, #d4a843);
   color: var(--accent, #d4a843);
+}
+
+/* Retry button for moves where gnubg analysis failed. */
+.replay-move-retry {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.2rem 0.5rem 0.3rem 2.6rem;
+  font-size: 0.75rem;
+}
+
+.replay-move-retry-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text-secondary, #9a9ab0);
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.replay-move-retry-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.10);
+  color: var(--text-primary, #e8e8e8);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.replay-move-retry-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.replay-move-retry-error {
+  color: var(--danger, #e74c3c);
+  font-size: 0.72rem;
 }
 
 /* Gammon/backgammon probability breakdown grid. */

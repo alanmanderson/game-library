@@ -23,7 +23,7 @@ import type {
   ReplayData,
   ReplayMoveRecord,
 } from "../types/game";
-import { getAnalysis, getPositionDeepDive, getReplay, exportGame } from "../services/api";
+import { getAnalysis, getPositionDeepDive, getReplay, exportGame, retryMoveAnalysis } from "../services/api";
 import Board from "./Board";
 import Dice from "./Dice";
 import ReanalyzeModal from "./ReanalyzeModal";
@@ -361,6 +361,10 @@ function GameReplay() {
   const [selectedCandidate, setSelectedCandidate] = useState<number | null>(null);
   /** gnubg evaluation depth: 0 (fast), 2 (standard), 3 (deep/slow). */
   const [analysisPly, setAnalysisPly] = useState<0 | 2 | 3>(2);
+
+  /** Per-move retry state: tracks loading and error for failed-analysis retries. */
+  const [retryingMoves, setRetryingMoves] = useState<Set<number>>(new Set());
+  const [retryErrors, setRetryErrors] = useState<Map<number, string>>(new Map());
 
   /** Color filter for stepping through moves: only step through white, black, or both. */
   type ColorFilter = "white" | "black" | "both";
@@ -709,7 +713,7 @@ function GameReplay() {
    * "gnubg-sourced" if any move row declares it — mixed responses fall back
    * to the existing behaviour (ml_available banner only).
    */
-  const analysisSource = useMemo<"gnubg" | "ml" | "heuristic" | null>(() => {
+  const analysisSource = useMemo<"gnubg" | "ml" | "heuristic" | "unavailable" | null>(() => {
     if (!analysis) return null;
     for (const m of analysis.move_analyses) {
       if (m.source === "gnubg") return "gnubg";
@@ -879,6 +883,27 @@ function GameReplay() {
       return next;
     });
   }, []);
+
+  const handleRetryMoveAnalysis = useCallback(async (moveNumber: number) => {
+    if (!tableId || retryingMoves.has(moveNumber)) return;
+    setRetryingMoves((prev) => new Set(prev).add(moveNumber));
+    setRetryErrors((prev) => { const next = new Map(prev); next.delete(moveNumber); return next; });
+    try {
+      const updated = await retryMoveAnalysis(tableId, moveNumber);
+      setAnalysis((prev) => {
+        if (!prev) return prev;
+        const newAnalyses = prev.move_analyses.map((m) =>
+          m.move_number === moveNumber ? updated : m
+        );
+        return { ...prev, move_analyses: newAnalyses };
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Retry failed";
+      setRetryErrors((prev) => new Map(prev).set(moveNumber, msg));
+    } finally {
+      setRetryingMoves((prev) => { const next = new Set(prev); next.delete(moveNumber); return next; });
+    }
+  }, [tableId, retryingMoves]);
 
   const handleCopyShareLink = useCallback(async () => {
     if (!tableId) return;
@@ -1884,7 +1909,8 @@ function GameReplay() {
                           </span>
                           {m.quality !== "best" && m.quality !== "very_good" && m.best_move_notation && (
                             <span className="replay-move-item-best">
-                              best: {notationToPlayerPerspective(m.best_move_notation, m.player_color)}
+                              <span className="replay-move-probs-label replay-move-probs-label--best">Best</span>
+                              {notationToPlayerPerspective(m.best_move_notation, m.player_color)}
                             </span>
                           )}
                         </button>
@@ -1929,6 +1955,21 @@ function GameReplay() {
                               >
                                 {isExpanded ? "\u25BE" : "\u25B8"} details
                               </button>
+                            )}
+                          </div>
+                        )}
+                        {m.source === "unavailable" && (
+                          <div className="replay-move-retry">
+                            <button
+                              type="button"
+                              className="replay-move-retry-btn"
+                              disabled={retryingMoves.has(m.move_number)}
+                              onClick={() => handleRetryMoveAnalysis(m.move_number)}
+                            >
+                              {retryingMoves.has(m.move_number) ? "Retrying\u2026" : "\u21BB Retry analysis"}
+                            </button>
+                            {retryErrors.has(m.move_number) && (
+                              <span className="replay-move-retry-error">{retryErrors.get(m.move_number)}</span>
                             )}
                           </div>
                         )}
