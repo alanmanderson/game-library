@@ -43,23 +43,7 @@
   align-items: center;
   gap: 1rem;
   width: 100%;
-  max-width: 860px;
-}
-
-.replay-back-btn {
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  color: #ccc;
-  padding: 0.4rem 0.85rem;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  transition: background 0.15s, color 0.15s;
-}
-
-.replay-back-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  max-width: 1200px;
 }
 
 .replay-title {
@@ -74,32 +58,83 @@
   white-space: nowrap;
 }
 
-/* Share link button */
-.replay-share-btn {
-  background: var(--accent, #d4a843);
-  border: 1px solid var(--accent, #d4a843);
-  color: var(--bg-primary, #1a1a2e);
-  padding: 0.45rem 0.9rem;
-  border-radius: 6px;
+/* ── Header controls group (icon buttons) ──────────────────────────────── */
+.replay-page .header-controls {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid #2c2c48;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.02);
+  flex-shrink: 0;
+}
+
+.replay-page .hc-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-primary, #e8e8e8);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 36px;
   cursor: pointer;
-  font-size: 0.9rem;
-  font-weight: 600;
-  transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
-  white-space: nowrap;
+  padding: 0;
+  border-right: 1px solid #2c2c48;
+  transition: color 0.15s, background 0.15s;
+}
+.replay-page .hc-btn:last-child { border-right: none; border-radius: 0 8px 8px 0; }
+.replay-page .header-controls > :first-child > .hc-btn,
+.replay-page .header-controls > .hc-btn:first-child { border-radius: 8px 0 0 8px; }
+.replay-page .hc-btn:hover:not(:disabled) {
+  color: var(--accent, #d4a843);
+  background: rgba(212, 168, 67, 0.10);
+}
+.replay-page .hc-btn:focus-visible {
+  outline: 2px solid var(--accent, #d4a843);
+  outline-offset: -2px;
 }
 
-.replay-share-btn:hover:not(:disabled) {
-  filter: brightness(1.1);
+.replay-page .hc-btn--home {
+  color: var(--accent, #d4a843);
+}
+.replay-page .hc-btn--home:hover {
+  background: rgba(212, 168, 67, 0.16);
 }
 
-.replay-share-btn:active:not(:disabled) {
-  transform: scale(0.97);
+.replay-page .hc-btn--copied {
+  color: var(--success, #2ecc71);
 }
 
-.replay-share-btn--copied {
-  background: var(--success, #2ecc71);
-  border-color: var(--success, #2ecc71);
-  color: var(--bg-primary, #1a1a2e);
+.replay-page .hc-btn--running {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.replay-page .header-controls .settings-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.replay-page .settings-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--bg-secondary, #22223a);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 10px;
+  padding: 0.75rem;
+  min-width: 170px;
+  z-index: 10;
+  animation: fadeIn 0.15s ease;
+}
+
+.replay-page .settings-label {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--text-secondary, #9a9ab0);
+  margin-bottom: 0.45rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
 /* Embed mode: tighten padding, lose extra chrome */
@@ -115,10 +150,6 @@
 @media (max-width: 768px) {
   .replay-header {
     flex-wrap: wrap;
-  }
-  .replay-share-btn {
-    font-size: 0.85rem;
-    padding: 0.4rem 0.7rem;
   }
 }
 
@@ -1027,41 +1058,7 @@
   }
 }
 
-/* ── Re-analyze button ─────────────────────────────────────────────────── */
-
-.replay-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.replay-reanalyze-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 12px;
-  border-radius: 6px;
-  border: 1px solid rgba(212, 168, 67, 0.35);
-  background: rgba(212, 168, 67, 0.06);
-  color: var(--accent, #d4a843);
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
-  white-space: nowrap;
-}
-
-.replay-reanalyze-btn:hover:not(:disabled) {
-  background: rgba(212, 168, 67, 0.14);
-  border-color: var(--accent, #d4a843);
-}
-
-.replay-reanalyze-btn--running {
-  opacity: 0.85;
-  cursor: default;
-}
+/* ── Re-analyze spinner (used in header-controls icon button) ──────────── */
 
 .replay-reanalyze-spin {
   display: inline-block;
@@ -1075,6 +1072,11 @@
 
 @keyframes replay-spin {
   to { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* ── Freshness banner ──────────────────────────────────────────────────── */
