@@ -1230,6 +1230,152 @@ async def get_position_deep_dive(
     )
 
 
+@router.post(
+    "/tables/{table_id}/analysis/retry/{move_number}",
+    response_model=MoveAnalysis,
+)
+async def retry_move_analysis(
+    table_id: str,
+    move_number: int,
+    db: AsyncSession = Depends(get_db),
+    current_player: Player = Depends(get_current_player),
+) -> MoveAnalysis:
+    """Re-run gnubg analysis on a single move that previously failed.
+
+    Updates the cached analysis in-place if successful and returns the
+    new MoveAnalysis entry.  If gnubg fails again, returns 502 with the
+    failure reason so the UI can display it.
+    """
+    from app.game_engine import BackgammonEngine, Color
+    from app.services import gnubg_client
+    from app.services.analysis_service import (
+        _build_gnubg_analysis_dict,
+        _parse_notation_to_steps,
+    )
+
+    table = await db.get(Table, table_id)
+    if not table:
+        raise HTTPException(status_code=404, detail="Table not found")
+
+    participant_ids = {table.white_player_id, table.black_player_id}
+    if current_player.id not in participant_ids:
+        raise HTTPException(
+            status_code=403,
+            detail="Only players who participated in this game may view its analysis.",
+        )
+
+    # Load the target move and the one before it (for pre-move state).
+    records_result = await db.execute(
+        select(MoveRecord)
+        .where(MoveRecord.table_id == table_id)
+        .where(MoveRecord.move_number.in_([move_number - 1, move_number]))
+        .order_by(MoveRecord.move_number)
+    )
+    records = records_result.scalars().all()
+
+    target_record = None
+    prev_record = None
+    for r in records:
+        if r.move_number == move_number:
+            target_record = r
+        elif r.move_number == move_number - 1:
+            prev_record = r
+
+    if not target_record:
+        raise HTTPException(status_code=404, detail="Move not found")
+
+    player_color = (
+        "white" if target_record.player_id == table.white_player_id else "black"
+    )
+    turn = Color.WHITE if player_color == "white" else Color.BLACK
+
+    # Pre-move board state.
+    if prev_record and prev_record.game_state_after:
+        pre_move_state = prev_record.game_state_after
+    else:
+        pre_move_state = BackgammonEngine().get_state_snapshot()
+        if target_record.player_id == table.black_player_id:
+            pre_move_state["current_turn"] = "black"
+
+    # Parse dice.
+    dice_parts = target_record.dice_roll.split("-")
+    die1, die2 = int(dice_parts[0]), int(dice_parts[1])
+
+    # Parse chosen moves.
+    chosen_moves = _parse_notation_to_steps(
+        target_record.moves_notation or "", turn
+    )
+
+    # Build gnubg board payload.
+    board = gnubg_client._board_payload(
+        pre_move_state,
+        turn,
+        cube_value=pre_move_state.get("cube_value", 1),
+        cube_owner=(
+            Color.WHITE if pre_move_state.get("cube_owner") == "white"
+            else Color.BLACK if pre_move_state.get("cube_owner") == "black"
+            else None
+        ),
+    )
+
+    # Determine ply from cached analysis (default 2).
+    cached = await db.get(GameAnalysis, table_id)
+    ply = cached.ply if cached and cached.ply else 2
+
+    # Call gnubg.
+    try:
+        resp = await gnubg_client.analyze_move(
+            board, [die1, die2], chosen_moves, ply=ply,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"gnubg analysis failed: {exc}",
+        )
+
+    if resp is None:
+        raise HTTPException(
+            status_code=502,
+            detail="gnubg returned no result — the server may be overloaded or the position too complex.",
+        )
+
+    # Build nicknames map.
+    player_ids = {table.white_player_id, table.black_player_id}
+    players_result = await db.execute(
+        select(Player).where(Player.id.in_(player_ids))
+    )
+    nickname_map = {
+        p.id: p.nickname for p in players_result.scalars().all()
+    }
+
+    record_dict = {
+        "move_number": target_record.move_number,
+        "player_id": target_record.player_id,
+        "dice_roll": target_record.dice_roll,
+        "moves_notation": target_record.moves_notation,
+    }
+    analysis_dict = _build_gnubg_analysis_dict(
+        record_dict, turn, resp, None, nickname_map
+    )
+
+    # Update cached analysis in-place if present.
+    if cached and cached.move_analyses:
+        updated = list(cached.move_analyses)
+        replaced = False
+        for i, entry in enumerate(updated):
+            if entry.get("move_number") == move_number:
+                updated[i] = analysis_dict
+                replaced = True
+                break
+        if not replaced:
+            updated.append(analysis_dict)
+            updated.sort(key=lambda e: e.get("move_number", 0))
+        cached.move_analyses = updated
+        await db.commit()
+
+    return MoveAnalysis(**analysis_dict)
+
+
 def _notation_to_mat(notation: str, is_black: bool) -> str:
     """Convert internal move notation to gnubg-compatible MAT format.
 

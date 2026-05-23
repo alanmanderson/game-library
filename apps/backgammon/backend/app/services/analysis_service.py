@@ -546,6 +546,10 @@ def _compute_analysis_gnubg(
                 move_number, failures,
                 record.get("dice_roll"), color.value if color else "?",
             )
+            # Still add a placeholder so the move appears in the UI.
+            analyses.append(
+                _build_placeholder_analysis(record, color, player_nicknames)
+            )
             prev_state = game_state_after
             # Only give up if gnubg is truly down — isolated timeouts on
             # complex positions shouldn't abort the entire analysis.
@@ -584,7 +588,38 @@ def _compute_analysis_gnubg(
     return analyses, True, len(analyses), analysis_source
 
 
-# ── Shared helper for building a move analysis dict from gnubg response ───
+# ── Shared helpers for building per-move analysis dicts ─────────────────
+
+
+def _build_placeholder_analysis(
+    record: dict,
+    color: Color,
+    player_nicknames: dict[str, str],
+) -> dict:
+    """Build a minimal analysis entry for moves where gnubg failed.
+
+    Uses quality="best" and equity_loss=0 so the UI doesn't misleadingly
+    flag the move as an error — we simply have no analysis for it.
+    """
+    return {
+        "move_number": int(record.get("move_number") or 0),
+        "player_color": color.value,
+        "player_nickname": player_nicknames.get(record.get("player_id") or ""),
+        "dice_roll": record.get("dice_roll") or "",
+        "moves_notation": record.get("moves_notation") or "",
+        "equity_before": None,
+        "equity_after": None,
+        "best_equity": None,
+        "equity_loss": 0.0,
+        "quality": "best",
+        "best_move_notation": None,
+        "best_probs": None,
+        "chosen_probs": None,
+        "best_win_prob": None,
+        "chosen_win_prob": None,
+        "source": "unavailable",
+        "top_moves": None,
+    }
 
 
 def _build_gnubg_analysis_dict(
@@ -761,6 +796,10 @@ async def run_background_analysis(
                     "(%d consecutive failures, dice=%s, turn=%s)",
                     move_number, table_id, failures,
                     record.get("dice_roll"), color.value if color else "?",
+                )
+                # Still add a placeholder so the move appears in the UI.
+                analyses.append(
+                    _build_placeholder_analysis(record, color, nickname_map)
                 )
                 prev_state = game_state_after
                 if failures >= 10:
