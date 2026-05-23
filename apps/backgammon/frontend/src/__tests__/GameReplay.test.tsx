@@ -19,6 +19,7 @@ import type { ReplayData } from "../types/game";
 vi.mock("../services/api", () => ({
   getReplay: vi.fn(),
   getAnalysis: vi.fn(),
+  exportGame: vi.fn(),
 }));
 
 import * as api from "../services/api";
@@ -320,8 +321,9 @@ describe("GameReplay – share link", () => {
     expect(calledWith.endsWith("/replay/TABLE001")).toBe(true);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /copy share link/i })).toHaveTextContent(
-        /copied/i,
+      expect(screen.getByRole("button", { name: /copy share link/i })).toHaveAttribute(
+        "title",
+        "Copied!",
       );
     });
   });

@@ -12,7 +12,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
 import type {
   AnalysisData,
   DeepDiveResult,
@@ -23,7 +23,7 @@ import type {
   ReplayData,
   ReplayMoveRecord,
 } from "../types/game";
-import { getAnalysis, getPositionDeepDive, getReplay } from "../services/api";
+import { getAnalysis, getPositionDeepDive, getReplay, exportGame } from "../services/api";
 import Board from "./Board";
 import Dice from "./Dice";
 import ReanalyzeModal from "./ReanalyzeModal";
@@ -293,6 +293,38 @@ function MoveProbsBreakdown({
   );
 }
 
+/* ── Inline SVG icons for header controls ────────────────────────────── */
+const ReanalyzeSvg = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M14 2v4h-4"/><path d="M2 14v-4h4"/><path d="M13.5 6A6 6 0 0 0 3.4 4.4M2.5 10a6 6 0 0 0 10.1 1.6"/>
+  </svg>
+);
+const ShareSvg = () => (
+  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true">
+    <rect x="6" y="6" width="11" height="11" rx="1.8"/><path d="M13 6V4.2A1.2 1.2 0 0 0 11.8 3H4.2A1.2 1.2 0 0 0 3 4.2v7.6A1.2 1.2 0 0 0 4.2 13H6"/>
+  </svg>
+);
+const CheckSvg = () => (
+  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M4 10.5l4 4 8-9"/>
+  </svg>
+);
+const DownloadSvg = () => (
+  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M10 3v10M6 9.5l4 4 4-4"/><path d="M3 14v2a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2"/>
+  </svg>
+);
+const GearSvg = () => (
+  <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+    <path d="M11.078 0l.855 3.424a7.28 7.28 0 011.804 1.042l3.358-1.052 1.078 1.867-2.5 2.375a7.4 7.4 0 010 2.088l2.5 2.375-1.078 1.867-3.358-1.052a7.28 7.28 0 01-1.804 1.042L11.078 18H8.922l-.855-3.424a7.28 7.28 0 01-1.804-1.042L2.905 14.586l-1.078-1.867 2.5-2.375a7.4 7.4 0 010-2.088L1.827 5.88l1.078-1.867 3.358 1.052A7.28 7.28 0 018.067 4.024L8.922 0h2.156zM10 6.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5z"/>
+  </svg>
+);
+const HomeSvg = () => (
+  <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+    <path d="M10 1.2L0.6 9.2l1.4 1.65L3 10.05V18a1 1 0 0 0 1 1h3.5v-5.5h5V19H16a1 1 0 0 0 1-1v-7.95l1 0.8 1.4-1.65L10 1.2z"/>
+  </svg>
+);
+
 function GameReplay() {
   const { tableId } = useParams<{ tableId: string }>();
   const navigate = useNavigate();
@@ -331,6 +363,10 @@ function GameReplay() {
 
   // Re-analyze modal state
   const [showReanalyzeModal, setShowReanalyzeModal] = useState(false);
+
+  // Header settings dropdown
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsRef = useRef<HTMLDivElement>(null);
 
   // Deep-dive state
   const [deepDiveData, setDeepDiveData] = useState<DeepDiveResult | null>(null);
@@ -849,6 +885,35 @@ function GameReplay() {
     }
   }, [tableId]);
 
+  // Close settings menu when clicking outside
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
+        setSettingsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [settingsOpen]);
+
+  /** Trigger a browser download of the .mat file. */
+  const handleExport = useCallback(async () => {
+    if (!tableId) return;
+    try {
+      const text = await exportGame(tableId);
+      const blob = new Blob([text], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `game_${tableId}.mat`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // silently fail — export is best-effort
+    }
+  }, [tableId]);
+
   if (loading) {
     return (
       <div className={`replay-page${embed ? " replay-page--embed" : ""}`}>
@@ -945,47 +1010,81 @@ function GameReplay() {
       {/* Header (hidden in embed mode) */}
       {!embed && (
         <div className="replay-header">
-          <button className="replay-back-btn" onClick={() => navigate(-1)}>
-            ← Back
-          </button>
           <h2 className="replay-title">
             {replayData.white_player_nickname ?? "White"} vs{" "}
             {replayData.black_player_nickname ?? "Black"}
           </h2>
-          <div className="replay-header-actions">
+          <div className="header-controls">
             {analysis?.status === "running" ? (
               <button
                 type="button"
-                className="replay-reanalyze-btn replay-reanalyze-btn--running"
+                className="hc-btn hc-btn--running"
                 disabled
+                title={`Re-analyzing \u00b7 ${analysis.progress != null ? `${Math.round(analysis.progress * 100)}%` : "..."}`}
               >
                 <span className="replay-reanalyze-spin" />
-                Re-analyzing &middot; {analysis.progress != null ? `${Math.round(analysis.progress * 100)}%` : "..."}
               </button>
             ) : (
               <button
                 type="button"
-                className="replay-reanalyze-btn"
+                className="hc-btn"
                 onClick={() => setShowReanalyzeModal(true)}
-                title="Re-analyze this game with different settings"
+                title="Re-analyze"
+                aria-label="Re-analyze"
               >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M14 2v4h-4"/>
-                  <path d="M2 14v-4h4"/>
-                  <path d="M13.5 6A6 6 0 0 0 3.4 4.4M2.5 10a6 6 0 0 0 10.1 1.6"/>
-                </svg>
-                Re-analyze
+                <ReanalyzeSvg />
               </button>
             )}
             <button
               type="button"
-              className={`replay-share-btn${copied ? " replay-share-btn--copied" : ""}`}
+              className={`hc-btn${copied ? " hc-btn--copied" : ""}`}
               onClick={handleCopyShareLink}
+              title={copied ? "Copied!" : "Copy share link"}
               aria-label="Copy share link"
-              title="Copy a public link to this replay"
             >
-              {copied ? "✓ Copied!" : "🔗 Share"}
+              {copied ? <CheckSvg /> : <ShareSvg />}
             </button>
+            <button
+              type="button"
+              className="hc-btn"
+              onClick={handleExport}
+              title="Download .mat file"
+              aria-label="Download .mat file"
+            >
+              <DownloadSvg />
+            </button>
+            <div className="settings-wrapper" ref={settingsRef}>
+              <button
+                className="hc-btn"
+                onClick={() => setSettingsOpen((p) => !p)}
+                title="Settings"
+                aria-label="Settings"
+              >
+                <GearSvg />
+              </button>
+              {settingsOpen && (
+                <div className="settings-menu">
+                  <span className="settings-label">Show moves for</span>
+                  <div className="replay-color-filter" role="radiogroup" aria-label="Filter moves by player">
+                    {(["white", "black", "both"] as const).map((f) => (
+                      <button
+                        key={f}
+                        className={`color-filter-btn${colorFilter === f ? " color-filter-btn--active" : ""}${f !== "both" ? ` color-filter-btn--${f}` : ""}`}
+                        onClick={() => setColorFilter(f)}
+                        role="radio"
+                        aria-checked={colorFilter === f}
+                        title={f === "both" ? "Show all moves" : `Show only ${f} moves`}
+                      >
+                        {f === "white" ? "\u26AA" : f === "black" ? "\u26AB" : "Both"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <Link to="/" className="hc-btn hc-btn--home" title="Home" aria-label="Home">
+              <HomeSvg />
+            </Link>
           </div>
         </div>
       )}
@@ -1022,22 +1121,6 @@ function GameReplay() {
             <button className="nav-btn" onClick={() => { stopAutoPlay(); goTo(totalMoves); }} disabled={isAtFilteredEnd} title="Go to last move" aria-label="Go to last move">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 3.5L10 8l-6 4.5"/><path d="M12 3.5v9"/></svg>
             </button>
-
-            {/* Color filter toggle */}
-            <div className="replay-color-filter" role="radiogroup" aria-label="Filter moves by player">
-              {(["white", "black", "both"] as const).map((f) => (
-                <button
-                  key={f}
-                  className={`color-filter-btn${colorFilter === f ? " color-filter-btn--active" : ""}${f !== "both" ? ` color-filter-btn--${f}` : ""}`}
-                  onClick={() => setColorFilter(f)}
-                  role="radio"
-                  aria-checked={colorFilter === f}
-                  title={f === "both" ? "Show all moves" : `Show only ${f} moves`}
-                >
-                  {f === "white" ? "\u26AA" : f === "black" ? "\u26AB" : "Both"}
-                </button>
-              ))}
-            </div>
 
             {/* Speed */}
             <input
