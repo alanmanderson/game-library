@@ -658,6 +658,7 @@
 .wp-chart-hover-line { pointer-events: none; }
 .wp-chart-hit-area { cursor: pointer; }
 .wp-chart-hit-area:hover ~ .wp-chart-hover-line { display: block; }
+.wp-chart-hover-group { pointer-events: none; }
 
 /* ── Chart tabs ──────────────────────────────────────────────────────── */
 .chart-tabs {
