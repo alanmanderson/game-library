@@ -1,17 +1,17 @@
 /* ── Game Replay ──────────────────────────────────────────────────────────── */
 
 /* ── Quality Color System ────────────────────────────────────────────────── */
-/* 5-tier classification: Best (gold), Good (green), Doubtful (amber),       */
+/* 5-tier classification: Best (green), Good (yellow), Doubtful (amber),     */
 /* Mistake (orange), Blunder (deep red).                                     */
 :root {
-  --q-best-fg: #ecd089;
-  --q-best-bg: rgba(212,168,67,0.14);
-  --q-best-border: rgba(212,168,67,0.35);
-  --q-best-bar: #d4a843;
-  --q-good-fg: oklch(76% 0.13 152);
-  --q-good-bg: oklch(72% 0.13 152 / 0.14);
-  --q-good-border: oklch(72% 0.13 152 / 0.32);
-  --q-good-bar: oklch(72% 0.13 152);
+  --q-best-fg: #2ecc71;
+  --q-best-bg: rgba(46,204,113,0.14);
+  --q-best-border: rgba(46,204,113,0.35);
+  --q-best-bar: #2ecc71;
+  --q-good-fg: #f1c40f;
+  --q-good-bg: rgba(241,196,15,0.14);
+  --q-good-border: rgba(241,196,15,0.35);
+  --q-good-bar: #f1c40f;
   --q-doubtful-fg: oklch(80% 0.13 80);
   --q-doubtful-bg: oklch(78% 0.13 80 / 0.14);
   --q-doubtful-border: oklch(78% 0.13 80 / 0.32);
@@ -576,6 +576,57 @@
 .qchip--doubtful { color: var(--q-doubtful-fg); background: var(--q-doubtful-bg); border-color: var(--q-doubtful-border); }
 .qchip--mistake  { color: var(--q-mistake-fg);  background: var(--q-mistake-bg);  border-color: var(--q-mistake-border); }
 .qchip--blunder  { color: var(--q-blunder-fg);  background: var(--q-blunder-bg);  border-color: var(--q-blunder-border); }
+
+/* ── Quality dot (no text) ────────────────────────────────────────────── */
+.qdot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.qdot--best     { background: var(--q-best-bar); }
+.qdot--good     { background: var(--q-good-bar); }
+.qdot--doubtful { background: var(--q-doubtful-bar); }
+.qdot--mistake  { background: var(--q-mistake-bar); }
+.qdot--blunder  { background: var(--q-blunder-bar); }
+
+/* ── Luck pill ────────────────────────────────────────────────────────── */
+.luck-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  border-radius: 999px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+.luck-pill--very_lucky { color: #2ecc71; background: rgba(46,204,113,0.12); }
+.luck-pill--lucky      { color: #7dcea0; background: rgba(125,206,160,0.10); }
+.luck-pill--none       { color: var(--text-secondary, #9a9ab0); background: rgba(154,154,176,0.08); }
+.luck-pill--unlucky    { color: #e07c5a; background: rgba(224,124,90,0.10); }
+.luck-pill--very_unlucky { color: #e74c3c; background: rgba(231,76,60,0.12); }
+
+/* ── Win probability chart ────────────────────────────────────────────── */
+.wp-chart-wrap {
+  width: 100%;
+  max-width: 700px;
+  margin: 0.5rem auto;
+}
+.wp-chart-wrap svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.wp-chart-wrap text {
+  font-family: inherit;
+}
+.wp-chart-hover-line { pointer-events: none; }
+.wp-chart-hit-area { cursor: pointer; }
+.wp-chart-hit-area:hover ~ .wp-chart-hover-line { display: block; }
 
 /* Legacy .replay-quality alias — keeps summary/key-moments working */
 .replay-quality {

@@ -127,10 +127,43 @@ function formatDelta(d: number): string {
   return (d > 0 ? "+" : "") + d.toFixed(3);
 }
 
-/** Quality chip: small coloured pill with dot indicator. */
+/** Classify luck value into a tier. */
+type LuckTier = "very_lucky" | "lucky" | "none" | "unlucky" | "very_unlucky";
+function classifyLuck(luck: number): LuckTier {
+  if (luck > 0.06) return "very_lucky";
+  if (luck > 0.02) return "lucky";
+  if (luck > -0.02) return "none";
+  if (luck > -0.06) return "unlucky";
+  return "very_unlucky";
+}
+
+/** Format luck value with sign. */
+function formatLuck(luck: number): string {
+  return (luck >= 0 ? "+" : "") + luck.toFixed(3);
+}
+
+/** Luck pill: clover + numeric luck value. */
+function LuckPill({ luck }: { luck: number }) {
+  const tier = classifyLuck(luck);
+  if (tier === "none") return null;
+  return (
+    <span className={`luck-pill luck-pill--${tier}`} title={`Dice luck: ${formatLuck(luck)}`}>
+      {"\u2618"}{formatLuck(luck)}
+    </span>
+  );
+}
+
+/** Per-move luck data. */
+interface MoveLuck {
+  move_number: number;
+  player_color: "white" | "black";
+  luck: number;
+}
+
+/** Quality chip: small coloured dot indicator. */
 function QualityChip({ quality }: { quality: string }) {
   const cssQ = QUALITY_CSS_CLASS[quality as MoveQuality] ?? quality;
-  return <span className={`qchip qchip--${cssQ}`}>{QUALITY_LABEL[quality as MoveQuality] ?? quality}</span>;
+  return <span className={`qdot qdot--${cssQ}`} title={QUALITY_LABEL[quality as MoveQuality] ?? quality} />;
 }
 
 /** Equity bar: horizontal track showing equity relative to the best move. */
@@ -279,8 +312,7 @@ function GameReplay() {
   const [playSpeed, setPlaySpeed] = useState(1500); // ms between moves
   const autoPlayRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Analysis panel state
-  const [analysisOpen, setAnalysisOpen] = useState(false);
+  // Analysis panel state (always visible in replay)
   const [analysis, setAnalysis] = useState<AnalysisData | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
@@ -542,12 +574,23 @@ function GameReplay() {
     }
   }, [analysis, tableId, stopPolling, startPolling]);
 
-  // Fetch analysis as soon as the replay loads so the on-board quality
-  // indicator is available without requiring the user to open the panel.
+  // Fetch analysis as soon as the replay loads.
   useEffect(() => {
     if (!replayData) return;
     fetchAnalysis(analysisPly);
   }, [replayData]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-expand: when analysis finishes, navigate to move 1 and expand its details.
+  const hasAutoExpanded = useRef(false);
+  useEffect(() => {
+    if (hasAutoExpanded.current) return;
+    if (!analysis || analysis.status === "running") return;
+    if (analysis.move_analyses.length === 0) return;
+    hasAutoExpanded.current = true;
+    const firstMove = analysis.move_analyses[0].move_number;
+    goTo(firstMove);
+    setExpandedMoves(new Set([firstMove]));
+  }, [analysis, goTo]);
 
   // Re-fetch when ply changes.
   const handlePlyChange = useCallback((newPly: 0 | 2 | 3) => {
@@ -557,11 +600,7 @@ function GameReplay() {
     fetchAnalysis(newPly, true);
   }, [fetchAnalysis, stopPolling]);
 
-  const handleToggleAnalysis = useCallback(async () => {
-    const next = !analysisOpen;
-    setAnalysisOpen(next);
-    if (next) await fetchAnalysis(analysisPly);
-  }, [analysisOpen, fetchAnalysis, analysisPly]);
+  // Analysis is always visible - no toggle needed.
 
   /** Re-analyze with force flag. */
   const handleReanalyze = useCallback(async (ply: 0 | 2 | 3) => {
@@ -571,7 +610,6 @@ function GameReplay() {
     setAnalysis(null);
     setAnalysisLoading(true);
     setAnalysisError(null);
-    setAnalysisOpen(true);
     try {
       const data = await getAnalysis(tableId!, 100, ply, true);
       setAnalysis(data);
@@ -675,6 +713,46 @@ function GameReplay() {
     }
     return summaries;
   }, [analysis, replayData]);
+
+  // ── Luck computation ──────────────────────────────────────────────────
+  // luck = best_equity_with_dice - expected_equity_before_roll
+  // expected_equity_before_roll ≈ -(equity_after of previous move)
+  const luckData = useMemo<MoveLuck[]>(() => {
+    if (!analysis?.move_analyses?.length) return [];
+    const moves = analysis.move_analyses;
+    return moves.map((m, i) => {
+      const prevEquityAfter = i > 0 ? moves[i - 1].equity_after : 0;
+      const luck = m.best_equity - (-prevEquityAfter);
+      return { move_number: m.move_number, player_color: m.player_color, luck };
+    });
+  }, [analysis]);
+
+  const luckByMove = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const l of luckData) map.set(l.move_number, l.luck);
+    return map;
+  }, [luckData]);
+
+  // Per-player total luck for the game summary.
+  const luckSummary = useMemo(() => {
+    const totals: Record<string, number> = { white: 0, black: 0 };
+    for (const l of luckData) totals[l.player_color] = (totals[l.player_color] ?? 0) + l.luck;
+    return totals;
+  }, [luckData]);
+
+  // ── Win probability series for chart ──────────────────────────────────
+  // Track white's win probability throughout the game.
+  const winProbSeries = useMemo<{ move: number; whiteWin: number }[]>(() => {
+    if (!analysis?.move_analyses?.length) return [];
+    return analysis.move_analyses
+      .filter((m) => m.chosen_win_prob != null || m.chosen_probs?.win != null)
+      .map((m) => {
+        const p = m.chosen_win_prob ?? m.chosen_probs?.win ?? 0.5;
+        // chosen_win_prob is from the mover's perspective. Normalise to white's POV.
+        const whiteWin = m.player_color === "white" ? p : 1 - p;
+        return { move: m.move_number, whiteWin };
+      });
+  }, [analysis]);
 
   // Orient the board to the logged-in player's perspective when they were
   // one of the two seats. Fall back to white for spectators/unauthed viewers.
@@ -1053,6 +1131,7 @@ function GameReplay() {
               const pillWinPct = selectedCand
                 ? formatPct(selectedCand.probs?.win)
                 : currentWinPct;
+              const moveLuck = luckByMove.get(moveIndex) ?? null;
               return (
                 <div
                   className={`replay-board-analysis replay-board-analysis--${QUALITY_CSS_CLASS[pillQuality as MoveQuality] ?? pillQuality}`}
@@ -1060,11 +1139,12 @@ function GameReplay() {
                   aria-live="polite"
                 >
                   <span className="replay-board-analysis-quality">
-                    {QUALITY_LABEL[pillQuality as MoveQuality] ?? pillQuality}
+                    <QualityChip quality={pillQuality} />
+                    {pillWinPct && <>{" "}{pillWinPct} win</>}
                   </span>
-                  {pillWinPct && (
+                  {moveLuck !== null && classifyLuck(moveLuck) !== "none" && (
                     <span className="replay-board-analysis-prob">
-                      {pillWinPct} win
+                      <LuckPill luck={moveLuck} />
                     </span>
                   )}
                 </div>
@@ -1254,22 +1334,8 @@ function GameReplay() {
         </div>
       </div>
 
-      {/* ── Full analysis panel (game summary, key moments, move list) ── */}
+      {/* ── Full analysis panel (always visible in replay) ── */}
       {!embed && (
-        <div className="replay-analysis-controls">
-          <button
-            type="button"
-            className={`replay-analysis-toggle${analysisOpen ? " replay-analysis-toggle--open" : ""}`}
-            onClick={handleToggleAnalysis}
-            aria-expanded={analysisOpen}
-            aria-controls="replay-analysis-panel"
-          >
-            {analysisOpen ? "▼ Hide analysis" : "▶ Show move analysis"}
-          </button>
-        </div>
-      )}
-
-      {analysisOpen && (
         <div id="replay-analysis-panel" className="replay-analysis">
           {analysis?.status === "running" && (
             <div className="replay-analysis-status">
@@ -1338,9 +1404,107 @@ function GameReplay() {
                               );
                             })}
                           </div>
+                          {luckSummary[c] !== 0 && (
+                            <div className="replay-summary-stat">
+                              <span className="replay-summary-label">{"\u2618"} Luck</span>
+                              <span className="replay-summary-value">
+                                <LuckPill luck={luckSummary[c]} />
+                              </span>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
+                  </div>
+                </div>
+              )}
+
+              {/* Win probability chart */}
+              {winProbSeries.length > 1 && (
+                <div className="replay-analysis-section">
+                  <h3 className="replay-analysis-heading">Win probability</h3>
+                  <div className="wp-chart-wrap">
+                    <svg
+                      viewBox={`0 0 ${Math.max(300, winProbSeries.length * 6 + 60)} 160`}
+                      preserveAspectRatio="xMidYMid meet"
+                    >
+                      {(() => {
+                        const W = Math.max(300, winProbSeries.length * 6 + 60);
+                        const H = 160;
+                        const pad = { top: 15, right: 15, bottom: 25, left: 40 };
+                        const cw = W - pad.left - pad.right;
+                        const ch = H - pad.top - pad.bottom;
+                        const maxMove = winProbSeries[winProbSeries.length - 1].move;
+                        const x = (m: number) => pad.left + (m / maxMove) * cw;
+                        const y = (p: number) => pad.top + (1 - p) * ch;
+
+                        // Build the line path
+                        const linePts = winProbSeries.map((d) => `${x(d.move).toFixed(1)},${y(d.whiteWin).toFixed(1)}`);
+                        const linePath = `M${linePts.join("L")}`;
+                        // Fill areas: above 50% = white advantage, below = black
+                        const fillPath = `M${x(winProbSeries[0].move).toFixed(1)},${y(0.5).toFixed(1)}L${linePts.join("L")}L${x(maxMove).toFixed(1)},${y(0.5).toFixed(1)}Z`;
+
+                        return (
+                          <g>
+                            {/* Grid lines */}
+                            {[0, 0.25, 0.5, 0.75, 1].map((p) => (
+                              <g key={p}>
+                                <line x1={pad.left} x2={W - pad.right} y1={y(p)} y2={y(p)}
+                                  stroke="rgba(255,255,255,0.08)" strokeWidth="1" />
+                                <text x={pad.left - 4} y={y(p) + 3.5} textAnchor="end"
+                                  fill="rgba(255,255,255,0.35)" fontSize="9">
+                                  {(p * 100).toFixed(0)}%
+                                </text>
+                              </g>
+                            ))}
+                            {/* 50% midline */}
+                            <line x1={pad.left} x2={W - pad.right} y1={y(0.5)} y2={y(0.5)}
+                              stroke="rgba(255,255,255,0.2)" strokeWidth="1" strokeDasharray="4 3" />
+                            {/* Filled area */}
+                            <clipPath id="wp-above">
+                              <rect x={pad.left} y={pad.top} width={cw} height={ch / 2} />
+                            </clipPath>
+                            <clipPath id="wp-below">
+                              <rect x={pad.left} y={y(0.5)} width={cw} height={ch / 2} />
+                            </clipPath>
+                            <path d={fillPath} fill="rgba(255,255,255,0.06)" clipPath="url(#wp-above)" />
+                            <path d={fillPath} fill="rgba(100,100,120,0.08)" clipPath="url(#wp-below)" />
+                            {/* Line */}
+                            <path d={linePath} fill="none" stroke="var(--accent, #d4a843)" strokeWidth="1.5" strokeLinejoin="round" />
+                            {/* X-axis label */}
+                            <text x={pad.left + cw / 2} y={H - 3} textAnchor="middle"
+                              fill="rgba(255,255,255,0.35)" fontSize="9">
+                              Move
+                            </text>
+                            {/* Click targets */}
+                            {winProbSeries.map((d) => (
+                              <rect key={d.move} className="wp-chart-hit-area"
+                                x={x(d.move) - 3} y={pad.top} width={6} height={ch}
+                                fill="transparent"
+                                onClick={() => { stopAutoPlay(); goTo(d.move); }}
+                              />
+                            ))}
+                            {/* Current position marker */}
+                            {winProbSeries.find((d) => d.move === moveIndex) && (() => {
+                              const d = winProbSeries.find((d) => d.move === moveIndex)!;
+                              return (
+                                <>
+                                  <line x1={x(d.move)} x2={x(d.move)} y1={pad.top} y2={pad.top + ch}
+                                    stroke="var(--accent, #d4a843)" strokeWidth="1" opacity="0.5" />
+                                  <circle cx={x(d.move)} cy={y(d.whiteWin)} r="3.5"
+                                    fill="var(--accent, #d4a843)" stroke="#1a1a2e" strokeWidth="1.5" />
+                                </>
+                              );
+                            })()}
+                            {/* Player labels */}
+                            <text x={W - pad.right} y={pad.top + 10} textAnchor="end"
+                              fill="rgba(255,255,255,0.4)" fontSize="8">White</text>
+                            <text x={W - pad.right} y={pad.top + ch - 4} textAnchor="end"
+                              fill="rgba(255,255,255,0.4)" fontSize="8">Black</text>
+                          </g>
+                        );
+                      })()}
+                    </svg>
                   </div>
                 </div>
               )}
@@ -1408,6 +1572,7 @@ function GameReplay() {
                           <span className="replay-move-item-player">
                             {m.player_color === "white" ? "\u26AA" : "\u26AB"} {m.dice_roll}
                           </span>
+                          {(() => { const ml = luckByMove.get(m.move_number); return ml != null ? <LuckPill luck={ml} /> : null; })()}
                           <span className="replay-move-item-notation">
                             {notationToPlayerPerspective(m.moves_notation, m.player_color)}
                           </span>
