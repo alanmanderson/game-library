@@ -293,6 +293,10 @@ function GameReplay() {
   /** gnubg evaluation depth: 0 (fast), 2 (standard), 3 (deep/slow). */
   const [analysisPly, setAnalysisPly] = useState<0 | 2 | 3>(2);
 
+  /** Color filter for stepping through moves: only step through white, black, or both. */
+  type ColorFilter = "white" | "black" | "both";
+  const [colorFilter, setColorFilter] = useState<ColorFilter>("both");
+
   // Re-analyze modal state
   const [showReanalyzeModal, setShowReanalyzeModal] = useState(false);
 
@@ -385,6 +389,49 @@ function GameReplay() {
     [totalMoves],
   );
 
+  // Helper: determine a move's color from its player_nickname.
+  const getMoveColor = useCallback(
+    (move: ReplayMoveRecord): "white" | "black" =>
+      move.player_nickname === replayData?.white_player_nickname ? "white" : "black",
+    [replayData],
+  );
+
+  // Filtered move indices for stepping (null = no filter / show all).
+  const filteredMoveIndices = useMemo<number[] | null>(() => {
+    if (!replayData || colorFilter === "both") return null;
+    const indices: number[] = [0]; // always include starting position
+    for (let i = 0; i < replayData.moves.length; i++) {
+      if (getMoveColor(replayData.moves[i]) === colorFilter) {
+        indices.push(i + 1); // moveIndex is 1-based
+      }
+    }
+    return indices;
+  }, [replayData, colorFilter, getMoveColor]);
+
+  // Filtered navigation helpers.
+  const goToNextFiltered = useCallback(() => {
+    if (!filteredMoveIndices) { goTo(moveIndex + 1); return; }
+    const next = filteredMoveIndices.find((i) => i > moveIndex);
+    if (next !== undefined) goTo(next);
+  }, [moveIndex, filteredMoveIndices, goTo]);
+
+  const goToPrevFiltered = useCallback(() => {
+    if (!filteredMoveIndices) { goTo(moveIndex - 1); return; }
+    for (let i = filteredMoveIndices.length - 1; i >= 0; i--) {
+      if (filteredMoveIndices[i] < moveIndex) { goTo(filteredMoveIndices[i]); return; }
+    }
+  }, [moveIndex, filteredMoveIndices, goTo]);
+
+  const isAtFilteredEnd = useMemo(() => {
+    if (!filteredMoveIndices) return moveIndex >= totalMoves;
+    return !filteredMoveIndices.some((i) => i > moveIndex);
+  }, [moveIndex, totalMoves, filteredMoveIndices]);
+
+  const isAtFilteredStart = useMemo(() => {
+    if (!filteredMoveIndices) return moveIndex === 0;
+    return !filteredMoveIndices.some((i) => i < moveIndex);
+  }, [moveIndex, filteredMoveIndices]);
+
   const stopAutoPlay = useCallback(() => {
     if (autoPlayRef.current) {
       clearInterval(autoPlayRef.current);
@@ -398,15 +445,17 @@ function GameReplay() {
     setAutoPlaying(true);
     autoPlayRef.current = setInterval(() => {
       setMoveIndex((prev) => {
-        const next = prev + 1;
-        if (next >= totalMoves) {
-          stopAutoPlay();
-          return totalMoves;
+        if (!filteredMoveIndices) {
+          const next = prev + 1;
+          if (next >= totalMoves) { stopAutoPlay(); return totalMoves; }
+          return next;
         }
+        const next = filteredMoveIndices.find((i) => i > prev);
+        if (next === undefined) { stopAutoPlay(); return prev; }
         return next;
       });
     }, playSpeed);
-  }, [playSpeed, totalMoves, stopAutoPlay]);
+  }, [playSpeed, totalMoves, stopAutoPlay, filteredMoveIndices]);
 
   // Restart timer when speed changes while auto-playing
   useEffect(() => {
@@ -416,12 +465,12 @@ function GameReplay() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playSpeed]);
 
-  // Stop auto-play when reaching the end
+  // Stop auto-play when reaching the filtered end
   useEffect(() => {
-    if (autoPlaying && moveIndex >= totalMoves) {
+    if (autoPlaying && isAtFilteredEnd) {
       stopAutoPlay();
     }
-  }, [autoPlaying, moveIndex, totalMoves, stopAutoPlay]);
+  }, [autoPlaying, isAtFilteredEnd, stopAutoPlay]);
 
   // Reset selected candidate when the viewed move changes.
   useEffect(() => setSelectedCandidate(null), [moveIndex]);
@@ -432,16 +481,16 @@ function GameReplay() {
       if (e.key === "ArrowLeft") {
         e.preventDefault();
         stopAutoPlay();
-        goTo(moveIndex - 1);
+        goToPrevFiltered();
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
         stopAutoPlay();
-        goTo(moveIndex + 1);
+        goToNextFiltered();
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [moveIndex, goTo, stopAutoPlay]);
+  }, [goToNextFiltered, goToPrevFiltered, stopAutoPlay]);
 
   /** Stop any active analysis poll. */
   const stopPolling = useCallback(() => {
@@ -634,6 +683,13 @@ function GameReplay() {
     storedPlayerId && replayData?.black_player_id === storedPlayerId
       ? "black"
       : "white";
+
+  // Default the color filter to the logged-in player's color once replay loads.
+  useEffect(() => {
+    if (!replayData || !storedPlayerId) return;
+    if (replayData.white_player_id === storedPlayerId) setColorFilter("white");
+    else if (replayData.black_player_id === storedPlayerId) setColorFilter("black");
+  }, [replayData, storedPlayerId]);
 
   // Analysis entry for the move we just reached (moveIndex === move_number).
   const currentAnalysis = useMemo<MoveAnalysis | null>(() => {
@@ -867,10 +923,10 @@ function GameReplay() {
             </span>
           </div>
           <div className="replay-nav-buttons">
-            <button className="nav-btn" onClick={() => { stopAutoPlay(); goTo(0); }} disabled={moveIndex === 0} title="First move" aria-label="Go to first move">
+            <button className="nav-btn" onClick={() => { stopAutoPlay(); goTo(0); }} disabled={isAtFilteredStart} title="First move" aria-label="Go to first move">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 12.5L6 8l6-4.5"/><path d="M4 3.5v9"/></svg>
             </button>
-            <button className="nav-btn" onClick={() => { stopAutoPlay(); goTo(moveIndex - 1); }} disabled={moveIndex === 0} title="Previous move" aria-label="Previous move">
+            <button className="nav-btn" onClick={() => { stopAutoPlay(); goToPrevFiltered(); }} disabled={isAtFilteredStart} title="Previous move" aria-label="Previous move">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 12.5L4 8l6-4.5"/></svg>
             </button>
             {autoPlaying ? (
@@ -878,16 +934,32 @@ function GameReplay() {
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M5 3.5v9M11 3.5v9"/></svg>
               </button>
             ) : (
-              <button className="nav-btn nav-btn--play" onClick={startAutoPlay} disabled={moveIndex >= totalMoves} title="Auto-play" aria-label="Auto-play">
+              <button className="nav-btn nav-btn--play" onClick={startAutoPlay} disabled={isAtFilteredEnd} title="Auto-play" aria-label="Auto-play">
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4.5 2.5l9 5.5-9 5.5z"/></svg>
               </button>
             )}
-            <button className="nav-btn" onClick={() => { stopAutoPlay(); goTo(moveIndex + 1); }} disabled={moveIndex >= totalMoves} title="Next move" aria-label="Next move">
+            <button className="nav-btn" onClick={() => { stopAutoPlay(); goToNextFiltered(); }} disabled={isAtFilteredEnd} title="Next move" aria-label="Next move">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3.5L12 8l-6 4.5"/></svg>
             </button>
-            <button className="nav-btn" onClick={() => { stopAutoPlay(); goTo(totalMoves); }} disabled={moveIndex >= totalMoves} title="Go to last move" aria-label="Go to last move">
+            <button className="nav-btn" onClick={() => { stopAutoPlay(); goTo(totalMoves); }} disabled={isAtFilteredEnd} title="Go to last move" aria-label="Go to last move">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 3.5L10 8l-6 4.5"/><path d="M12 3.5v9"/></svg>
             </button>
+
+            {/* Color filter toggle */}
+            <div className="replay-color-filter" role="radiogroup" aria-label="Filter moves by player">
+              {(["white", "black", "both"] as const).map((f) => (
+                <button
+                  key={f}
+                  className={`color-filter-btn${colorFilter === f ? " color-filter-btn--active" : ""}${f !== "both" ? ` color-filter-btn--${f}` : ""}`}
+                  onClick={() => setColorFilter(f)}
+                  role="radio"
+                  aria-checked={colorFilter === f}
+                  title={f === "both" ? "Show all moves" : `Show only ${f} moves`}
+                >
+                  {f === "white" ? "\u26AA" : f === "black" ? "\u26AB" : "Both"}
+                </button>
+              ))}
+            </div>
 
             {/* Speed */}
             <input
@@ -1314,7 +1386,7 @@ function GameReplay() {
                   </p>
                 )}
                 <ul className="replay-move-list">
-                  {analysis.move_analyses.map((m) => {
+                  {analysis.move_analyses.filter((m) => colorFilter === "both" || m.player_color === colorFilter).map((m) => {
                     const chosenPct = formatPct(m.chosen_win_prob ?? m.chosen_probs?.win);
                     const bestPct = formatPct(m.best_win_prob ?? m.best_probs?.win);
                     const hasProbs = chosenPct !== null || bestPct !== null;

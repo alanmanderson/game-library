@@ -694,17 +694,38 @@ async def _plan_bot_turn_gnu(engine, table_id: str):
     # engine's move validation doesn't reject a slightly-off bar/off
     # representation.  If no exact match exists, pick the enumerated turn
     # with the most matching moves (best effort).
+    #
+    # gnubg may collapse chain moves where one checker uses multiple dice
+    # into a single span (e.g. "24/16" instead of "24/22/16").  We
+    # collapse both sides before comparing so the match still succeeds.
     target = [(m["from_point"], m["to_point"]) for m in best_moves]
     turns = engine.enumerate_complete_turns()
     if not turns:
         return None
 
+    def _collapse(pairs: list[tuple[int, int]]) -> list[tuple[int, int]]:
+        """Collapse consecutive hops: [(1,3),(3,9)] → [(1,9)]."""
+        if not pairs:
+            return []
+        result: list[tuple[int, int]] = []
+        start, end = pairs[0]
+        for f, t in pairs[1:]:
+            if f == end:
+                end = t
+            else:
+                result.append((start, end))
+                start, end = f, t
+        result.append((start, end))
+        return result
+
+    collapsed_target = sorted(_collapse(target))
+
     def _score(turn) -> int:
         pairs = [(m.from_point, m.to_point) for m in turn]
-        # Count matches ignoring order so bar/off variants still line up.
-        remaining = list(pairs)
+        collapsed = sorted(_collapse(pairs))
+        remaining = list(collapsed)
         hits = 0
-        for t in target:
+        for t in collapsed_target:
             if t in remaining:
                 remaining.remove(t)
                 hits += 1
@@ -714,7 +735,12 @@ async def _plan_bot_turn_gnu(engine, table_id: str):
     scored.sort(key=lambda x: x[1], reverse=True)
     best_turn, best_score = scored[0]
     if best_score == 0:
-        # No overlap at all — gnubg output couldn't be mapped. Fall back.
+        # No overlap at all — gnubg output couldn't be mapped.
+        logger.warning(
+            "gnubg returned moves %s (notation: %s) for table %s "
+            "but none matched any enumerated turn",
+            target, resp["best"].get("notation", "?"), table_id,
+        )
         return None
     return best_turn
 
@@ -958,11 +984,13 @@ async def execute_bot_turn(table_id: str) -> None:
                         else:
                             planned_turn = None
             if planned_turn is None:
-                logger.info(
-                    "gnubg unavailable for table %s; falling back to expert", table_id
+                logger.warning(
+                    "gnubg failed to produce a plan for table %s; "
+                    "bot will use per-move selection (no v2 fallback)",
+                    table_id,
                 )
 
-        if planned_turn is None:
+        if difficulty != "gnu" and planned_turn is None:
             async with game_manager._get_lock(table_id):
                 engine = game_manager.get_engine(table_id)
                 if engine and engine.state.status == GameStatus.MOVING:

@@ -10,6 +10,7 @@ import { generateGameId, generatePlayerId, generateSecret } from '../utils/id.js
 import { setupGame } from '../engine/board-setup.js';
 import { processAction, toClientState, skipDisconnectedTurn } from '../engine/game-engine.js';
 import { shuffle } from '../utils/shuffle.js';
+import type { GameStore } from '../persistence/game-store.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -37,6 +38,64 @@ export class RoomManager {
   private clients = new Map<WebSocket, ClientInfo>();
   private games = new Map<string, GameRoom>();
   private playerToWs = new Map<string, WebSocket>();
+  private store: GameStore | null = null;
+
+  /** Attach a persistent store and load saved games. */
+  async initStore(store: GameStore): Promise<void> {
+    this.store = store;
+    await store.init();
+    const rows = await store.loadAll();
+    for (const row of rows) {
+      const room: GameRoom = {
+        gameId: row.gameId,
+        lobby: row.lobby,
+        state: row.state,
+        playerSecrets: new Map(Object.entries(row.playerSecrets)),
+        disconnectTimers: new Map(),
+        gcTimer: null,
+        createdAt: row.createdAt,
+      };
+      // Mark all players as disconnected (they'll reconnect via game:reconnect)
+      if (room.state) {
+        room.state = {
+          ...room.state,
+          players: room.state.players.map((p) => ({ ...p, isConnected: false })),
+        };
+      }
+      this.games.set(row.gameId, room);
+    }
+    if (rows.length > 0) {
+      console.log(`Loaded ${rows.length} game(s) from database`);
+    }
+  }
+
+  /** Persist a game room to the store (fire-and-forget). */
+  private persist(room: GameRoom): void {
+    if (!this.store) return;
+    this.store.save({
+      gameId: room.gameId,
+      lobby: room.lobby,
+      state: room.state,
+      playerSecrets: Object.fromEntries(room.playerSecrets),
+      createdAt: room.createdAt,
+    }).catch((err) => console.error('Failed to persist game:', err));
+  }
+
+  /** Persist only the game state (hot path). */
+  private persistState(gameId: string, state: GameState | null): void {
+    if (!this.store) return;
+    this.store.updateState(gameId, state).catch((err) =>
+      console.error('Failed to persist state:', err),
+    );
+  }
+
+  /** Remove a game from the store. */
+  private unpersist(gameId: string): void {
+    if (!this.store) return;
+    this.store.delete(gameId).catch((err) =>
+      console.error('Failed to delete game:', err),
+    );
+  }
 
   // ─── Connection lifecycle ─────────────────────────────────────────
 
@@ -203,6 +262,7 @@ export class RoomManager {
     };
 
     this.games.set(gameId, room);
+    this.persist(room);
 
     this.send(ws, {
       type: 'lobby:created',
@@ -254,6 +314,7 @@ export class RoomManager {
     });
 
     room.playerSecrets.set(playerId, client.secret);
+    this.persist(room);
 
     this.broadcastToGame(gameId, {
       type: 'lobby:updated',
@@ -281,6 +342,7 @@ export class RoomManager {
     if (room.lobby.players.length === 0) {
       // No players left, remove the game
       this.games.delete(gameId);
+      this.unpersist(gameId);
       this.broadcastGameList();
       return;
     }
@@ -290,6 +352,8 @@ export class RoomManager {
       room.lobby.hostId = room.lobby.players[0].id;
       room.lobby.players[0] = { ...room.lobby.players[0], isHost: true };
     }
+
+    this.persist(room);
 
     this.broadcastToGame(gameId, {
       type: 'lobby:updated',
@@ -338,6 +402,7 @@ export class RoomManager {
     });
 
     room.state = gameState;
+    this.persist(room);
 
     // Send personalized game state to each player
     for (const player of players) {
@@ -370,6 +435,7 @@ export class RoomManager {
     }
 
     room.lobby.difficulty = difficulty;
+    this.persist(room);
 
     this.broadcastToGame(gameId, {
       type: 'lobby:updated',
@@ -465,6 +531,7 @@ export class RoomManager {
     };
 
     this.games.set(gameId, room);
+    this.persist(room);
 
     // Send game started directly (skip lobby phase)
     this.send(ws, {
@@ -519,6 +586,7 @@ export class RoomManager {
 
     const result = processAction(room.state, actingPlayerId, action);
     room.state = result.state;
+    this.persistState(gameId, room.state);
 
     // Broadcast animation events first
     for (const event of result.events) {
@@ -623,6 +691,7 @@ export class RoomManager {
     if (currentPlayer && currentPlayer.id === playerId && !currentPlayer.isConnected) {
       const result = skipDisconnectedTurn(room.state);
       room.state = result.state;
+      this.persistState(gameId, room.state);
 
       for (const event of result.events) {
         this.broadcastToGame(gameId, event);
@@ -640,6 +709,7 @@ export class RoomManager {
 
     room.gcTimer = setTimeout(() => {
       this.games.delete(gameId);
+      this.unpersist(gameId);
     }, GAME_GC_TIMEOUT_MS);
   }
 

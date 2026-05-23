@@ -35,6 +35,22 @@ export function useWebSocket() {
         try {
           const msg: ServerMessage = JSON.parse(evt.data);
           handleMsg(msg);
+
+          // After processing lobby:identity, auto-reconnect if we have
+          // rejoin info from a previous session (e.g. browser refresh).
+          // We use the local `ws` variable directly so we are guaranteed
+          // to send on the exact socket that just identified us.
+          if (msg.type === 'lobby:identity') {
+            const rejoin = useStore.getState().rejoinInfo;
+            if (rejoin && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({
+                type: 'game:reconnect',
+                gameId: rejoin.gameId,
+                playerId: rejoin.playerId,
+                secret: rejoin.secret,
+              }));
+            }
+          }
         } catch (e) {
           console.error('Failed to parse WS message', e);
         }
