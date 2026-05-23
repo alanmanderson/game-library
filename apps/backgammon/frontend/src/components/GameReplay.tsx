@@ -1122,6 +1122,22 @@ function GameReplay() {
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 3.5L10 8l-6 4.5"/><path d="M12 3.5v9"/></svg>
             </button>
 
+            {/* Color filter toggle */}
+            <div className="replay-color-filter" role="radiogroup" aria-label="Filter moves by player">
+              {(["white", "black", "both"] as const).map((f) => (
+                <button
+                  key={f}
+                  className={`color-filter-btn${colorFilter === f ? " color-filter-btn--active" : ""}${f !== "both" ? ` color-filter-btn--${f}` : ""}`}
+                  onClick={() => setColorFilter(f)}
+                  role="radio"
+                  aria-checked={colorFilter === f}
+                  title={f === "both" ? "Show all moves" : `Show only ${f} moves`}
+                >
+                  {f === "white" ? "\u26AA" : f === "black" ? "\u26AB" : "Both"}
+                </button>
+              ))}
+            </div>
+
             {/* Speed */}
             <input
               type="range"
