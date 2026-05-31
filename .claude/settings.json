@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "prompt",
+            "if": "Bash(gh pr create*)",
+            "prompt": "STOP. Before creating this PR, you MUST run /security-review first. Do not proceed with the gh pr create command until the security review has been completed and the verdict is not FAIL. If the review has already been run in this conversation and the verdict was PASS or PASS WITH WARNINGS, allow the PR creation. Output your decision as JSON: {\"decision\": \"block\", \"reason\": \"Security review must be completed before creating a PR. Run /security-review first.\"} or {\"decision\": \"allow\", \"reason\": \"Security review already completed.\"}",
+            "statusMessage": "Checking security review status..."
+          }
+        ]
+      }
+    ]
+  }
+}
