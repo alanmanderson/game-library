@@ -42,6 +42,8 @@ COPY --from=frontend-build /build/dist ./frontend/dist
 RUN adduser --disabled-password --gecos "" appuser && chown -R appuser:appuser /app
 USER appuser
 
+ENV PYTHONPATH=/app/backend
+
 EXPOSE 8000
 
 CMD ["sh", "-c", "cd /app/backend && alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
