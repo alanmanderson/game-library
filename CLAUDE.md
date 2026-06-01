@@ -1,6 +1,6 @@
 # Game Library Monorepo
 
-Monorepo of 7 web-based multiplayer games deployed to a single VM via Docker Compose with subdomain-per-game routing under `*.games.alanmanderson.com`.
+Monorepo of 8 web-based multiplayer games deployed to a single VM via Docker Compose with subdomain-per-game routing under `*.games.alanmanderson.com`.
 
 ## Repository Layout
 
@@ -11,6 +11,7 @@ apps/
   bughouse/          React + FastAPI + PostgreSQL      (bughouse.games.alanmanderson.com)
   forbidden-island/  React + Fastify (in-memory)       (fi.games.alanmanderson.com)
   lemonadestand/     React + .NET 8 + SQLite           (lemonade.games.alanmanderson.com)
+  sneaky-sabotage/   React + FastAPI + PostgreSQL      (sabotage.games.alanmanderson.com)
   spades/            Flask + SQLite                     (spades.games.alanmanderson.com)
   telestrations/     Vanilla TS + Express (in-memory)  (telestrations.games.alanmanderson.com)
 services/
@@ -28,7 +29,7 @@ Each game has its own CLAUDE.md with game-specific architecture, commands, and c
 
 | Category | Games | Backend | Frontend | Database |
 |----------|-------|---------|----------|----------|
-| FastAPI | ai-pinochle, backgammon, bughouse | Python 3.12, FastAPI, SQLAlchemy 2 (async), Alembic | React + TypeScript + Vite | PostgreSQL 16 (asyncpg) |
+| FastAPI | ai-pinochle, backgammon, bughouse, sneaky-sabotage | Python 3.12, FastAPI, SQLAlchemy 2 (async), Alembic | React + TypeScript + Vite | PostgreSQL 16 (asyncpg) |
 | Fastify | forbidden-island | Node 20, Fastify, TypeScript | React + Vite | None (in-memory) |
 | .NET | lemonadestand | C# .NET 8 Web API (3-tier) | React 19 + Vite + Tailwind + Zustand | SQLite |
 | Flask | spades | Python 3.12, Flask, SQLAlchemy (sync) | Server-rendered | SQLite |
@@ -44,6 +45,7 @@ Internet → Caddy (ports 80/443, auto-HTTPS via Let's Encrypt)
              ├── fi.games.*         → forbidden-island:3000
              ├── lemonade.games.*   → lemonadestand:5000
              ├── spades.games.*     → spades:5000
+             ├── sabotage.games.*    → sneaky-sabotage:8000
              └── telestrations.games.* → telestrations:8080
 
 PostgreSQL 16 (internal only, shared by ai-pinochle, backgammon, bughouse)

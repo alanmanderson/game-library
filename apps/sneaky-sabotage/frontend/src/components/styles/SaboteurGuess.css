@@ -1,0 +1,112 @@
+/* SaboteurGuess */
+
+.saboteur-guess {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: 24px 16px;
+}
+
+.saboteur-guess-content {
+  width: 100%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.saboteur-guess-waiting {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+}
+
+.saboteur-guess-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.saboteur-guess-subtitle {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.saboteur-guess-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  width: 100%;
+}
+
+.saboteur-guess-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 20px 12px;
+  background: var(--surface);
+  border: 2px solid transparent;
+  border-radius: var(--radius);
+  transition: all 0.15s ease;
+  min-height: 48px;
+}
+
+.saboteur-guess-card:hover:not(:disabled) {
+  border-color: var(--insider);
+  background: var(--bg-tertiary);
+}
+
+.saboteur-guess-card:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.saboteur-guess-card:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.saboteur-guess-card--selected {
+  border-color: var(--insider);
+  background: rgba(155, 89, 182, 0.15);
+}
+
+.saboteur-guess-card--selected:disabled {
+  opacity: 1;
+}
+
+.saboteur-guess-card-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--bg-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.saboteur-guess-card--selected .saboteur-guess-card-avatar {
+  background: var(--insider);
+  color: #fff;
+}
+
+.saboteur-guess-card-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.saboteur-guess-status {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  text-align: center;
+}

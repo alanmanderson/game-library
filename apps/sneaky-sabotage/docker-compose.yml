@@ -1,0 +1,49 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: sabotage
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sabotage_secret}
+      POSTGRES_DB: sneaky_sabotage
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sabotage"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      target: production
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app/backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://sabotage:${POSTGRES_PASSWORD:-sabotage_secret}@db:5432/sneaky_sabotage
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "cd /app/backend && alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      VITE_BACKEND_INTERNAL_URL: http://backend:8000
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
