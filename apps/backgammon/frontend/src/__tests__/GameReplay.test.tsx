@@ -417,7 +417,7 @@ describe("GameReplay – analysis panel", () => {
 
 
     await waitFor(() => {
-      expect(api.getAnalysis).toHaveBeenCalledWith("TABLE001", 100, 2);
+      expect(api.getAnalysis).toHaveBeenCalledWith("TABLE001", 500, 2);
     });
 
     await waitFor(() => {
