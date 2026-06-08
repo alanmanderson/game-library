@@ -6,6 +6,12 @@ on:
     paths:
       - 'apps/**'
       - 'infra/**'
+  workflow_dispatch:
+    inputs:
+      services:
+        description: 'Services to rebuild (space-separated, or "all")'
+        required: false
+        default: 'all'
 
 permissions:
   contents: read
@@ -89,6 +95,7 @@ jobs:
       always() &&
       !contains(needs.*.result, 'failure') &&
       (
+      github.event_name == 'workflow_dispatch' ||
       needs.detect-changes.outputs.ai-pinochle == 'true' ||
       needs.detect-changes.outputs.backgammon == 'true' ||
       needs.detect-changes.outputs.bughouse == 'true' ||
@@ -140,6 +147,21 @@ jobs:
       - name: Determine which services to rebuild
         id: services
         run: |
+          ALL_SERVICES="ai-pinochle gnubg backgammon bughouse forbidden-island lemonadestand spades telestrations sneaky-sabotage"
+
+          # Manual trigger: use the input directly
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            INPUT="${{ github.event.inputs.services }}"
+            if [ "$INPUT" == "all" ] || [ -z "$INPUT" ]; then
+              SERVICES="$ALL_SERVICES"
+            else
+              SERVICES="$INPUT"
+            fi
+            echo "list=$SERVICES" >> "$GITHUB_OUTPUT"
+            echo "Manual deploy: $SERVICES"
+            exit 0
+          fi
+
           SERVICES=""
 
           # 1) App code changes — rebuild that app
@@ -166,7 +188,7 @@ jobs:
             # If compose changed but no specific services identified (e.g., volumes
             # or top-level keys), fall back to rebuilding all app services
             if [ -z "$COMPOSE_SERVICES" ] && [ -n "$DIFF" ]; then
-              COMPOSE_SERVICES="ai-pinochle gnubg backgammon bughouse forbidden-island lemonadestand spades telestrations sneaky-sabotage"
+              COMPOSE_SERVICES="$ALL_SERVICES"
             fi
             SERVICES="$SERVICES $COMPOSE_SERVICES"
             echo "Compose-affected services: $COMPOSE_SERVICES"
@@ -190,7 +212,7 @@ jobs:
              docker compose up -d ${{ steps.services.outputs.list }}"
 
       - name: Reload Caddy if Caddyfile changed
-        if: needs.detect-changes.outputs.infra-caddyfile == 'true'
+        if: needs.detect-changes.outputs.infra-caddyfile == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           ssh -i ~/.ssh/deploy_key \
             ${{ env.VM_USER }}@${{ env.VM_HOST }} \
