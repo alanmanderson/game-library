@@ -583,7 +583,7 @@ function GameReplay() {
     pollIntervalRef.current = setInterval(async () => {
       if (!tableId) return;
       try {
-        const updated = await getAnalysis(tableId, 100, ply);
+        const updated = await getAnalysis(tableId, 500, ply);
         setAnalysis(updated);
         if (updated.status !== "running") {
           stopPolling();
@@ -603,7 +603,7 @@ function GameReplay() {
     setAnalysisError(null);
     stopPolling();
     try {
-      const data = await getAnalysis(tableId, 100, ply);
+      const data = await getAnalysis(tableId, 500, ply);
       setAnalysis(data);
       if (data.status === "running") {
         // Keep loading state and start polling every 60s
@@ -656,7 +656,7 @@ function GameReplay() {
     setAnalysisLoading(true);
     setAnalysisError(null);
     try {
-      const data = await getAnalysis(tableId!, 100, ply, true);
+      const data = await getAnalysis(tableId!, 500, ply, true);
       setAnalysis(data);
       if (data.status === "running") {
         startPolling(ply);
