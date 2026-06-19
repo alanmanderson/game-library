@@ -1,6 +1,6 @@
 # Game Library Monorepo
 
-Monorepo of 7 web-based multiplayer games deployed to a single VM via Docker Compose with subdomain-per-game routing under `*.games.alanmanderson.com`.
+Monorepo of 8 web-based multiplayer games deployed to a single VM via Docker Compose with subdomain-per-game routing under `*.games.alanmanderson.com`.
 
 ## Repository Layout
 
@@ -11,6 +11,7 @@ apps/
   bughouse/          React + FastAPI + PostgreSQL      (bughouse.games.alanmanderson.com)
   forbidden-island/  React + Fastify (in-memory)       (fi.games.alanmanderson.com)
   lemonadestand/     React + .NET 8 + SQLite           (lemonade.games.alanmanderson.com)
+  sneaky-sabotage/   React + FastAPI + PostgreSQL      (sabotage.games.alanmanderson.com)
   spades/            Flask + SQLite                     (spades.games.alanmanderson.com)
   telestrations/     Vanilla TS + Express (in-memory)  (telestrations.games.alanmanderson.com)
 services/
@@ -28,7 +29,7 @@ Each game has its own CLAUDE.md with game-specific architecture, commands, and c
 
 | Category | Games | Backend | Frontend | Database |
 |----------|-------|---------|----------|----------|
-| FastAPI | ai-pinochle, backgammon, bughouse | Python 3.12, FastAPI, SQLAlchemy 2 (async), Alembic | React + TypeScript + Vite | PostgreSQL 16 (asyncpg) |
+| FastAPI | ai-pinochle, backgammon, bughouse, sneaky-sabotage | Python 3.12, FastAPI, SQLAlchemy 2 (async), Alembic | React + TypeScript + Vite | PostgreSQL 16 (asyncpg) |
 | Fastify | forbidden-island | Node 20, Fastify, TypeScript | React + Vite | None (in-memory) |
 | .NET | lemonadestand | C# .NET 8 Web API (3-tier) | React 19 + Vite + Tailwind + Zustand | SQLite |
 | Flask | spades | Python 3.12, Flask, SQLAlchemy (sync) | Server-rendered | SQLite |
@@ -44,6 +45,7 @@ Internet → Caddy (ports 80/443, auto-HTTPS via Let's Encrypt)
              ├── fi.games.*         → forbidden-island:3000
              ├── lemonade.games.*   → lemonadestand:5000
              ├── spades.games.*     → spades:5000
+             ├── sabotage.games.*    → sneaky-sabotage:8000
              └── telestrations.games.* → telestrations:8080
 
 PostgreSQL 16 (internal only, shared by ai-pinochle, backgammon, bughouse)
@@ -188,9 +190,12 @@ COPY backend/ ./backend/
 COPY --from=frontend-build /build/dist ./frontend/dist
 RUN adduser --disabled-password --gecos "" appuser && chown -R appuser:appuser /app
 USER appuser
+ENV PYTHONPATH=/app/backend
 EXPOSE 8000
 CMD ["sh", "-c", "cd /app/backend && alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
 ```
+
+**Important:** The `ENV PYTHONPATH=/app/backend` line is required so that Alembic can find the `app` module when running migrations at container start.
 
 For Node.js games, follow the telestrations Dockerfile pattern (build client, compile server TypeScript, run with `node`).
 
@@ -256,14 +261,55 @@ Edit `apps/landing/index.html`:
 1. Add an entry to the `games` array with: `name`, `genre`, `desc`, `url` (`https://<subdomain>.games.alanmanderson.com`), `players`, `duration`, `bot` (boolean), `color` (two-color gradient array), `icon` (key into the icons object).
 2. Add an SVG icon to the `icons` object. Use a 64x64 viewBox with white fills/strokes to match existing icons.
 
-#### 6. Add DNS record
+**Also update `apps/landing/__tests__/landing.test.ts`:**
+1. Update the game card count assertions (search for the previous count and increment by 1 — there are two: one for `.card` and one for `.card-icon`).
+2. Add the new game to the `expectedGames` array with: `name`, `url`, `players`, `duration`, `hasBot`.
 
-Add a CNAME record in Squarespace DNS for `<subdomain>.games.alanmanderson.com` pointing to the VM's IP/hostname. Note: Squarespace does not support wildcard DNS records, so each subdomain must be added individually.
+The deploy workflow runs these landing tests before deploying, so failing to update them will block deployment.
 
-#### 7. Update the root CLAUDE.md
+#### 6. Update the deploy workflow
+
+**`.github/workflows/deploy.yml`** — The deploy workflow uses per-game change detection. Four places must be updated:
+
+1. **`detect-changes` job outputs** — Add: `<game-name>: ${{ steps.changes.outputs.<game-name> }}`
+2. **`detect-changes` paths-filter** — Add a filter block:
+   ```yaml
+   <game-name>:
+     - 'apps/<game-name>/**'
+   ```
+3. **`deploy` job `if` condition** — Add: `needs.detect-changes.outputs.<game-name> == 'true' ||`
+4. **`Determine which services to rebuild` step** — Add: `[ "${{ needs.detect-changes.outputs.<game-name> }}" == "true" ] && SERVICES="$SERVICES <game-name>"`
+5. **Compose-diff service lists** (two places in the same step) — Add `<game-name>` to both the `for svc in ...` loop and the fallback `COMPOSE_SERVICES="..."` string.
+
+#### 7. Add DNS record
+
+Add an **A record** in Squarespace DNS for `<subdomain>.games` pointing to the VM's IP address (`20.83.116.73`). Squarespace does not support wildcard DNS records, so each subdomain must be added individually. Use an A record (not CNAME) to match the other games.
+
+#### 8. Update the root CLAUDE.md
 
 Update the Repository Layout, Tech Stacks table, and Deployment Architecture diagram in this file to include the new game.
 
+#### 9. Post-merge: production database and env setup
+
+The `init-databases.sql` file only runs on first PostgreSQL initialization, so for an existing deployment the database must be created manually. After merging:
+
+1. **Create the database** on the VM:
+   ```bash
+   ssh azureuser@backgammon.games.alanmanderson.com \
+     "cd /opt/gamelibrary/infra && docker compose exec -T postgres psql -U postgres -c 'CREATE DATABASE <game_name>;'"
+   ```
+2. **Add the database URL** to the production `.env`:
+   ```bash
+   ssh azureuser@backgammon.games.alanmanderson.com \
+     "echo '<GAME>_DATABASE_URL=postgresql+asyncpg://postgres:<password>@postgres:5432/<game_name>' >> /opt/gamelibrary/infra/.env"
+   ```
+   (Use the same password as the other `*_DATABASE_URL` entries in `.env`.)
+3. **Restart Caddy** after the first deploy so it provisions the Let's Encrypt TLS certificate for the new subdomain:
+   ```bash
+   ssh azureuser@backgammon.games.alanmanderson.com \
+     "cd /opt/gamelibrary/infra && docker compose restart caddy"
+   ```
+   A `caddy reload` is not sufficient for a brand-new domain — Caddy needs a full restart to trigger certificate provisioning.
 ### Internal port conventions
 
 Docker networking isolates containers, so port collisions between games are not possible. By convention:

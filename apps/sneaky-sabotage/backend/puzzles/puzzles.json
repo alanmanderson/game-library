@@ -1,0 +1,640 @@
+{
+  "puzzles": [
+    {
+      "id": 1,
+      "type": "caesar_cipher",
+      "title": "Buried Secrets",
+      "instructions": "Each letter has been shifted forward by 5 positions in the alphabet. A becomes F, B becomes G, etc. Decode the message to find the hidden word.",
+      "content": {
+        "text": "YMJ YWJFXZWJ NX GZWNJI",
+        "shift": 5
+      },
+      "answer": "TREASURE",
+      "hint": "Something valuable you might dig up",
+      "difficulty": 1
+    },
+    {
+      "id": 2,
+      "type": "caesar_cipher",
+      "title": "Late Night Meeting",
+      "instructions": "Each letter has been shifted forward by 7 positions in the alphabet. A becomes H, B becomes I, etc. Decode the message.",
+      "content": {
+        "text": "TPKUPNOA YLUKLGCVBZ",
+        "shift": 7
+      },
+      "answer": "MIDNIGHT",
+      "hint": "A specific time on the clock",
+      "difficulty": 2
+    },
+    {
+      "id": 3,
+      "type": "caesar_cipher",
+      "title": "Morning Meal",
+      "instructions": "Each letter has been shifted forward by 3 positions in the alphabet. A becomes D, B becomes E, etc. Decode the message.",
+      "content": {
+        "text": "VFUDPEOHG HJJV IRU EUHDNIDVW",
+        "shift": 3
+      },
+      "answer": "BREAKFAST",
+      "hint": "The first meal of the day",
+      "difficulty": 1
+    },
+    {
+      "id": 4,
+      "type": "caesar_cipher",
+      "title": "Fire Mountain",
+      "instructions": "Each letter has been shifted forward by 13 positions in the alphabet (ROT13). A becomes N, B becomes O, etc. Decode the message.",
+      "content": {
+        "text": "GUR IBYPNAB REHCGF NG QNJA",
+        "shift": 13
+      },
+      "answer": "VOLCANO",
+      "hint": "A geological formation that can erupt",
+      "difficulty": 2
+    },
+    {
+      "id": 5,
+      "type": "number_code",
+      "title": "Phantom Signal",
+      "instructions": "Each number represents a letter position in the alphabet (A=1, B=2, C=3... Z=26). Convert the numbers to letters to reveal the secret word.",
+      "content": {
+        "numbers": [
+          16,
+          8,
+          1,
+          14,
+          20,
+          15,
+          13
+        ]
+      },
+      "answer": "PHANTOM",
+      "hint": "A ghostly presence",
+      "difficulty": 1
+    },
+    {
+      "id": 6,
+      "type": "number_code",
+      "title": "Celestial Event",
+      "instructions": "Each number represents a letter position in the alphabet (A=1, B=2, C=3... Z=26). Convert the numbers to letters to reveal the secret word.",
+      "content": {
+        "numbers": [
+          5,
+          3,
+          12,
+          9,
+          16,
+          19,
+          5
+        ]
+      },
+      "answer": "ECLIPSE",
+      "hint": "The moon blocks the sun",
+      "difficulty": 1
+    },
+    {
+      "id": 7,
+      "type": "number_code",
+      "title": "Rumble in the Sky",
+      "instructions": "Each number represents a letter position in the alphabet (A=1, B=2, C=3... Z=26). Convert the numbers to letters to reveal the secret word.",
+      "content": {
+        "numbers": [
+          20,
+          8,
+          21,
+          14,
+          4,
+          5,
+          18
+        ]
+      },
+      "answer": "THUNDER",
+      "hint": "Sound that follows lightning",
+      "difficulty": 1
+    },
+    {
+      "id": 8,
+      "type": "number_code",
+      "title": "Cosmic Voyage",
+      "instructions": "Each number represents a letter position in the alphabet (A=1, B=2, C=3... Z=26). Convert the numbers to letters to reveal the secret word.",
+      "content": {
+        "numbers": [
+          7,
+          1,
+          12,
+          1,
+          24,
+          25
+        ]
+      },
+      "answer": "GALAXY",
+      "hint": "The Milky Way is one",
+      "difficulty": 1
+    },
+    {
+      "id": 9,
+      "type": "anagram",
+      "title": "Ancient Worship",
+      "instructions": "Rearrange these scrambled letters to form a single common English word.",
+      "content": {
+        "letters": "EETLMP"
+      },
+      "answer": "TEMPLE",
+      "hint": "A place of worship",
+      "difficulty": 2
+    },
+    {
+      "id": 10,
+      "type": "anagram",
+      "title": "Medieval Fortress",
+      "instructions": "Rearrange these scrambled letters to form a single common English word.",
+      "content": {
+        "letters": "ACLEST"
+      },
+      "answer": "CASTLE",
+      "hint": "Royalty lives here",
+      "difficulty": 1
+    },
+    {
+      "id": 11,
+      "type": "anagram",
+      "title": "Pattern Play",
+      "instructions": "Rearrange these scrambled letters to form a single common English word.",
+      "content": {
+        "letters": "PRIETS"
+      },
+      "answer": "STRIPE",
+      "hint": "A pattern on a tiger or a flag",
+      "difficulty": 2
+    },
+    {
+      "id": 12,
+      "type": "anagram",
+      "title": "Fruity Jumble",
+      "instructions": "Rearrange these scrambled letters to form a single common English word.",
+      "content": {
+        "letters": "AEGNOR"
+      },
+      "answer": "ORANGE",
+      "hint": "Both a color and a fruit",
+      "difficulty": 1
+    },
+    {
+      "id": 13,
+      "type": "reverse_message",
+      "title": "Garden Bloom",
+      "instructions": "Read this text backwards (right to left) to reveal the hidden word.",
+      "content": {
+        "text": "REWOLFNUS"
+      },
+      "answer": "SUNFLOWER",
+      "hint": "A tall yellow flower that faces the sun",
+      "difficulty": 1
+    },
+    {
+      "id": 14,
+      "type": "reverse_message",
+      "title": "Mountain Danger",
+      "instructions": "Read this text backwards (right to left) to reveal the hidden word.",
+      "content": {
+        "text": "EHCNALAVA"
+      },
+      "answer": "AVALANCHE",
+      "hint": "A sudden rush of snow down a mountain",
+      "difficulty": 1
+    },
+    {
+      "id": 15,
+      "type": "reverse_message",
+      "title": "Under the Sea",
+      "instructions": "Read this text backwards (right to left) to reveal the hidden word.",
+      "content": {
+        "text": "ENIRAMBUS"
+      },
+      "answer": "SUBMARINE",
+      "hint": "Travels underwater",
+      "difficulty": 2
+    },
+    {
+      "id": 16,
+      "type": "reverse_message",
+      "title": "Twisted Paths",
+      "instructions": "Read this text backwards (right to left) to reveal the hidden word.",
+      "content": {
+        "text": "HTNIRYBAL"
+      },
+      "answer": "LABYRINTH",
+      "hint": "A complex maze",
+      "difficulty": 2
+    },
+    {
+      "id": 17,
+      "type": "first_letters",
+      "title": "Yo Ho Ho",
+      "instructions": "Take the first letter of each word in the sentence below. The first letters spell the secret answer.",
+      "content": {
+        "sentences": [
+          "Penguins In Rainy Autumn Typically Eat Sardines"
+        ]
+      },
+      "answer": "PIRATES",
+      "hint": "They sail the seven seas looking for treasure",
+      "difficulty": 1
+    },
+    {
+      "id": 18,
+      "type": "first_letters",
+      "title": "Wax and Wick",
+      "instructions": "Take the first letter of each word in the sentence below. The first letters spell the secret answer.",
+      "content": {
+        "sentences": [
+          "Cats Always Need Dance Lessons Eventually"
+        ]
+      },
+      "answer": "CANDLE",
+      "hint": "You light it and it melts",
+      "difficulty": 1
+    },
+    {
+      "id": 19,
+      "type": "first_letters",
+      "title": "Fire Breather",
+      "instructions": "Take the first letter of each word in the sentence below. The first letters spell the secret answer.",
+      "content": {
+        "sentences": [
+          "Dangerous Reptiles Always Guard Old Nests"
+        ]
+      },
+      "answer": "DRAGON",
+      "hint": "A mythical winged creature",
+      "difficulty": 2
+    },
+    {
+      "id": 20,
+      "type": "first_letters",
+      "title": "Exhibits and Artifacts",
+      "instructions": "Take the first letter of each word in the sentence below. The first letters spell the secret answer.",
+      "content": {
+        "sentences": [
+          "Many Unusual Specimens Eagerly Unveiled Monthly"
+        ]
+      },
+      "answer": "MUSEUM",
+      "hint": "A building full of art and history",
+      "difficulty": 2
+    },
+    {
+      "id": 21,
+      "type": "keyboard_shift",
+      "title": "Mechanical Friend",
+      "instructions": "Each letter has been shifted 1 key to the right on a QWERTY keyboard. Shift each letter back (to the left) to decode the word.",
+      "content": {
+        "text": "TPNPY",
+        "direction": "right",
+        "positions": 1
+      },
+      "answer": "ROBOT",
+      "hint": "A machine that can move and work",
+      "difficulty": 2
+    },
+    {
+      "id": 22,
+      "type": "keyboard_shift",
+      "title": "Jungle Cat",
+      "instructions": "Each letter has been shifted 1 key to the right on a QWERTY keyboard. Shift each letter back (to the left) to decode the word.",
+      "content": {
+        "text": "YOHRT",
+        "direction": "right",
+        "positions": 1
+      },
+      "answer": "TIGER",
+      "hint": "A big striped cat",
+      "difficulty": 2
+    },
+    {
+      "id": 23,
+      "type": "keyboard_shift",
+      "title": "Blade of Legend",
+      "instructions": "Each letter has been shifted 1 key to the right on a QWERTY keyboard. Shift each letter back (to the left) to decode the word.",
+      "content": {
+        "text": "DEPTF",
+        "direction": "right",
+        "positions": 1
+      },
+      "answer": "SWORD",
+      "hint": "A medieval weapon with a long blade",
+      "difficulty": 3
+    },
+    {
+      "id": 24,
+      "type": "missing_vowels",
+      "title": "Sweet Factory",
+      "instructions": "The vowels (A, E, I, O, U) have been removed from this phrase. Figure out what it originally said.",
+      "content": {
+        "text": "CHCLT FCTRY"
+      },
+      "answer": "CHOCOLATE FACTORY",
+      "hint": "Willy Wonka runs one",
+      "difficulty": 2
+    },
+    {
+      "id": 25,
+      "type": "missing_vowels",
+      "title": "Arctic Glow",
+      "instructions": "The vowels (A, E, I, O, U) have been removed from this phrase. Figure out what it originally said.",
+      "content": {
+        "text": "NRTHRN LGHTS"
+      },
+      "answer": "NORTHERN LIGHTS",
+      "hint": "A colorful sky phenomenon near the poles",
+      "difficulty": 2
+    },
+    {
+      "id": 26,
+      "type": "missing_vowels",
+      "title": "Precious Circle",
+      "instructions": "The vowels (A, E, I, O, U) have been removed from this phrase. Figure out what it originally said.",
+      "content": {
+        "text": "DMND RNG"
+      },
+      "answer": "DIAMOND RING",
+      "hint": "Given during a proposal",
+      "difficulty": 1
+    },
+    {
+      "id": 27,
+      "type": "missing_vowels",
+      "title": "X Marks the Spot",
+      "instructions": "The vowels (A, E, I, O, U) have been removed from this phrase. Figure out what it originally said.",
+      "content": {
+        "text": "TRSR MP"
+      },
+      "answer": "TREASURE MAP",
+      "hint": "Leads you to buried gold",
+      "difficulty": 1
+    },
+    {
+      "id": 28,
+      "type": "morse_code",
+      "title": "Guiding Light",
+      "instructions": "Decode this Morse code message. Each letter is separated by a space, words by /. Reference: A=.- B=-... C=-.-. D=-.. E=. F=..-. G=--. H=.... I=.. J=.--- K=-.- L=.-.. M=-- N=-. O=--- P=.--. Q=--.- R=.-. S=... T=- U=..- V=...- W=.-- X=-..- Y=-.-- Z=--..",
+      "content": {
+        "code": "-... . .- -.-. --- -."
+      },
+      "answer": "BEACON",
+      "hint": "A light that guides ships",
+      "difficulty": 2
+    },
+    {
+      "id": 29,
+      "type": "morse_code",
+      "title": "Blast Off",
+      "instructions": "Decode this Morse code message. Each letter is separated by a space, words by /. Reference: A=.- B=-... C=-.-. D=-.. E=. F=..-. G=--. H=.... I=.. J=.--- K=-.- L=.-.. M=-- N=-. O=--- P=.--. Q=--.- R=.-. S=... T=- U=..- V=...- W=.-- X=-..- Y=-.-- Z=--..",
+      "content": {
+        "code": ".-. --- -.-. -.- . -"
+      },
+      "answer": "ROCKET",
+      "hint": "It launches into space",
+      "difficulty": 2
+    },
+    {
+      "id": 30,
+      "type": "morse_code",
+      "title": "Riddle of the Desert",
+      "instructions": "Decode this Morse code message. Each letter is separated by a space, words by /. Reference: A=.- B=-... C=-.-. D=-.. E=. F=..-. G=--. H=.... I=.. J=.--- K=-.- L=.-.. M=-- N=-. O=--- P=.--. Q=--.- R=.-. S=... T=- U=..- V=...- W=.-- X=-..- Y=-.-- Z=--..",
+      "content": {
+        "code": "... .--. .... .. -. -..-"
+      },
+      "answer": "SPHINX",
+      "hint": "A mythical creature that poses riddles in Egypt",
+      "difficulty": 3
+    },
+    {
+      "id": 31,
+      "type": "morse_code",
+      "title": "Steady Hold",
+      "instructions": "Decode this Morse code message. Each letter is separated by a space, words by /. Reference: A=.- B=-... C=-.-. D=-.. E=. F=..-. G=--. H=.... I=.. J=.--- K=-.- L=.-.. M=-- N=-. O=--- P=.--. Q=--.- R=.-. S=... T=- U=..- V=...- W=.-- X=-..- Y=-.-- Z=--..",
+      "content": {
+        "code": ".- -. -.-. .... --- .-."
+      },
+      "answer": "ANCHOR",
+      "hint": "Keeps a boat from drifting away",
+      "difficulty": 2
+    },
+    {
+      "id": 32,
+      "type": "letter_math",
+      "title": "Burning Bright",
+      "instructions": "Solve each math equation to get a number. Then convert each number to a letter (1=A, 2=B, 3=C... 26=Z). The letters spell the secret word.",
+      "content": {
+        "equations": [
+          "3 + 3",
+          "19 - 7",
+          "2 - 1",
+          "20 - 7",
+          "2 + 3"
+        ],
+        "key": "1=A, 2=B, 3=C, 4=D, 5=E, 6=F, 7=G, 8=H, 9=I, 10=J, 11=K, 12=L, 13=M, 14=N, 15=O, 16=P, 17=Q, 18=R, 19=S, 20=T, 21=U, 22=V, 23=W, 24=X, 25=Y, 26=Z"
+      },
+      "answer": "FLAME",
+      "hint": "What you see on a candle",
+      "difficulty": 2
+    },
+    {
+      "id": 33,
+      "type": "letter_math",
+      "title": "Around and Around",
+      "instructions": "Solve each math equation to get a number. Then convert each number to a letter (1=A, 2=B, 3=C... 26=Z). The letters spell the secret word.",
+      "content": {
+        "equations": [
+          "22 - 7",
+          "25 - 7",
+          "6 - 4",
+          "4 + 5",
+          "27 - 7"
+        ],
+        "key": "1=A, 2=B, 3=C, 4=D, 5=E, 6=F, 7=G, 8=H, 9=I, 10=J, 11=K, 12=L, 13=M, 14=N, 15=O, 16=P, 17=Q, 18=R, 19=S, 20=T, 21=U, 22=V, 23=W, 24=X, 25=Y, 26=Z"
+      },
+      "answer": "ORBIT",
+      "hint": "The path a planet follows around a star",
+      "difficulty": 2
+    },
+    {
+      "id": 34,
+      "type": "letter_math",
+      "title": "Royal Headwear",
+      "instructions": "Solve each math equation to get a number. Then convert each number to a letter (1=A, 2=B, 3=C... 26=Z). The letters spell the secret word.",
+      "content": {
+        "equations": [
+          "9 - 6",
+          "25 - 7",
+          "22 - 7",
+          "20 + 3",
+          "21 - 7"
+        ],
+        "key": "1=A, 2=B, 3=C, 4=D, 5=E, 6=F, 7=G, 8=H, 9=I, 10=J, 11=K, 12=L, 13=M, 14=N, 15=O, 16=P, 17=Q, 18=R, 19=S, 20=T, 21=U, 22=V, 23=W, 24=X, 25=Y, 26=Z"
+      },
+      "answer": "CROWN",
+      "hint": "Worn on the head of a king or queen",
+      "difficulty": 3
+    },
+    {
+      "id": 35,
+      "type": "word_chain",
+      "title": "Shooting Star",
+      "instructions": "Solve each clue to find a common word. Then take the indicated letter from that word. The collected letters spell the secret answer.",
+      "content": {
+        "clues": [
+          "Place to sleep outdoors (take letter 1)",
+          "Something you read for fun (take letter 2)",
+          "Earth's natural satellite (take letter 1)",
+          "It has leaves and bark (take letter 3)",
+          "Twinkles in the night sky (take letter 2)"
+        ]
+      },
+      "answer": "COMET",
+      "hint": "A celestial object with a glowing tail",
+      "difficulty": 3
+    },
+    {
+      "id": 36,
+      "type": "word_chain",
+      "title": "Cosmic Wanderer",
+      "instructions": "Solve each clue to find a common word. Then take the indicated letter from that word. The collected letters spell the secret answer.",
+      "content": {
+        "clues": [
+          "A large vessel on water (take letter 4)",
+          "Color of a clear sky (take letter 2)",
+          "Falls from trees in autumn (take letter 3)",
+          "Falls from clouds (take letter 4)",
+          "Small round jewelry piece (take letter 2)",
+          "Floats on water (take letter 4)"
+        ]
+      },
+      "answer": "PLANET",
+      "hint": "Earth, Mars, and Jupiter are examples",
+      "difficulty": 3
+    },
+    {
+      "id": 37,
+      "type": "word_chain",
+      "title": "Wild Weather",
+      "instructions": "Solve each clue to find a common word. Then take the indicated letter from that word. The collected letters spell the secret answer.",
+      "content": {
+        "clues": [
+          "A writing surface with drawers (take letter 3)",
+          "Entrance to a fence or yard (take letter 3)",
+          "Part of the body below the ankle (take letter 2)",
+          "A large furry animal (take letter 4)",
+          "Gives off light at night (take letter 3)"
+        ]
+      },
+      "answer": "STORM",
+      "hint": "Thunder and lightning come with one",
+      "difficulty": 3
+    },
+    {
+      "id": 38,
+      "type": "caesar_cipher",
+      "title": "Secret Stronghold",
+      "instructions": "Each letter has been shifted forward by 8 positions in the alphabet. A becomes I, B becomes J, etc. Decode the message.",
+      "content": {
+        "text": "PQLLMV NWZBZMAA",
+        "shift": 8
+      },
+      "answer": "FORTRESS",
+      "hint": "A heavily defended building",
+      "difficulty": 3
+    },
+    {
+      "id": 39,
+      "type": "number_code",
+      "title": "Magnetic Pull",
+      "instructions": "Each number represents a letter position in the alphabet (A=1, B=2, C=3... Z=26). Convert the numbers to letters to reveal the secret word.",
+      "content": {
+        "numbers": [
+          13,
+          1,
+          7,
+          14,
+          5,
+          20
+        ]
+      },
+      "answer": "MAGNET",
+      "hint": "Sticks to your fridge",
+      "difficulty": 1
+    },
+    {
+      "id": 40,
+      "type": "anagram",
+      "title": "Sea Rogue",
+      "instructions": "Rearrange these scrambled letters to form a single common English word.",
+      "content": {
+        "letters": "EIPRTA"
+      },
+      "answer": "PIRATE",
+      "hint": "Yo ho ho and a bottle of rum",
+      "difficulty": 2
+    },
+    {
+      "id": 41,
+      "type": "first_letters",
+      "title": "Over the River",
+      "instructions": "Take the first letter of each word in the sentence below. The first letters spell the secret answer.",
+      "content": {
+        "sentences": [
+          "Bears Rarely Inhabit Dense Green Enclosures"
+        ]
+      },
+      "answer": "BRIDGE",
+      "hint": "Connects two sides over water",
+      "difficulty": 2
+    },
+    {
+      "id": 42,
+      "type": "missing_vowels",
+      "title": "Hidden Corridor",
+      "instructions": "The vowels (A, E, I, O, U) have been removed from this phrase. Figure out what it originally said.",
+      "content": {
+        "text": "SCRT PSSG"
+      },
+      "answer": "SECRET PASSAGE",
+      "hint": "A hidden way through a wall",
+      "difficulty": 3
+    },
+    {
+      "id": 43,
+      "type": "letter_math",
+      "title": "Sparkling Stones",
+      "instructions": "Solve each math equation to get a number. Then convert each number to a letter (1=A, 2=B, 3=C... 26=Z). The letters spell the secret word.",
+      "content": {
+        "equations": [
+          "5 + 5",
+          "2 + 3",
+          "20 + 3",
+          "2 + 3",
+          "19 - 7"
+        ],
+        "key": "1=A, 2=B, 3=C, 4=D, 5=E, 6=F, 7=G, 8=H, 9=I, 10=J, 11=K, 12=L, 13=M, 14=N, 15=O, 16=P, 17=Q, 18=R, 19=S, 20=T, 21=U, 22=V, 23=W, 24=X, 25=Y, 26=Z"
+      },
+      "answer": "JEWEL",
+      "hint": "A precious gemstone",
+      "difficulty": 3
+    },
+    {
+      "id": 44,
+      "type": "keyboard_shift",
+      "title": "Tall Structure",
+      "instructions": "Each letter has been shifted 1 key to the right on a QWERTY keyboard. Shift each letter back (to the left) to decode the word.",
+      "content": {
+        "text": "YPERT",
+        "direction": "right",
+        "positions": 1
+      },
+      "answer": "TOWER",
+      "hint": "Rapunzel was locked in one",
+      "difficulty": 3
+    }
+  ]
+}

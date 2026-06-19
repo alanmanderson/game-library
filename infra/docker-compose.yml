@@ -23,6 +23,7 @@ services:
       - lemonadestand
       - spades
       - telestrations
+      - sneaky-sabotage
       - logservice
 
   postgres:
@@ -180,6 +181,21 @@ services:
       PORT: "8080"
       LOG_SERVICE_URL: http://logservice:3100/api/ingest
       LOG_SERVICE_API_KEY: ${LOG_SERVICE_API_KEY}
+    logging: *default-logging
+    restart: unless-stopped
+
+  sneaky-sabotage:
+    build:
+      context: ../apps/sneaky-sabotage
+      args:
+        GIT_SHA: ${GIT_SHA}
+    environment:
+      DATABASE_URL: ${SNEAKY_SABOTAGE_DATABASE_URL}
+      ALLOWED_ORIGINS: https://sabotage.games.alanmanderson.com
+      LOG_SERVICE_URL: http://logservice:3100/api/ingest
+      LOG_SERVICE_API_KEY: ${LOG_SERVICE_API_KEY}
+    depends_on:
+      - postgres
     logging: *default-logging
     restart: unless-stopped
 

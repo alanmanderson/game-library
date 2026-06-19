@@ -1,0 +1,179 @@
+/* PuzzleRenderer */
+
+.puzzle-renderer {
+  width: 100%;
+}
+
+.puzzle-block {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.puzzle-cipher-text {
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.6;
+  word-break: break-word;
+  color: var(--text-primary);
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius);
+  font-family: "Courier New", Courier, monospace;
+}
+
+.puzzle-reverse {
+  direction: ltr;
+  unicode-bidi: bidi-override;
+}
+
+.puzzle-missing-vowels {
+  letter-spacing: 0.1em;
+}
+
+/* Tile grids (numbers, letters) */
+.puzzle-number-row,
+.puzzle-letter-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.puzzle-number-tile,
+.puzzle-letter-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 56px;
+  font-size: 1.5rem;
+  font-weight: 700;
+  background: var(--surface);
+  border: 2px solid var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+}
+
+.puzzle-letter-tile {
+  text-transform: uppercase;
+}
+
+/* Morse code */
+.puzzle-morse-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
+.puzzle-morse-letter {
+  font-size: 1.25rem;
+  font-weight: 600;
+  font-family: "Courier New", Courier, monospace;
+  padding: 6px 10px;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  letter-spacing: 0.15em;
+}
+
+/* Meta info (shift, direction) */
+.puzzle-meta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.puzzle-meta-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+}
+
+.puzzle-meta-value {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--accent);
+  padding: 4px 12px;
+  background: rgba(108, 92, 231, 0.15);
+  border-radius: var(--radius-sm);
+}
+
+/* Lists (sentences, equations, clues) */
+.puzzle-sentence-list,
+.puzzle-equation-list,
+.puzzle-clue-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0;
+}
+
+.puzzle-sentence-list {
+  counter-reset: sentence;
+}
+
+.puzzle-sentence {
+  counter-increment: sentence;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: var(--radius-sm);
+}
+
+.puzzle-sentence::before {
+  content: counter(sentence) ". ";
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.puzzle-first-letter {
+  font-weight: 800;
+  color: var(--accent);
+  font-size: 1.125em;
+}
+
+.puzzle-equation {
+  font-size: 1.125rem;
+  font-weight: 600;
+  font-family: "Courier New", Courier, monospace;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+}
+
+.puzzle-clue-list {
+  counter-reset: clue;
+}
+
+.puzzle-clue {
+  counter-increment: clue;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: var(--radius-sm);
+}
+
+.puzzle-clue::before {
+  content: counter(clue) ". ";
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.puzzle-unknown {
+  text-align: center;
+  color: var(--text-muted);
+  font-style: italic;
+}

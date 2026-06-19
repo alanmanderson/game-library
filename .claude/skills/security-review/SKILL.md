@@ -160,11 +160,13 @@ Output a structured report with the following format:
 
 ---
 
-### Step 6: Act on the verdict
+### Step 6: Record the verdict
 
-- **If FAIL**: List the critical issues clearly and explain exactly what needs to change. Do NOT proceed with PR creation. Tell the user what to fix.
-- **If PASS WITH WARNINGS**: Present the warnings and ask the user if they want to address them before the PR or proceed as-is.
-- **If PASS**: Confirm the changes are security-clean and proceed.
+Write a marker file so the pre-PR hook in `settings.json` can verify the review was completed for this exact code state. The hook compares the SHA in the marker against the current `HEAD` — if they don't match (new commits since the review), the hook blocks and requires a new review.
+
+- **If FAIL**: Remove any existing marker: `rm -f .claude/security-review-passed`. List the critical issues clearly and explain exactly what needs to change. Do NOT proceed with PR creation. Tell the user what to fix.
+- **If PASS WITH WARNINGS**: Write the marker: `git rev-parse HEAD > .claude/security-review-passed`. Present the warnings and ask the user if they want to address them before the PR or proceed as-is.
+- **If PASS**: Write the marker: `git rev-parse HEAD > .claude/security-review-passed`. Confirm the changes are security-clean and proceed.
 
 ## Notes
 

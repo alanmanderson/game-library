@@ -1,0 +1,128 @@
+/* RoleReveal */
+
+.role-reveal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: 24px;
+  transition: background 0.4s ease;
+}
+
+.role-reveal--agent {
+  background: linear-gradient(180deg, rgba(52, 152, 219, 0.15) 0%, var(--bg-primary) 60%);
+}
+
+.role-reveal--saboteur {
+  background: linear-gradient(180deg, rgba(231, 76, 60, 0.2) 0%, var(--bg-primary) 60%);
+}
+
+.role-reveal--insider {
+  background: linear-gradient(180deg, rgba(155, 89, 182, 0.15) 0%, var(--bg-primary) 60%);
+}
+
+.role-reveal-content {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32px;
+}
+
+.role-reveal-round {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.role-reveal-card {
+  width: 100%;
+  padding: 40px 24px;
+  text-align: center;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.role-reveal--agent .role-reveal-card {
+  border: 2px solid var(--agent);
+  box-shadow: 0 0 40px rgba(52, 152, 219, 0.15);
+}
+
+.role-reveal--saboteur .role-reveal-card {
+  border: 2px solid var(--saboteur);
+  box-shadow: 0 0 40px rgba(231, 76, 60, 0.2);
+}
+
+.role-reveal--insider .role-reveal-card {
+  border: 2px solid var(--insider);
+  box-shadow: 0 0 40px rgba(155, 89, 182, 0.15);
+}
+
+.role-reveal-label {
+  font-size: 3rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.role-reveal--agent .role-reveal-label {
+  color: var(--agent);
+}
+
+.role-reveal--saboteur .role-reveal-label {
+  color: var(--saboteur);
+}
+
+.role-reveal--insider .role-reveal-label {
+  color: var(--insider);
+}
+
+.role-reveal-description {
+  color: var(--text-secondary);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.role-reveal-hint {
+  margin-top: 12px;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius);
+}
+
+.role-reveal-hint-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--warning);
+}
+
+.role-reveal-hint-text {
+  margin-top: 6px;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.role-reveal-footer {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.role-reveal-ready-btn {
+  width: 100%;
+}
+
+.role-reveal-count {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
