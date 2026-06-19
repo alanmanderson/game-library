@@ -71,6 +71,7 @@ publish/
 
 # Claude Code (local config)
 .mcp.json
+.claude/security-review-passed
 
 # Vite
 .vite/
