@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 
 class CreateGameRequest(BaseModel):
     player_name: str = Field(..., min_length=1, max_length=50)
-    timer_seconds: int = Field(default=300)
+    timer_seconds: int = Field(default=300, ge=60, le=600)
     max_rounds: int = Field(default=4, ge=1, le=8)
 
 

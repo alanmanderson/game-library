@@ -1089,6 +1089,11 @@ function GameReplay() {
   // Dice values for the panel display.
   const diceValues = currentMove ? parseDiceRoll(currentMove.dice_roll) : null;
 
+  // Pre-move game state: used to position arrows at checker centers
+  const preMoveState: GameState | undefined = moveIndex === 0 ? undefined :
+    moveIndex === 1 ? replayData.initial_state :
+    (replayData.moves[moveIndex - 2]?.game_state_after ?? replayData.initial_state);
+
   return (
     <div className={`replay-page${embed ? " replay-page--embed" : ""}`}>
       {/* Header (hidden in embed mode) */}
@@ -1296,6 +1301,8 @@ function GameReplay() {
               bestMoveArrows={displayBestMoveArrows}
               arrowsMoverColor={movedByColor as "white" | "black"}
               labelPerspective={currentMove ? (movedByColor as "white" | "black") : viewColor}
+              moveQuality={currentAnalysis?.quality}
+              arrowGameState={preMoveState}
             />
             {replayDice && (
               <div className="replay-dice-overlay">
