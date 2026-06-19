@@ -8,6 +8,10 @@ export interface AnimatingMove {
   from_point: number;
   to_point: number;
   color: Color;
+  /** Count at source point before the move. Present only for the local player's own move (gameState not yet updated). */
+  src_count?: number;
+  /** Count at destination point before the move. Present only for the local player's own move (gameState not yet updated). */
+  dst_count?: number;
 }
 
 interface BoardProps {
@@ -99,7 +103,7 @@ function Board({
     if (animatingMove) {
       animKeyRef.current += 1;
       setAnimPhase('start');
-      // Double-rAF to ensure the 'start' position renders before transitioning
+      // Double-rAF ensures the 'start' position is painted before the transition begins.
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           setAnimPhase('end');
@@ -359,11 +363,31 @@ function Board({
     const color: Color = value > 0 ? "white" : "black";
     let count = Math.abs(value);
 
-    // During animation, hide the top checker at the destination
-    // (the animation overlay visually represents it sliding into place)
+    // For the local player's own move (src_count set): gameState hasn't been updated yet,
+    // so we must hide the moved checker from the source manually.
+    if (animatingMove?.src_count !== undefined && animPhase !== 'idle' && point === animatingMove.from_point && point >= 1 && point <= 24) {
+      if (count === animatingMove.src_count) {
+        count = Math.max(0, count - 1);
+        if (count === 0) return null;
+      }
+    }
+
+    // During animation, hide the top checker at the destination so the overlay
+    // (representing the checker in flight) is the only one at that position.
     if (animatingMove && animPhase !== 'idle' && point === animatingMove.to_point && point >= 1 && point <= 24) {
-      count = Math.max(0, count - 1);
-      if (count === 0) return null;
+      if (animatingMove.dst_count !== undefined) {
+        // User's own move: only hide once the server's game_state has arrived
+        // (count increased above the pre-move snapshot). Before the response,
+        // the overlay is already positioned above the untouched destination stack.
+        if (count > animatingMove.dst_count) {
+          count = Math.max(0, count - 1);
+          if (count === 0) return null;
+        }
+      } else {
+        // Opponent's move: game_state already reflects the move, always hide 1.
+        count = Math.max(0, count - 1);
+        if (count === 0) return null;
+      }
     }
 
     const visibleCount = Math.min(count, MAX_VISIBLE_CHECKERS);
@@ -574,9 +598,26 @@ function Board({
       if (!pos) return { cx: 0, cy: 0 };
       const cx = columnX(pos.col);
       const count = Math.abs(gameState.points[point]);
-      // Source: checker was at the top of the old (larger) stack
-      // Dest: checker is now the top of the new stack
-      const stackIndex = isSource ? count : Math.max(0, count - 1);
+
+      let stackIndex: number;
+      if (isSource) {
+        if (animatingMove?.src_count !== undefined) {
+          // User's own move: gameState not yet updated; top checker is at src_count - 1.
+          stackIndex = animatingMove.src_count - 1;
+        } else {
+          // Opponent's move: gameState already decremented; top was at count.
+          stackIndex = count;
+        }
+      } else {
+        if (animatingMove?.dst_count !== undefined) {
+          // User's own move: checker lands at dst_count (first empty slot above original stack).
+          stackIndex = animatingMove.dst_count;
+        } else {
+          // Opponent's move: gameState already incremented; top of new stack is at count - 1.
+          stackIndex = Math.max(0, count - 1);
+        }
+      }
+
       const cappedIndex = Math.min(stackIndex, MAX_VISIBLE_CHECKERS - 1);
       const cy = pos.isTop
         ? MARGIN + CHECKER_RADIUS + cappedIndex * (CHECKER_RADIUS * 2 + CHECKER_GAP)
@@ -1054,7 +1095,7 @@ function Board({
               className="checker-animating"
               style={{
                 transform: `translate(${pos.cx}px, ${pos.cy}px)`,
-                transition: animPhase === 'end' ? 'transform 0.35s ease-out' : 'none',
+                transition: animPhase === 'end' ? 'transform 0.18s ease-out' : 'none',
               }}
               filter="url(#glass-shadow)"
             >

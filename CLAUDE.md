@@ -310,7 +310,6 @@ The `init-databases.sql` file only runs on first PostgreSQL initialization, so f
      "cd /opt/gamelibrary/infra && docker compose restart caddy"
    ```
    A `caddy reload` is not sufficient for a brand-new domain — Caddy needs a full restart to trigger certificate provisioning.
-
 ### Internal port conventions
 
 Docker networking isolates containers, so port collisions between games are not possible. By convention:
