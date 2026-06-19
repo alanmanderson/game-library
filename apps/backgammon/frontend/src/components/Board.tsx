@@ -38,6 +38,10 @@ interface BoardProps {
   boardTheme?: string;
   /** Checker style ID (e.g. "classic", "marble"). Defaults to "classic". */
   checkerStyle?: string;
+  /** Quality of the actual move being shown (for arrow coloring). */
+  moveQuality?: string;
+  /** Pre-move game state (used to compute arrow positions at checker centers). */
+  arrowGameState?: GameState;
 }
 
 // ----- Layout constants -----
@@ -89,9 +93,27 @@ function Board({
   labelPerspective,
   boardTheme,
   checkerStyle,
+  moveQuality,
+  arrowGameState,
 }: BoardProps) {
   const themeId = resolveBoardTheme(boardTheme);
   const checkerId = resolveCheckerStyle(checkerStyle);
+
+  const QUALITY_ARROW: Record<string, { color: string; marker: string }> = {
+    best:       { color: "#2ecc71", marker: "arrow-q-best" },
+    very_good:  { color: "#2ecc71", marker: "arrow-q-best" },
+    good:       { color: "#f1c40f", marker: "arrow-q-good" },
+    inaccuracy: { color: "#e8a500", marker: "arrow-q-doubtful" },
+    doubtful:   { color: "#e8a500", marker: "arrow-q-doubtful" },
+    mistake:    { color: "#e67e22", marker: "arrow-q-mistake" },
+    bad:        { color: "#e67e22", marker: "arrow-q-mistake" },
+    blunder:    { color: "#e74c3c", marker: "arrow-q-blunder" },
+    very_bad:   { color: "#e74c3c", marker: "arrow-q-blunder" },
+  };
+  const moveArrowStyle = moveQuality && QUALITY_ARROW[moveQuality]
+    ? QUALITY_ARROW[moveQuality]
+    : { color: "rgba(255, 184, 0, 0.9)", marker: "arrow-q-default" };
+
   // Hover state for ghost checker preview
   const [hoveredPoint, setHoveredPoint] = useState<number | null>(null);
 
@@ -744,7 +766,7 @@ function Board({
     );
   }
 
-  function arrowCoord(point: number | "bar" | "off"): { cx: number; cy: number } {
+  function arrowCoord(point: number | "bar" | "off", isSource: boolean): { cx: number; cy: number } {
     if (point === "bar") {
       // Bar position: the mover's bar checkers sit on their own side.
       const isBottom = arrowsMoverColor ? arrowsMoverColor === myColor : true;
@@ -764,6 +786,20 @@ function Board({
     const pos = pointPositions[point];
     if (!pos) return { cx: 0, cy: 0 };
     const cx = columnX(pos.col);
+
+    if (arrowGameState) {
+      const count = Math.abs(arrowGameState.points[point]);
+      // Source: the moved checker is the top one (index count-1)
+      // Destination: the new checker lands on top (index count)
+      const stackIndex = isSource ? Math.max(0, count - 1) : count;
+      const cappedIndex = Math.min(stackIndex, MAX_VISIBLE_CHECKERS - 1);
+      const cy = pos.isTop
+        ? MARGIN + CHECKER_RADIUS + cappedIndex * (CHECKER_RADIUS * 2 + CHECKER_GAP)
+        : BOARD_HEIGHT - MARGIN - CHECKER_RADIUS - cappedIndex * (CHECKER_RADIUS * 2 + CHECKER_GAP);
+      return { cx, cy };
+    }
+
+    // Fallback: 40% into triangle from base
     const cy = pos.isTop
       ? MARGIN + TRIANGLE_HEIGHT * 0.4
       : BOARD_HEIGHT - MARGIN - TRIANGLE_HEIGHT * 0.4;
@@ -772,23 +808,26 @@ function Board({
 
   function renderArrows(arrows: ParsedMove[], color: string, markerId: string) {
     return arrows.map((m, i) => {
-      const start = arrowCoord(m.from);
-      const end = arrowCoord(m.to);
+      const start = arrowCoord(m.from, true);
+      const end = arrowCoord(m.to, false);
       const dx = end.cx - start.cx;
       const dy = end.cy - start.cy;
       const len = Math.sqrt(dx * dx + dy * dy);
       if (len < 1) return null;
-      const perpX = (-dy / len) * 25;
-      const perpY = (dx / len) * 25;
-      const midX = (start.cx + end.cx) / 2 + perpX;
-      const midY = (start.cy + end.cy) / 2 + perpY;
+      const nx = dx / len;
+      const ny = dy / len;
+      // Start from edge of source checker
+      const sx = start.cx + nx * CHECKER_RADIUS;
+      const sy = start.cy + ny * CHECKER_RADIUS;
       return (
-        <path
+        <line
           key={`arrow-${markerId}-${i}`}
-          d={`M ${start.cx} ${start.cy} Q ${midX} ${midY} ${end.cx} ${end.cy}`}
-          fill="none"
+          x1={sx}
+          y1={sy}
+          x2={end.cx}
+          y2={end.cy}
           stroke={color}
-          strokeWidth={3}
+          strokeWidth={5}
           strokeLinecap="round"
           markerEnd={`url(#${markerId})`}
           pointerEvents="none"
@@ -980,12 +1019,27 @@ function Board({
             <stop offset="95%" stopColor="#999999" stopOpacity={0.4} />
             <stop offset="100%" stopColor="#666666" stopOpacity={0.15} />
           </radialGradient>
-          {/* Arrowhead markers for move arrows */}
-          <marker id="arrow-yellow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth={6} markerHeight={6} orient="auto-start-reverse">
-            <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(255, 215, 0, 0.85)" />
+          {/* Quality-based arrow markers */}
+          <marker id="arrow-q-best" viewBox="0 0 10 10" refX="9" refY="5" markerWidth={7} markerHeight={7} orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#2ecc71" />
           </marker>
-          <marker id="arrow-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth={6} markerHeight={6} orient="auto-start-reverse">
-            <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(231, 76, 60, 0.7)" />
+          <marker id="arrow-q-good" viewBox="0 0 10 10" refX="9" refY="5" markerWidth={7} markerHeight={7} orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#f1c40f" />
+          </marker>
+          <marker id="arrow-q-doubtful" viewBox="0 0 10 10" refX="9" refY="5" markerWidth={7} markerHeight={7} orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#e8a500" />
+          </marker>
+          <marker id="arrow-q-mistake" viewBox="0 0 10 10" refX="9" refY="5" markerWidth={7} markerHeight={7} orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#e67e22" />
+          </marker>
+          <marker id="arrow-q-blunder" viewBox="0 0 10 10" refX="9" refY="5" markerWidth={7} markerHeight={7} orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#e74c3c" />
+          </marker>
+          <marker id="arrow-q-default" viewBox="0 0 10 10" refX="9" refY="5" markerWidth={7} markerHeight={7} orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(255,184,0,0.9)" />
+          </marker>
+          <marker id="arrow-q-bestmove" viewBox="0 0 10 10" refX="9" refY="5" markerWidth={7} markerHeight={7} orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#3498db" />
           </marker>
         </defs>
 
@@ -1073,8 +1127,8 @@ function Board({
         {renderBearOffCheckers()}
 
         {/* Move arrows (drawn over checkers so they're visible) */}
-        {bestMoveArrows && bestMoveArrows.length > 0 && renderArrows(bestMoveArrows, "rgba(231, 76, 60, 0.7)", "arrow-red")}
-        {moveArrows && moveArrows.length > 0 && renderArrows(moveArrows, "rgba(255, 215, 0, 0.85)", "arrow-yellow")}
+        {bestMoveArrows && bestMoveArrows.length > 0 && renderArrows(bestMoveArrows, "#3498db", "arrow-q-bestmove")}
+        {moveArrows && moveArrows.length > 0 && renderArrows(moveArrows, moveArrowStyle.color, moveArrowStyle.marker)}
 
         {/* Ghost checker preview */}
         {renderGhostChecker()}
@@ -1148,19 +1202,39 @@ function Board({
           onMouseLeave={bearOffIsDestination ? () => setHoveredPoint(null) : undefined}
         />
 
-        {/* "BAR" label */}
-        <text
-          x={layout.barX + BAR_WIDTH / 2}
-          y={BOARD_HEIGHT / 2}
-          textAnchor="middle"
-          fill="#888"
-          fontSize={10}
-          fontFamily="monospace"
-          transform={`rotate(-90, ${layout.barX + BAR_WIDTH / 2}, ${BOARD_HEIGHT / 2})`}
-          pointerEvents="none"
-        >
-          BAR
-        </text>
+        {/* Pip counts on bar */}
+        {(() => {
+          if (gameState.pip_white === undefined || gameState.pip_black === undefined) {
+            return (
+              <text
+                x={layout.barX + BAR_WIDTH / 2}
+                y={BOARD_HEIGHT / 2}
+                textAnchor="middle"
+                fill="#888"
+                fontSize={10}
+                fontFamily="monospace"
+                transform={`rotate(-90, ${layout.barX + BAR_WIDTH / 2}, ${BOARD_HEIGHT / 2})`}
+                pointerEvents="none"
+              >
+                BAR
+              </text>
+            );
+          }
+          const barCx = layout.barX + BAR_WIDTH / 2;
+          const whiteIsBottom = myColor !== "black";
+          const whitePipY = whiteIsBottom ? BOARD_HEIGHT - MARGIN - 14 : MARGIN + 14;
+          const blackPipY = whiteIsBottom ? MARGIN + 14 : BOARD_HEIGHT - MARGIN - 14;
+          return (
+            <>
+              <text x={barCx} y={whitePipY} textAnchor="middle" dominantBaseline="central" fill="#ccc" fontSize={12} fontWeight="bold" fontFamily="monospace" pointerEvents="none">
+                {gameState.pip_white}
+              </text>
+              <text x={barCx} y={blackPipY} textAnchor="middle" dominantBaseline="central" fill="#ccc" fontSize={12} fontWeight="bold" fontFamily="monospace" pointerEvents="none">
+                {gameState.pip_black}
+              </text>
+            </>
+          );
+        })()}
 
         {/* Doubling cube */}
         {renderDoublingCube()}

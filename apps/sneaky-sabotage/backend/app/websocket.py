@@ -315,7 +315,7 @@ async def _handle_propose_answer(
 ):
     """Player proposes an answer for team vote."""
     answer = data.get("answer", "").strip()
-    if not answer:
+    if not answer or len(answer) > 500:
         return
 
     game = await get_game_with_players(db, game_id)
