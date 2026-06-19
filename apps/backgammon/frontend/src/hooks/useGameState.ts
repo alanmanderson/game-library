@@ -140,7 +140,7 @@ export function useGameState(tableId: string | undefined): GameStateHook {
             if (move) {
               setAnimatingMove(move);
               if (animTimerRef.current) clearTimeout(animTimerRef.current);
-              animTimerRef.current = setTimeout(() => setAnimatingMove(null), 400);
+              animTimerRef.current = setTimeout(() => setAnimatingMove(null), 250);
             }
           }
           // Reset dice order on a fresh roll (all dice still remaining).
@@ -273,9 +273,16 @@ export function useGameState(tableId: string | undefined): GameStateHook {
   const makeMove = useCallback(
     (fromPoint: number, toPoint: number) => {
       if (myColor) {
-        setAnimatingMove({ from_point: fromPoint, to_point: toPoint, color: myColor });
+        const prevGS = prevGameStateRef.current;
+        setAnimatingMove({
+          from_point: fromPoint,
+          to_point: toPoint,
+          color: myColor,
+          src_count: prevGS && fromPoint >= 1 && fromPoint <= 24 ? Math.abs(prevGS.points[fromPoint]) : undefined,
+          dst_count: prevGS && toPoint >= 1 && toPoint <= 24 ? Math.abs(prevGS.points[toPoint]) : undefined,
+        });
         if (animTimerRef.current) clearTimeout(animTimerRef.current);
-        animTimerRef.current = setTimeout(() => setAnimatingMove(null), 400);
+        animTimerRef.current = setTimeout(() => setAnimatingMove(null), 250);
       }
       setMoveInFlight(true);
       sendMessage({ action: "make_move", from_point: fromPoint, to_point: toPoint });
