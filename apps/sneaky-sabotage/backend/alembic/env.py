@@ -1,9 +1,14 @@
 import asyncio
 import os
+import sys
 
 from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import create_async_engine
+
+# Ensure the backend `app` package is importable when alembic runs from the
+# backend directory (alembic is a console script, so cwd is not on sys.path).
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.database import Base
 from app.models import Game, Player, Round, PlayerRole, Vote  # noqa: F401
