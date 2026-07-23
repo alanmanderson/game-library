@@ -23,7 +23,7 @@ import type {
   ReplayData,
   ReplayMoveRecord,
 } from "../types/game";
-import { getAnalysis, getPositionDeepDive, getReplay, exportGame } from "../services/api";
+import { getAnalysis, getPositionDeepDive, getReplay, exportGame, retryMoveAnalysis } from "../services/api";
 import Board from "./Board";
 import Dice from "./Dice";
 import ReanalyzeModal from "./ReanalyzeModal";
@@ -344,6 +344,11 @@ function GameReplay() {
   const [playSpeed, setPlaySpeed] = useState(1500); // ms between moves
   const autoPlayRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Chart tab state
+  const [chartTab, setChartTab] = useState<"winProb" | "luck">("winProb");
+  // Hovered move number on charts (null = not hovering)
+  const [chartHover, setChartHover] = useState<number | null>(null);
+
   // Analysis panel state (always visible in replay)
   const [analysis, setAnalysis] = useState<AnalysisData | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
@@ -356,6 +361,10 @@ function GameReplay() {
   const [selectedCandidate, setSelectedCandidate] = useState<number | null>(null);
   /** gnubg evaluation depth: 0 (fast), 2 (standard), 3 (deep/slow). */
   const [analysisPly, setAnalysisPly] = useState<0 | 2 | 3>(2);
+
+  /** Per-move retry state: tracks loading and error for failed-analysis retries. */
+  const [retryingMoves, setRetryingMoves] = useState<Set<number>>(new Set());
+  const [retryErrors, setRetryErrors] = useState<Map<number, string>>(new Map());
 
   /** Color filter for stepping through moves: only step through white, black, or both. */
   type ColorFilter = "white" | "black" | "both";
@@ -574,7 +583,7 @@ function GameReplay() {
     pollIntervalRef.current = setInterval(async () => {
       if (!tableId) return;
       try {
-        const updated = await getAnalysis(tableId, 100, ply);
+        const updated = await getAnalysis(tableId, 500, ply);
         setAnalysis(updated);
         if (updated.status !== "running") {
           stopPolling();
@@ -594,7 +603,7 @@ function GameReplay() {
     setAnalysisError(null);
     stopPolling();
     try {
-      const data = await getAnalysis(tableId, 100, ply);
+      const data = await getAnalysis(tableId, 500, ply);
       setAnalysis(data);
       if (data.status === "running") {
         // Keep loading state and start polling every 60s
@@ -647,7 +656,7 @@ function GameReplay() {
     setAnalysisLoading(true);
     setAnalysisError(null);
     try {
-      const data = await getAnalysis(tableId!, 100, ply, true);
+      const data = await getAnalysis(tableId!, 500, ply, true);
       setAnalysis(data);
       if (data.status === "running") {
         startPolling(ply);
@@ -704,7 +713,7 @@ function GameReplay() {
    * "gnubg-sourced" if any move row declares it — mixed responses fall back
    * to the existing behaviour (ml_available banner only).
    */
-  const analysisSource = useMemo<"gnubg" | "ml" | "heuristic" | null>(() => {
+  const analysisSource = useMemo<"gnubg" | "ml" | "heuristic" | "unavailable" | null>(() => {
     if (!analysis) return null;
     for (const m of analysis.move_analyses) {
       if (m.source === "gnubg") return "gnubg";
@@ -790,6 +799,20 @@ function GameReplay() {
       });
   }, [analysis]);
 
+  // ── Cumulative luck series for chart ──────────────────────────────────
+  const cumulativeLuckSeries = useMemo<{ move: number; white: number; black: number }[]>(() => {
+    if (!luckData.length) return [];
+    const series: { move: number; white: number; black: number }[] = [];
+    let whiteCum = 0;
+    let blackCum = 0;
+    for (const l of luckData) {
+      if (l.player_color === "white") whiteCum += l.luck;
+      else blackCum += l.luck;
+      series.push({ move: l.move_number, white: whiteCum, black: blackCum });
+    }
+    return series;
+  }, [luckData]);
+
   // Orient the board to the logged-in player's perspective when they were
   // one of the two seats. Fall back to white for spectators/unauthed viewers.
   const storedPlayerId = useMemo(() => readStoredPlayerId(), []);
@@ -861,6 +884,27 @@ function GameReplay() {
     });
   }, []);
 
+  const handleRetryMoveAnalysis = useCallback(async (moveNumber: number) => {
+    if (!tableId || retryingMoves.has(moveNumber)) return;
+    setRetryingMoves((prev) => new Set(prev).add(moveNumber));
+    setRetryErrors((prev) => { const next = new Map(prev); next.delete(moveNumber); return next; });
+    try {
+      const updated = await retryMoveAnalysis(tableId, moveNumber);
+      setAnalysis((prev) => {
+        if (!prev) return prev;
+        const newAnalyses = prev.move_analyses.map((m) =>
+          m.move_number === moveNumber ? updated : m
+        );
+        return { ...prev, move_analyses: newAnalyses };
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Retry failed";
+      setRetryErrors((prev) => new Map(prev).set(moveNumber, msg));
+    } finally {
+      setRetryingMoves((prev) => { const next = new Set(prev); next.delete(moveNumber); return next; });
+    }
+  }, [tableId, retryingMoves]);
+
   const handleCopyShareLink = useCallback(async () => {
     if (!tableId) return;
     const shareUrl = `${window.location.origin}/replay/${tableId}`;
@@ -913,6 +957,46 @@ function GameReplay() {
       // silently fail — export is best-effort
     }
   }, [tableId]);
+
+  // Helper: convert mouse event on an SVG to the nearest move number in a series.
+  const chartMouseMove = useCallback(
+    (e: React.MouseEvent<SVGSVGElement>, moveNumbers: number[]) => {
+      if (!moveNumbers.length) return;
+      const svg = e.currentTarget;
+      const rect = svg.getBoundingClientRect();
+      const viewBox = svg.viewBox.baseVal;
+      const svgX = ((e.clientX - rect.left) / rect.width) * viewBox.width;
+
+      // Use the same padding as the chart
+      const W = viewBox.width;
+      const pad = { left: 40, right: 15 };
+      const cw = W - pad.left - pad.right;
+      const maxMove = moveNumbers[moveNumbers.length - 1];
+      // Invert: svgX = pad.left + (m / maxMove) * cw  →  m = (svgX - pad.left) / cw * maxMove
+      const rawMove = ((svgX - pad.left) / cw) * maxMove;
+
+      // Find nearest move number
+      let nearest = moveNumbers[0];
+      let bestDist = Math.abs(rawMove - nearest);
+      for (const mn of moveNumbers) {
+        const dist = Math.abs(rawMove - mn);
+        if (dist < bestDist) { bestDist = dist; nearest = mn; }
+      }
+      setChartHover(nearest);
+    },
+    [],
+  );
+
+  // Compute x-axis tick positions (evenly spaced move numbers)
+  const getXTicks = useCallback((maxMove: number): number[] => {
+    if (maxMove <= 10) return Array.from({ length: maxMove + 1 }, (_, i) => i).filter((v) => v > 0);
+    const targetCount = 6;
+    const step = Math.ceil(maxMove / targetCount);
+    const ticks: number[] = [];
+    for (let v = step; v < maxMove; v += step) ticks.push(v);
+    ticks.push(maxMove);
+    return ticks;
+  }, []);
 
   if (loading) {
     return (
@@ -1004,6 +1088,11 @@ function GameReplay() {
 
   // Dice values for the panel display.
   const diceValues = currentMove ? parseDiceRoll(currentMove.dice_roll) : null;
+
+  // Pre-move game state: used to position arrows at checker centers
+  const preMoveState: GameState | undefined = moveIndex === 0 ? undefined :
+    moveIndex === 1 ? replayData.initial_state :
+    (replayData.moves[moveIndex - 2]?.game_state_after ?? replayData.initial_state);
 
   return (
     <div className={`replay-page${embed ? " replay-page--embed" : ""}`}>
@@ -1212,6 +1301,8 @@ function GameReplay() {
               bestMoveArrows={displayBestMoveArrows}
               arrowsMoverColor={movedByColor as "white" | "black"}
               labelPerspective={currentMove ? (movedByColor as "white" | "black") : viewColor}
+              moveQuality={currentAnalysis?.quality}
+              arrowGameState={preMoveState}
             />
             {replayDice && (
               <div className="replay-dice-overlay">
@@ -1518,14 +1609,33 @@ function GameReplay() {
                 </div>
               )}
 
-              {/* Win probability chart */}
+              {/* Win probability / Luck chart with tabs */}
               {winProbSeries.length > 1 && (
                 <div className="replay-analysis-section">
-                  <h3 className="replay-analysis-heading">Win probability</h3>
+                  <div className="chart-tabs">
+                    <button
+                      type="button"
+                      className={`chart-tab${chartTab === "winProb" ? " chart-tab--active" : ""}`}
+                      onClick={() => setChartTab("winProb")}
+                    >
+                      Win probability
+                    </button>
+                    <button
+                      type="button"
+                      className={`chart-tab${chartTab === "luck" ? " chart-tab--active" : ""}`}
+                      onClick={() => setChartTab("luck")}
+                    >
+                      Luck over time
+                    </button>
+                  </div>
+
+                  {chartTab === "winProb" && (
                   <div className="wp-chart-wrap">
                     <svg
                       viewBox={`0 0 ${Math.max(300, winProbSeries.length * 6 + 60)} 160`}
                       preserveAspectRatio="xMidYMid meet"
+                      onMouseMove={(e) => chartMouseMove(e, winProbSeries.map((d) => d.move))}
+                      onMouseLeave={() => setChartHover(null)}
                     >
                       {(() => {
                         const W = Math.max(300, winProbSeries.length * 6 + 60);
@@ -1536,12 +1646,16 @@ function GameReplay() {
                         const maxMove = winProbSeries[winProbSeries.length - 1].move;
                         const x = (m: number) => pad.left + (m / maxMove) * cw;
                         const y = (p: number) => pad.top + (1 - p) * ch;
+                        const xTicks = getXTicks(maxMove);
 
                         // Build the line path
                         const linePts = winProbSeries.map((d) => `${x(d.move).toFixed(1)},${y(d.whiteWin).toFixed(1)}`);
                         const linePath = `M${linePts.join("L")}`;
                         // Fill areas: above 50% = white advantage, below = black
                         const fillPath = `M${x(winProbSeries[0].move).toFixed(1)},${y(0.5).toFixed(1)}L${linePts.join("L")}L${x(maxMove).toFixed(1)},${y(0.5).toFixed(1)}Z`;
+
+                        // Hover data point
+                        const hoverDatum = chartHover != null ? winProbSeries.find((d) => d.move === chartHover) : null;
 
                         return (
                           <g>
@@ -1570,19 +1684,18 @@ function GameReplay() {
                             <path d={fillPath} fill="rgba(100,100,120,0.08)" clipPath="url(#wp-below)" />
                             {/* Line */}
                             <path d={linePath} fill="none" stroke="var(--accent, #d4a843)" strokeWidth="1.5" strokeLinejoin="round" />
-                            {/* X-axis label */}
-                            <text x={pad.left + cw / 2} y={H - 3} textAnchor="middle"
-                              fill="rgba(255,255,255,0.35)" fontSize="9">
-                              Move
-                            </text>
-                            {/* Click targets */}
-                            {winProbSeries.map((d) => (
-                              <rect key={d.move} className="wp-chart-hit-area"
-                                x={x(d.move) - 3} y={pad.top} width={6} height={ch}
-                                fill="transparent"
-                                onClick={() => { stopAutoPlay(); goTo(d.move); }}
-                              />
+                            {/* X-axis tick labels */}
+                            {xTicks.map((t) => (
+                              <text key={`xt-${t}`} x={x(t)} y={H - 3} textAnchor="middle"
+                                fill="rgba(255,255,255,0.35)" fontSize="9">
+                                {t}
+                              </text>
                             ))}
+                            {/* Full-area hover target */}
+                            <rect x={pad.left} y={pad.top} width={cw} height={ch}
+                              fill="transparent" className="wp-chart-hit-area"
+                              onClick={() => { if (chartHover != null) { stopAutoPlay(); goTo(chartHover); } }}
+                            />
                             {/* Current position marker */}
                             {winProbSeries.find((d) => d.move === moveIndex) && (() => {
                               const d = winProbSeries.find((d) => d.move === moveIndex)!;
@@ -1595,6 +1708,22 @@ function GameReplay() {
                                 </>
                               );
                             })()}
+                            {/* Hover crosshair + tooltip */}
+                            {hoverDatum && hoverDatum.move !== moveIndex && (
+                              <g className="wp-chart-hover-group" pointerEvents="none">
+                                <line x1={x(hoverDatum.move)} x2={x(hoverDatum.move)} y1={pad.top} y2={pad.top + ch}
+                                  stroke="rgba(255,255,255,0.3)" strokeWidth="1" strokeDasharray="3 2" />
+                                <circle cx={x(hoverDatum.move)} cy={y(hoverDatum.whiteWin)} r="3"
+                                  fill="rgba(255,255,255,0.6)" stroke="#1a1a2e" strokeWidth="1" />
+                                <rect x={x(hoverDatum.move) - 28} y={y(hoverDatum.whiteWin) - 20}
+                                  width="56" height="16" rx="3"
+                                  fill="rgba(20,20,40,0.85)" stroke="rgba(255,255,255,0.15)" strokeWidth="0.5" />
+                                <text x={x(hoverDatum.move)} y={y(hoverDatum.whiteWin) - 9}
+                                  textAnchor="middle" fill="rgba(255,255,255,0.9)" fontSize="8.5" fontWeight="600">
+                                  {`Move ${hoverDatum.move}: ${(hoverDatum.whiteWin * 100).toFixed(0)}%`}
+                                </text>
+                              </g>
+                            )}
                             {/* Player labels */}
                             <text x={W - pad.right} y={pad.top + 10} textAnchor="end"
                               fill="rgba(255,255,255,0.4)" fontSize="8">White</text>
@@ -1605,6 +1734,116 @@ function GameReplay() {
                       })()}
                     </svg>
                   </div>
+                  )}
+
+                  {chartTab === "luck" && cumulativeLuckSeries.length > 1 && (
+                  <div className="wp-chart-wrap">
+                    <svg
+                      viewBox={`0 0 ${Math.max(300, cumulativeLuckSeries.length * 6 + 60)} 160`}
+                      preserveAspectRatio="xMidYMid meet"
+                      onMouseMove={(e) => chartMouseMove(e, cumulativeLuckSeries.map((d) => d.move))}
+                      onMouseLeave={() => setChartHover(null)}
+                    >
+                      {(() => {
+                        const W = Math.max(300, cumulativeLuckSeries.length * 6 + 60);
+                        const H = 160;
+                        const pad = { top: 15, right: 15, bottom: 25, left: 40 };
+                        const cw = W - pad.left - pad.right;
+                        const ch = H - pad.top - pad.bottom;
+                        const maxMove = cumulativeLuckSeries[cumulativeLuckSeries.length - 1].move;
+                        const x = (m: number) => pad.left + (m / maxMove) * cw;
+                        const xTicks = getXTicks(maxMove);
+
+                        // Determine y-axis range symmetrically around 0
+                        let maxAbs = 0;
+                        for (const d of cumulativeLuckSeries) {
+                          maxAbs = Math.max(maxAbs, Math.abs(d.white), Math.abs(d.black));
+                        }
+                        maxAbs = Math.max(maxAbs, 0.1); // minimum range
+                        const yRange = maxAbs * 1.15; // padding
+                        const y = (v: number) => pad.top + ((yRange - v) / (2 * yRange)) * ch;
+
+                        // Grid lines
+                        const gridValues = [-yRange, -yRange / 2, 0, yRange / 2, yRange];
+
+                        // Build line paths
+                        const whitePts = cumulativeLuckSeries.map((d) => `${x(d.move).toFixed(1)},${y(d.white).toFixed(1)}`);
+                        const blackPts = cumulativeLuckSeries.map((d) => `${x(d.move).toFixed(1)},${y(d.black).toFixed(1)}`);
+                        const whiteLinePath = `M${whitePts.join("L")}`;
+                        const blackLinePath = `M${blackPts.join("L")}`;
+
+                        // Hover data point
+                        const hoverDatum = chartHover != null ? cumulativeLuckSeries.find((d) => d.move === chartHover) : null;
+
+                        return (
+                          <g>
+                            {/* Grid lines */}
+                            {gridValues.map((v) => (
+                              <g key={v}>
+                                <line x1={pad.left} x2={W - pad.right} y1={y(v)} y2={y(v)}
+                                  stroke="rgba(255,255,255,0.08)" strokeWidth="1" />
+                                <text x={pad.left - 4} y={y(v) + 3.5} textAnchor="end"
+                                  fill="rgba(255,255,255,0.35)" fontSize="9">
+                                  {v === 0 ? "0" : (v > 0 ? "+" : "") + v.toFixed(2)}
+                                </text>
+                              </g>
+                            ))}
+                            {/* Zero line */}
+                            <line x1={pad.left} x2={W - pad.right} y1={y(0)} y2={y(0)}
+                              stroke="rgba(255,255,255,0.2)" strokeWidth="1" strokeDasharray="4 3" />
+                            {/* White player line */}
+                            <path d={whiteLinePath} fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.5" strokeLinejoin="round" />
+                            {/* Black player line */}
+                            <path d={blackLinePath} fill="none" stroke="rgba(60,60,60,0.9)" strokeWidth="1.5" strokeLinejoin="round" />
+                            {/* X-axis tick labels */}
+                            {xTicks.map((t) => (
+                              <text key={`xt-${t}`} x={x(t)} y={H - 3} textAnchor="middle"
+                                fill="rgba(255,255,255,0.35)" fontSize="9">
+                                {t}
+                              </text>
+                            ))}
+                            {/* Full-area hover target */}
+                            <rect x={pad.left} y={pad.top} width={cw} height={ch}
+                              fill="transparent" className="wp-chart-hit-area"
+                              onClick={() => { if (chartHover != null) { stopAutoPlay(); goTo(chartHover); } }}
+                            />
+                            {/* Current position marker */}
+                            {cumulativeLuckSeries.find((d) => d.move === moveIndex) && (() => {
+                              const d = cumulativeLuckSeries.find((d) => d.move === moveIndex)!;
+                              return (
+                                <line x1={x(d.move)} x2={x(d.move)} y1={pad.top} y2={pad.top + ch}
+                                  stroke="var(--accent, #d4a843)" strokeWidth="1" opacity="0.5" />
+                              );
+                            })()}
+                            {/* Hover crosshair + tooltip */}
+                            {hoverDatum && hoverDatum.move !== moveIndex && (
+                              <g className="wp-chart-hover-group" pointerEvents="none">
+                                <line x1={x(hoverDatum.move)} x2={x(hoverDatum.move)} y1={pad.top} y2={pad.top + ch}
+                                  stroke="rgba(255,255,255,0.3)" strokeWidth="1" strokeDasharray="3 2" />
+                                <circle cx={x(hoverDatum.move)} cy={y(hoverDatum.white)} r="3"
+                                  fill="rgba(255,255,255,0.8)" stroke="#1a1a2e" strokeWidth="1" />
+                                <circle cx={x(hoverDatum.move)} cy={y(hoverDatum.black)} r="3"
+                                  fill="rgba(100,100,100,0.8)" stroke="#1a1a2e" strokeWidth="1" />
+                                <rect x={x(hoverDatum.move) - 40} y={pad.top - 14}
+                                  width="80" height="14" rx="3"
+                                  fill="rgba(20,20,40,0.85)" stroke="rgba(255,255,255,0.15)" strokeWidth="0.5" />
+                                <text x={x(hoverDatum.move)} y={pad.top - 4}
+                                  textAnchor="middle" fill="rgba(255,255,255,0.9)" fontSize="8" fontWeight="600">
+                                  {`Move ${hoverDatum.move}: W ${hoverDatum.white >= 0 ? "+" : ""}${hoverDatum.white.toFixed(3)} B ${hoverDatum.black >= 0 ? "+" : ""}${hoverDatum.black.toFixed(3)}`}
+                                </text>
+                              </g>
+                            )}
+                            {/* Player labels */}
+                            <text x={W - pad.right} y={pad.top + 10} textAnchor="end"
+                              fill="rgba(255,255,255,0.7)" fontSize="8">White</text>
+                            <text x={W - pad.right} y={pad.top + ch - 4} textAnchor="end"
+                              fill="rgba(150,150,150,0.7)" fontSize="8">Black</text>
+                          </g>
+                        );
+                      })()}
+                    </svg>
+                  </div>
+                  )}
                 </div>
               )}
 
@@ -1677,7 +1916,8 @@ function GameReplay() {
                           </span>
                           {m.quality !== "best" && m.quality !== "very_good" && m.best_move_notation && (
                             <span className="replay-move-item-best">
-                              best: {notationToPlayerPerspective(m.best_move_notation, m.player_color)}
+                              <span className="replay-move-probs-label replay-move-probs-label--best">Best</span>
+                              {notationToPlayerPerspective(m.best_move_notation, m.player_color)}
                             </span>
                           )}
                         </button>
@@ -1722,6 +1962,21 @@ function GameReplay() {
                               >
                                 {isExpanded ? "\u25BE" : "\u25B8"} details
                               </button>
+                            )}
+                          </div>
+                        )}
+                        {m.source === "unavailable" && (
+                          <div className="replay-move-retry">
+                            <button
+                              type="button"
+                              className="replay-move-retry-btn"
+                              disabled={retryingMoves.has(m.move_number)}
+                              onClick={() => handleRetryMoveAnalysis(m.move_number)}
+                            >
+                              {retryingMoves.has(m.move_number) ? "Retrying\u2026" : "\u21BB Retry analysis"}
+                            </button>
+                            {retryErrors.has(m.move_number) && (
+                              <span className="replay-move-retry-error">{retryErrors.get(m.move_number)}</span>
                             )}
                           </div>
                         )}

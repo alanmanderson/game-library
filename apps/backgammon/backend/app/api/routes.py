@@ -1,5 +1,6 @@
 """REST API routes for the backgammon application."""
 
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -1230,6 +1231,152 @@ async def get_position_deep_dive(
     )
 
 
+@router.post(
+    "/tables/{table_id}/analysis/retry/{move_number}",
+    response_model=MoveAnalysis,
+)
+async def retry_move_analysis(
+    table_id: str,
+    move_number: int,
+    db: AsyncSession = Depends(get_db),
+    current_player: Player = Depends(get_current_player),
+) -> MoveAnalysis:
+    """Re-run gnubg analysis on a single move that previously failed.
+
+    Updates the cached analysis in-place if successful and returns the
+    new MoveAnalysis entry.  If gnubg fails again, returns 502 with the
+    failure reason so the UI can display it.
+    """
+    from app.game_engine import BackgammonEngine, Color
+    from app.services import gnubg_client
+    from app.services.analysis_service import (
+        _build_gnubg_analysis_dict,
+        _parse_notation_to_steps,
+    )
+
+    table = await db.get(Table, table_id)
+    if not table:
+        raise HTTPException(status_code=404, detail="Table not found")
+
+    participant_ids = {table.white_player_id, table.black_player_id}
+    if current_player.id not in participant_ids:
+        raise HTTPException(
+            status_code=403,
+            detail="Only players who participated in this game may view its analysis.",
+        )
+
+    # Load the target move and the one before it (for pre-move state).
+    records_result = await db.execute(
+        select(MoveRecord)
+        .where(MoveRecord.table_id == table_id)
+        .where(MoveRecord.move_number.in_([move_number - 1, move_number]))
+        .order_by(MoveRecord.move_number)
+    )
+    records = records_result.scalars().all()
+
+    target_record = None
+    prev_record = None
+    for r in records:
+        if r.move_number == move_number:
+            target_record = r
+        elif r.move_number == move_number - 1:
+            prev_record = r
+
+    if not target_record:
+        raise HTTPException(status_code=404, detail="Move not found")
+
+    player_color = (
+        "white" if target_record.player_id == table.white_player_id else "black"
+    )
+    turn = Color.WHITE if player_color == "white" else Color.BLACK
+
+    # Pre-move board state.
+    if prev_record and prev_record.game_state_after:
+        pre_move_state = prev_record.game_state_after
+    else:
+        pre_move_state = BackgammonEngine().get_state_snapshot()
+        if target_record.player_id == table.black_player_id:
+            pre_move_state["current_turn"] = "black"
+
+    # Parse dice.
+    dice_parts = target_record.dice_roll.split("-")
+    die1, die2 = int(dice_parts[0]), int(dice_parts[1])
+
+    # Parse chosen moves.
+    chosen_moves = _parse_notation_to_steps(
+        target_record.moves_notation or "", turn
+    )
+
+    # Build gnubg board payload.
+    board = gnubg_client._board_payload(
+        pre_move_state,
+        turn,
+        cube_value=pre_move_state.get("cube_value", 1),
+        cube_owner=(
+            Color.WHITE if pre_move_state.get("cube_owner") == "white"
+            else Color.BLACK if pre_move_state.get("cube_owner") == "black"
+            else None
+        ),
+    )
+
+    # Determine ply from cached analysis (default 2).
+    cached = await db.get(GameAnalysis, table_id)
+    ply = cached.ply if cached and cached.ply else 2
+
+    # Call gnubg.
+    try:
+        resp = await gnubg_client.analyze_move(
+            board, [die1, die2], chosen_moves, ply=ply,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"gnubg analysis failed: {exc}",
+        )
+
+    if resp is None:
+        raise HTTPException(
+            status_code=502,
+            detail="gnubg returned no result — the server may be overloaded or the position too complex.",
+        )
+
+    # Build nicknames map.
+    player_ids = {table.white_player_id, table.black_player_id}
+    players_result = await db.execute(
+        select(Player).where(Player.id.in_(player_ids))
+    )
+    nickname_map = {
+        p.id: p.nickname for p in players_result.scalars().all()
+    }
+
+    record_dict = {
+        "move_number": target_record.move_number,
+        "player_id": target_record.player_id,
+        "dice_roll": target_record.dice_roll,
+        "moves_notation": target_record.moves_notation,
+    }
+    analysis_dict = _build_gnubg_analysis_dict(
+        record_dict, turn, resp, None, nickname_map
+    )
+
+    # Update cached analysis in-place if present.
+    if cached and cached.move_analyses:
+        updated = list(cached.move_analyses)
+        replaced = False
+        for i, entry in enumerate(updated):
+            if entry.get("move_number") == move_number:
+                updated[i] = analysis_dict
+                replaced = True
+                break
+        if not replaced:
+            updated.append(analysis_dict)
+            updated.sort(key=lambda e: e.get("move_number", 0))
+        cached.move_analyses = updated
+        await db.commit()
+
+    return MoveAnalysis(**analysis_dict)
+
+
 def _notation_to_mat(notation: str, is_black: bool) -> str:
     """Convert internal move notation to gnubg-compatible MAT format.
 
@@ -1290,23 +1437,37 @@ def _notation_to_mat(notation: str, is_black: bool) -> str:
     return " ".join(_convert_segment(s) for s in segments)
 
 
+_WIN_REC_RE = re.compile(r"^(White|Black) wins (\d+) pts?", re.IGNORECASE)
+
+
+def _is_win_record(r: MoveRecord) -> bool:
+    return r.dice_roll == "" and bool(_WIN_REC_RE.match(r.moves_notation))
+
+
 @router.get("/tables/{table_id}/export")
 async def export_game(
     table_id: str, db: AsyncSession = Depends(get_db)
 ) -> PlainTextResponse:
-    """Export a completed game in gnubg-compatible .mat format.
+    """Export in gnubg-compatible Jellyfish .mat format.
 
-    Follows the Jellyfish/gnubg MAT format so the file can be imported
-    directly into GNU Backgammon for analysis::
+    A match of N games is emitted as N separate Game blocks, each with its own
+    header showing the score at the START of that game.  The game-result line
+    ("Wins N point(s)") is placed in the winner's column — left-indented for
+    the player in the left column, right-indented for the player in the right
+    column — which is what gnubg requires to identify the winner::
 
-         5 point match
+         7 point match
 
          Game 1
-         White : 0                          Black : 0
-          1) 31: 8/5 6/5                    42: 24/20 13/11
-          2) 64: 13/7 13/9                  53: 20/15 11/8
+         Bot : 0                        Alan Anderson : 0
+          1) 63: 13/10 24/18            36: 24/18 13/10
          ...
-              Wins 2 points
+              Wins 1 point
+
+         Game 2
+         Bot : 1                        Alan Anderson : 0
+         ...
+                                  Wins 2 points
     """
     table = await db.get(Table, table_id)
     if not table:
@@ -1329,81 +1490,113 @@ async def export_game(
 
     match_points = table.match_points or 0
 
-    # Calculate scores at the START of this game (before this game's
-    # points were added to the match totals).
-    white_score = table.white_match_score or 0
-    black_score = table.black_match_score or 0
-    if table.final_score and table.winner_id:
-        if table.winner_id == table.white_player_id:
-            white_score -= table.final_score
-        elif table.winner_id == table.black_player_id:
-            black_score -= table.final_score
+    # Split all move records into per-game groups.  Each group ends with a
+    # win-notation record (dice_roll="" + "White/Black wins N pt(s)...").
+    games: list[list[MoveRecord]] = []
+    current: list[MoveRecord] = []
+    for r in records:
+        current.append(r)
+        if _is_win_record(r):
+            games.append(current)
+            current = []
+    if current:
+        games.append(current)
+    if not games:
+        games = [[]]  # always emit at least one Game 1 block
 
-    # In gnubg MAT format, the left column is the player who moved first.
-    # Determine who moved first from the chronological move records.
-    black_moved_first = bool(records) and records[0].player_id == black_id
+    lines: list[str] = [f" {match_points} point match", ""]
 
-    # Separate records by player colour while preserving chronological order.
-    white_records = [r for r in records if r.player_id == white_id]
-    black_records = [r for r in records if r.player_id == black_id]
+    # Running match scores; reconstructed from win records so we don't depend
+    # on the table's final tallies for intermediate games.
+    white_score = 0
+    black_score = 0
 
-    if black_moved_first:
-        left_name, left_score = black_name, black_score
-        right_name, right_score = white_name, white_score
-        left_records, right_records = black_records, white_records
-        left_is_black, right_is_black = True, False
-    else:
-        left_name, left_score = white_name, white_score
-        right_name, right_score = black_name, black_score
-        left_records, right_records = white_records, black_records
-        left_is_black, right_is_black = False, True
+    for game_idx, game_records in enumerate(games):
+        # Peel off the trailing win record (if present) so it isn't treated as
+        # a regular move row.
+        win_record = None
+        move_records = game_records
+        if game_records and _is_win_record(game_records[-1]):
+            win_record = game_records[-1]
+            move_records = game_records[:-1]
 
-    lines: list[str] = [
-        f" {match_points} point match",
-        "",
-        " Game 1",
-    ]
+        # In gnubg MAT the left column is whoever moved first in *this* game.
+        game_black_first = bool(move_records) and move_records[0].player_id == black_id
 
-    # Score line: " Name : Score                      Name : Score"
-    left_header = f"{left_name} : {left_score}"
-    lines.append(f" {left_header:<31}{right_name} : {right_score}")
+        if game_black_first:
+            left_name, left_score_val = black_name, black_score
+            right_name, right_score_val = white_name, white_score
+            left_recs = [r for r in move_records if r.player_id == black_id]
+            right_recs = [r for r in move_records if r.player_id == white_id]
+            left_is_black = True
+        else:
+            left_name, left_score_val = white_name, white_score
+            right_name, right_score_val = black_name, black_score
+            left_recs = [r for r in move_records if r.player_id == white_id]
+            right_recs = [r for r in move_records if r.player_id == black_id]
+            left_is_black = False
 
-    max_turns = max(len(left_records), len(right_records)) if records else 0
-    for i in range(max_turns):
-        turn_num = i + 1
-        left_rec = left_records[i] if i < len(left_records) else None
-        right_rec = right_records[i] if i < len(right_records) else None
+        lines.append(f" Game {game_idx + 1}")
+        left_header = f"{left_name} : {left_score_val}"
+        lines.append(f" {left_header:<31}{right_name} : {right_score_val}")
 
-        left_part = ""
-        if left_rec:
-            notation = _notation_to_mat(left_rec.moves_notation, is_black=left_is_black)
-            if left_rec.dice_roll:
-                dice = left_rec.dice_roll.replace("-", "")
-                left_part = f"{dice}: {notation}" if notation else f"{dice}:"
+        max_turns = max(len(left_recs), len(right_recs)) if move_records else 0
+        for i in range(max_turns):
+            left_rec = left_recs[i] if i < len(left_recs) else None
+            right_rec = right_recs[i] if i < len(right_recs) else None
+
+            left_part = ""
+            if left_rec:
+                notation = _notation_to_mat(left_rec.moves_notation, is_black=left_is_black)
+                if left_rec.dice_roll:
+                    dice = left_rec.dice_roll.replace("-", "")
+                    left_part = f"{dice}: {notation}" if notation else f"{dice}:"
+                else:
+                    left_part = notation
+
+            right_part = ""
+            if right_rec:
+                notation = _notation_to_mat(right_rec.moves_notation, is_black=not left_is_black)
+                if right_rec.dice_roll:
+                    dice = right_rec.dice_roll.replace("-", "")
+                    right_part = f"{dice}: {notation}" if notation else f"{dice}:"
+                else:
+                    right_part = notation
+
+            line = f"{i + 1:3d}) {left_part:<28}{right_part}"
+            lines.append(line.rstrip())
+
+        # Emit the win line in the winner's column.  gnubg uses column position
+        # to determine which player won: left-column start (~5 chars) means the
+        # left player won; right-column start (~33 chars) means the right player.
+        if win_record:
+            m = _WIN_REC_RE.match(win_record.moves_notation)
+            if m:
+                winner_color_str = m.group(1).lower()
+                pts = int(m.group(2))
+                point_word = "point" if pts == 1 else "points"
+                winner_is_left = (winner_color_str == "black") == game_black_first
+                if winner_is_left:
+                    lines.append(f"     Wins {pts} {point_word}")
+                else:
+                    lines.append(f"                                 Wins {pts} {point_word}")
+                if winner_color_str == "white":
+                    white_score += pts
+                else:
+                    black_score += pts
+        elif game_idx == len(games) - 1 and table.status == "finished" and table.winner_id:
+            # Fallback for tables that have a winner but no win MoveRecord.
+            pts = table.final_score or 1
+            point_word = "point" if pts == 1 else "points"
+            winner_is_white = table.winner_id == white_id
+            winner_is_left = winner_is_white != game_black_first
+            if winner_is_left:
+                lines.append(f"     Wins {pts} {point_word}")
             else:
-                left_part = notation
+                lines.append(f"                                 Wins {pts} {point_word}")
 
-        right_part = ""
-        if right_rec:
-            notation = _notation_to_mat(right_rec.moves_notation, is_black=right_is_black)
-            if right_rec.dice_roll:
-                dice = right_rec.dice_roll.replace("-", "")
-                right_part = f"{dice}: {notation}" if notation else f"{dice}:"
-            else:
-                right_part = notation
+        lines.append("")
 
-        # gnubg format: "%3d) %-27s %s"
-        line = f"{turn_num:3d}) {left_part:<28}{right_part}"
-        lines.append(line.rstrip())
-
-    if table.status == "finished" and table.winner_id:
-        score = table.final_score or 1
-        point_word = "point" if score == 1 else "points"
-        # gnubg places the result indented, aligned with the right column
-        # if Black won (even-indexed final turn) or left-indented if White won.
-        lines.append(f"      Wins {score} {point_word}")
-
-    lines.append("")  # trailing blank line
     content = "\n".join(lines) + "\n"
     return PlainTextResponse(
         content=content,

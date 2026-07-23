@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(gh pr create*)",
+            "command": "if [ ! -f .claude/security-review-passed ]; then echo 'Security review required. Run /security-review before creating a PR.' >&2; exit 2; fi; REVIEW_SHA=$(cat .claude/security-review-passed | tr -d '[:space:]'); HEAD_SHA=$(git rev-parse HEAD); if [ \"$REVIEW_SHA\" != \"$HEAD_SHA\" ]; then echo \"Security review is stale (reviewed $REVIEW_SHA, HEAD is now $HEAD_SHA). Run /security-review again.\" >&2; exit 2; fi",
+            "statusMessage": "Checking security review status..."
+          }
+        ]
+      }
+    ]
+  }
+}

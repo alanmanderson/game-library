@@ -1,0 +1,202 @@
+/* RoundResults */
+
+.round-results {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: 24px 16px;
+}
+
+.round-results-content {
+  width: 100%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.round-results-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* Outcome */
+.round-results-outcome {
+  padding: 20px;
+  border-radius: var(--radius);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.round-results-outcome--correct {
+  background: rgba(46, 204, 113, 0.1);
+  border: 2px solid var(--success);
+}
+
+.round-results-outcome--wrong {
+  background: rgba(231, 76, 60, 0.1);
+  border: 2px solid var(--danger);
+}
+
+.round-results-outcome-icon {
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+
+.round-results-outcome--correct .round-results-outcome-icon {
+  color: var(--success);
+}
+
+.round-results-outcome--wrong .round-results-outcome-icon {
+  color: var(--danger);
+}
+
+.round-results-answer-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.round-results-answer {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.round-results-answer-label {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* Roles */
+.round-results-roles {
+  display: flex;
+  gap: 12px;
+}
+
+.round-results-role {
+  flex: 1;
+  padding: 12px;
+  border-radius: var(--radius);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.round-results-role--saboteur {
+  background: rgba(231, 76, 60, 0.1);
+  border: 1px solid var(--saboteur);
+}
+
+.round-results-role--insider {
+  background: rgba(155, 89, 182, 0.1);
+  border: 1px solid var(--insider);
+}
+
+.round-results-role-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.round-results-role--saboteur .round-results-role-label {
+  color: var(--saboteur);
+}
+
+.round-results-role--insider .round-results-role-label {
+  color: var(--insider);
+}
+
+.round-results-role-name {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* Events */
+.round-results-events {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.round-results-event {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  padding: 6px 10px;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+}
+
+/* Scores */
+.round-results-scores {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.round-results-scores-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.round-results-score-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.round-results-score-row {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+}
+
+.round-results-score-name {
+  flex: 1;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.round-results-score-round {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--success);
+  margin-right: 16px;
+  min-width: 40px;
+  text-align: right;
+}
+
+.round-results-score-total {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  min-width: 40px;
+  text-align: right;
+}
+
+/* Actions */
+.round-results-actions {
+  padding-top: 8px;
+}
+
+.round-results-next-btn {
+  width: 100%;
+}
+
+.round-results-waiting {
+  text-align: center;
+  color: var(--text-secondary);
+  font-style: italic;
+  padding: 12px 0;
+}

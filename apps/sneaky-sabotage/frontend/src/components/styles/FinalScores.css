@@ -1,0 +1,124 @@
+/* FinalScores */
+
+.final-scores {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: 24px 16px;
+}
+
+.final-scores-content {
+  width: 100%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.final-scores-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+/* Winner */
+.final-scores-winner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 32px 24px;
+  width: 100%;
+  background: linear-gradient(
+    135deg,
+    rgba(108, 92, 231, 0.15) 0%,
+    rgba(162, 155, 254, 0.1) 100%
+  );
+  border: 2px solid var(--accent);
+  border-radius: var(--radius-lg);
+  text-align: center;
+}
+
+.final-scores-crown {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--accent);
+}
+
+.final-scores-winner-name {
+  font-size: 2rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--accent) 0%, #a29bfe 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.final-scores-winner-score {
+  font-size: 1.25rem;
+  color: var(--text-secondary);
+}
+
+/* Leaderboard */
+.final-scores-leaderboard {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.final-scores-row {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  gap: 12px;
+}
+
+.final-scores-row--first {
+  background: rgba(108, 92, 231, 0.12);
+  border: 1px solid var(--accent);
+}
+
+.final-scores-row--second {
+  background: rgba(192, 192, 192, 0.08);
+  border: 1px solid #666;
+}
+
+.final-scores-row--third {
+  background: rgba(205, 127, 50, 0.08);
+  border: 1px solid #8B6914;
+}
+
+.final-scores-rank {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  min-width: 32px;
+}
+
+.final-scores-row--first .final-scores-rank {
+  color: var(--accent);
+}
+
+.final-scores-name {
+  flex: 1;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.final-scores-score {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.final-scores-play-again {
+  width: 100%;
+  margin-top: 8px;
+}

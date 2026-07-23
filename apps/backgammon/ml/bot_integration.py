@@ -20,7 +20,7 @@ import torch
 
 # Add paths
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
-from app.game_engine import BackgammonEngine, Color, Move
+from app.game_engine import BackgammonEngine, Color, Move, _opponent
 
 from encoder import encode_state, encode_state_v2
 from model import BackgammonNet, BackgammonNetV2, compute_equity, load_model
@@ -97,10 +97,11 @@ class MLBotPlayer:
         Returns:
             True if the bot should accept the double.
         """
-        bot_color = engine.state.current_turn
+        # current_turn is the player who offered the double; the accepter is their opponent
+        accepter_color = _opponent(engine.state.current_turn)
 
         with torch.no_grad():
-            features = encode_state(engine, bot_color)
+            features = encode_state(engine, accepter_color)
             features_tensor = torch.from_numpy(features).to(self.device)
             outputs = self.model(features_tensor)
             equity = compute_equity(outputs).item()
@@ -213,7 +214,8 @@ class MLBotPlayerV2:
         return best_move
 
     def should_accept_double(self, engine):
-        return self._evaluate_position(engine, engine.state.current_turn) > -0.5
+        # current_turn is the offerer; evaluate from the accepter's perspective
+        return self._evaluate_position(engine, _opponent(engine.state.current_turn)) > -0.5
 
     def should_double(self, engine):
         return self._evaluate_position(engine, engine.state.current_turn) > 0.5
