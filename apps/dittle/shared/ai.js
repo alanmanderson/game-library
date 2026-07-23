@@ -135,11 +135,18 @@ function orderedMoves(state) {
   return scored.map((x) => x.m);
 }
 
+// Thrown to unwind the recursion when a search runs past its deadline.
+const SEARCH_TIMEOUT = Symbol('search-timeout');
+
 // Alpha-beta minimax. Returns { score, move }. `rootPlayer` is the perspective we
 // maximize for; the search alternates between maximizing (rootPlayer to move) and
-// minimizing (opponent to move).
+// minimizing (opponent to move). If `deadline` (a Date.now() timestamp) is given and
+// passes, the search throws SEARCH_TIMEOUT so the caller can fall back to a shallower
+// completed result — the richer move set (turning jumps, tilt+jump) makes deep
+// searches costly, so a wall-clock guard keeps the AI responsive.
 export function search(state, depth, rootPlayer, weights = DEFAULT_WEIGHTS,
-  alpha = -Infinity, beta = Infinity) {
+  alpha = -Infinity, beta = Infinity, deadline = 0) {
+  if (deadline && Date.now() > deadline) throw SEARCH_TIMEOUT;
   if (state.status !== 'playing' || depth === 0) {
     // Bias toward faster wins / slower losses by folding depth into terminal scores.
     let score = evaluate(state, rootPlayer, weights);
@@ -158,7 +165,7 @@ export function search(state, depth, rootPlayer, weights = DEFAULT_WEIGHTS,
     let best = -Infinity;
     for (const m of moves) {
       const child = applyMove(state, m);
-      const { score } = search(child, depth - 1, rootPlayer, weights, alpha, beta);
+      const { score } = search(child, depth - 1, rootPlayer, weights, alpha, beta, deadline);
       if (score > best) { best = score; bestMove = m; }
       if (best > alpha) alpha = best;
       if (alpha >= beta) break; // prune
@@ -168,7 +175,7 @@ export function search(state, depth, rootPlayer, weights = DEFAULT_WEIGHTS,
     let best = Infinity;
     for (const m of moves) {
       const child = applyMove(state, m);
-      const { score } = search(child, depth - 1, rootPlayer, weights, alpha, beta);
+      const { score } = search(child, depth - 1, rootPlayer, weights, alpha, beta, deadline);
       if (score < best) { best = score; bestMove = m; }
       if (best < beta) beta = best;
       if (alpha >= beta) break; // prune
@@ -178,8 +185,23 @@ export function search(state, depth, rootPlayer, weights = DEFAULT_WEIGHTS,
 }
 
 // Public entry point: pick the best move for the player to move in `state`.
-// `depth` is the lookahead in plies. Returns { move, score }.
-export function bestMove(state, depth = 3, weights = DEFAULT_WEIGHTS) {
+// `maxDepth` is the deepest lookahead in plies; `timeBudgetMs` caps wall-clock time
+// via iterative deepening (0 disables the cap). Depth 1 always completes so a move is
+// always returned. Returns { move, score }.
+export function bestMove(state, maxDepth = 3, weights = DEFAULT_WEIGHTS, timeBudgetMs = 1200) {
   if (state.status !== 'playing') return { move: null, score: 0 };
-  return search(state, depth, state.turn, weights);
+  const deadline = timeBudgetMs > 0 ? Date.now() + timeBudgetMs : 0;
+  let best = search(state, 1, state.turn, weights); // always complete the shallowest ply
+  for (let d = 2; d <= maxDepth; d++) {
+    let result;
+    try {
+      result = search(state, d, state.turn, weights, -Infinity, Infinity, deadline);
+    } catch (e) {
+      if (e === SEARCH_TIMEOUT) break; // out of time — keep the deepest completed result
+      throw e;
+    }
+    best = result;
+    if (Math.abs(best.score) >= WIN) break; // forced win/loss found; no need to go deeper
+  }
+  return best;
 }

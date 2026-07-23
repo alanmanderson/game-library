@@ -6,7 +6,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-import { initialState, applyMove, legalMoves } from '../shared/engine.js';
+import { initialState, applyMove, legalMoves, moveKey } from '../shared/engine.js';
 import { bestMove, DEFAULT_WEIGHTS } from '../shared/ai.js';
 import { RoomManager } from './rooms.js';
 import { LogService, expressErrorLogger } from './logservice.js';
@@ -98,12 +98,14 @@ function handleMove(room, seat, move) {
     send(room.players[seat], { type: 'error', message: 'Not your turn.' });
     return;
   }
-  // Validate against legal moves. Match by (from, to) since it is unique across
-  // tilts and jumps; fall back to (from, dir) for older tilt-only clients.
+  // Validate against legal moves by full path identity. A move can be a tilt, a
+  // (possibly turning) jump chain, or a tilt-then-jump, and two different paths can
+  // share a start/end square, so matching on the whole tilt+jumps sequence is
+  // required — not just (from, to).
   const legal = legalMoves(room.state);
-  const match = legal.find((m) =>
-    m.from === move.from &&
-    (move.to !== undefined ? m.to === move.to : m.dir === move.dir && !m.jump));
+  let wantKey;
+  try { wantKey = moveKey(move); } catch { wantKey = null; }
+  const match = wantKey && legal.find((m) => moveKey(m) === wantKey);
   if (!match) {
     send(room.players[seat], { type: 'error', message: 'Illegal move.' });
     return;

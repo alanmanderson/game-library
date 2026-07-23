@@ -36,14 +36,18 @@ A faithful digital adaptation of Dittle (Clash-style rules):
 
 - **Board:** 7×7. Each player starts with **7 dice** on their home row, **6 face-up**,
   the 3 facing toward them.
-- **A move** is a **tilt** or a **jump** (no backward moves, no diagonals):
-  - **Tilt** one die one square **forward** (toward the far side) or **sideways**.
-    The die physically rolls, so its top number changes.
-  - **Jump** a die in a straight line over one or more dice — **yours or the
-    enemy's** — landing on the empty square just past a jumped die. Jumps chain when
-    dice are separated by a gap. A jump does **not** change the die's number and does
-    **not** capture. Jumping over the opponent's home-row wall is often the way to
-    break through.
+- **A move** is a **tilt**, a **jump chain**, or a **tilt then a jump chain** — always
+  **forward or sideways, never backward or diagonal**:
+  - **Tilt** one die one square. The die physically rolls, so its top number changes.
+    A tilt is the *only* thing that changes a die's number.
+  - **Jump** over a single adjacent die — **yours or the enemy's** — to the empty
+    square just past it. Jumps **chain**: from the landing square you may jump the next
+    die, **and the chain may turn** (an “L-shape”, e.g. jump forward then jump sideways).
+    Because every hop lands on the empty square past the jumped die, consecutively
+    jumped dice are always separated by a gap — you can never leap a tight cluster. A
+    jump does **not** change the jumper's number and does **not** capture.
+  - **Tilt + jump (mixed):** tilt once onto an **empty** square, then jump one or more
+    dice. Only the tilt changes the number; the jump portion never does.
 - **Direct clash:** tilt onto an enemy die → the die showing the **lower** top number
   is removed; a tie removes both. You cannot land on your own die. (Jumps land on
   empty squares, so they never clash directly — but landing can trigger a surround.)

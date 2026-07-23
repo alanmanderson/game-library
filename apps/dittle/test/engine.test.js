@@ -1,6 +1,6 @@
 import {
   initialState, legalMoves, applyMove, rollDie, idx, countDice,
-  SIZE, goalRow, jumpLandings,
+  SIZE, goalRow, jumpLandings, makeMove, moveKey, normalizeMove, rowOf,
 } from '../shared/engine.js';
 
 let pass = 0, fail = 0;
@@ -158,6 +158,101 @@ function eq(a, b, msg) { ok(a === b, `${msg} (got ${a}, want ${b})`); }
   s.turn = 0;
   const backJump = legalMoves(s).find((m) => m.jump && m.to === idx(2, 3));
   ok(!backJump, 'no backward jump for player 0');
+}
+
+// --- Turning jump chain (L-shape): jump north, then east, in one move. ---
+{
+  const s = initialState();
+  s.board = new Array(SIZE * SIZE).fill(null);
+  s.board[idx(2, 2)] = { player: 0, up: 5, north: 4, east: 2 }; // jumper
+  s.board[idx(3, 2)] = { player: 1, up: 6, north: 3, east: 2 }; // leaped going N
+  s.board[idx(4, 3)] = { player: 1, up: 6, north: 3, east: 2 }; // leaped going E
+  s.turn = 0;
+  const turning = legalMoves(s).find((m) => m.from === idx(2, 2) && m.jumps.join('') === 'NE');
+  ok(turning, 'a turning (L-shape) jump chain is generated');
+  eq(turning.to, idx(4, 4), 'turning jump lands past the second die');
+  const ns = applyMove(s, turning);
+  const landed = ns.board[idx(4, 4)];
+  ok(landed && landed.player === 0 && landed.up === 5, 'turning jump keeps up-face (5)');
+  ok(ns.board[idx(3, 2)] && ns.board[idx(4, 3)], 'both jumped-over dice survive the turn');
+  eq(ns.board[idx(2, 2)], null, 'jumper leaves its origin after a turning jump');
+}
+
+// --- Straight multi-jump chain expressed as a jumps array. ---
+{
+  const s = initialState();
+  s.board = new Array(SIZE * SIZE).fill(null);
+  s.board[idx(1, 0)] = { player: 0, up: 4, north: 4, east: 2 };
+  s.board[idx(2, 0)] = { player: 0, up: 6, north: 4, east: 2 }; // own die, leaped
+  s.board[idx(4, 0)] = { player: 1, up: 2, north: 3, east: 2 }; // enemy, leaped
+  s.turn = 0;
+  const chain = legalMoves(s).find((m) => m.from === idx(1, 0) && m.jumps.join('') === 'NN');
+  ok(chain, 'a two-hop straight jump chain is generated');
+  eq(chain.to, idx(5, 0), 'two-hop chain lands two squares past');
+  const ns = applyMove(s, chain);
+  ok(ns.board[idx(5, 0)] && ns.board[idx(5, 0)].up === 4, 'multi-jump keeps up-face');
+}
+
+// --- Tilt + jump (mixed): tilt sideways onto an empty square, then jump forward. ---
+{
+  const s = initialState();
+  s.board = new Array(SIZE * SIZE).fill(null);
+  s.board[idx(2, 0)] = { player: 0, up: 6, north: 4, east: 2 }; // tilt E -> up = 7-2 = 5
+  s.board[idx(3, 1)] = { player: 1, up: 6, north: 3, east: 2 }; // leaped after the tilt
+  s.board[idx(6, 6)] = { player: 1, up: 6, north: 3, east: 2 }; // keep p1 alive
+  s.turn = 0;
+  const mixed = legalMoves(s).find((m) => m.from === idx(2, 0) && m.tilt === 'E' && m.jumps.join('') === 'N');
+  ok(mixed, 'a tilt-then-jump move is generated');
+  eq(mixed.to, idx(4, 1), 'tilt+jump ends past the jumped die');
+  const ns = applyMove(s, mixed);
+  const landed = ns.board[idx(4, 1)];
+  ok(landed && landed.up === 5, 'tilt+jump face changes only from the tilt (5), not the jump');
+  ok(ns.board[idx(3, 1)], 'jumped die survives a tilt+jump');
+}
+
+// --- The tilt leg of a tilt+jump must land on an EMPTY square. ---
+{
+  const s = initialState();
+  s.board = new Array(SIZE * SIZE).fill(null);
+  s.board[idx(2, 0)] = { player: 0, up: 6, north: 4, east: 2 };
+  s.board[idx(2, 1)] = { player: 1, up: 3, north: 3, east: 2 }; // enemy blocks the tilt square
+  s.turn = 0;
+  const ms = legalMoves(s).filter((m) => m.from === idx(2, 0));
+  ok(!ms.some((m) => m.tilt === 'E' && m.jumps.length > 0), 'no tilt+jump when the tilt square is occupied');
+  ok(ms.some((m) => m.tilt === 'E' && m.jumps.length === 0), 'a terminal tilt onto the enemy (clash) is still allowed');
+}
+
+// --- No backward jump hops anywhere in a chain (player 0 never uses S). ---
+{
+  const s = initialState();
+  s.board = new Array(SIZE * SIZE).fill(null);
+  s.board[idx(3, 3)] = { player: 0, up: 5, north: 4, east: 2 };
+  s.board[idx(4, 3)] = { player: 1, up: 6, north: 3, east: 2 };
+  s.board[idx(2, 3)] = { player: 1, up: 6, north: 3, east: 2 };
+  s.turn = 0;
+  const all = legalMoves(s).filter((m) => m.from === idx(3, 3));
+  const dirsUsed = new Set(all.flatMap((m) => [m.tilt, ...m.jumps]).filter(Boolean));
+  ok(!dirsUsed.has('S'), 'player 0 never tilts or jumps backward (S)');
+  ok(all.some((m) => m.jumps.join('') === 'N'), 'a forward jump over the north enemy exists');
+}
+
+// --- moveKey distinguishes different paths that could share a start square. ---
+{
+  const a = moveKey(makeMove(idx(2, 2), null, ['N', 'E']));
+  const b = moveKey(makeMove(idx(2, 2), 'N', ['E']));
+  ok(a !== b, 'a pure jump and a tilt+jump from the same square are distinct moves');
+  eq(moveKey({ from: idx(2, 2), tilt: null, jumps: ['N', 'E'] }), a, 'moveKey is stable for equivalent moves');
+}
+
+// --- Legacy single-step move objects still apply (back-compat). ---
+{
+  const s = initialState();
+  s.board = new Array(SIZE * SIZE).fill(null);
+  s.board[idx(3, 3)] = { player: 0, up: 6, north: 4, east: 2 };
+  s.board[idx(0, 0)] = { player: 1, up: 6, north: 3, east: 2 };
+  s.turn = 0;
+  const ns = applyMove(s, { from: idx(3, 3), dir: 'N', to: idx(4, 3) }); // legacy tilt
+  ok(ns.board[idx(4, 3)] && ns.board[idx(4, 3)].player === 0, 'legacy {from,dir,to} tilt still works');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

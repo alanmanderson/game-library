@@ -1,24 +1,31 @@
 // Dittle — game engine (pure, no I/O). Works in Node and the browser as an ES module.
 //
-// This is a faithful digital adaptation of "Dittle: Dice Battle":
-//  - 7x7 board. Each player starts with 7 dice on their base row.
-//  - Start orientation: 6 up, 3 facing toward the owning player.
-//  - On your turn you make ONE move, either a TILT or a JUMP:
-//    * Tilt: roll a die one square forward (toward the opponent) or sideways
-//      (left/right). The die rolls, so its up-facing number changes. No backward
-//      tilts, no diagonals.
-//    * Jump: lift a die and leap in a straight line (forward or sideways) over one
-//      or more dice — friendly OR enemy — landing on the empty square just past a
-//      jumped die. Consecutive jumped dice must be separated by an empty square. A
-//      jumped die is unaffected, and the jumper's up-face does NOT change.
-//  - Direct clash: tilt onto an enemy die -> the die showing the LOWER up-value is
-//    removed; a tie removes both. You may not tilt onto your own die. (Jumps land
-//    on empty squares, so they never clash directly — but can trigger surrounds.)
+// Faithful digital adaptation of "Dittle: Dice Battle". A move is made of an
+// OPTIONAL single tilt followed by an OPTIONAL chain of jumps (so a whole move is
+// one of: tilt, jump(s), or tilt-then-jump(s)):
+//
+//  - Board: 7x7. Each player starts with 7 dice on their base row (6 up, 3 facing
+//    the owning player).
+//  - Directions: forward (toward the opponent) or sideways. NEVER backward, never
+//    diagonal — this holds for both tilts and jumps.
+//  - Tilt: roll a die one square. The die physically rolls, so its up-face changes.
+//    A tilt is the ONLY thing that changes a die's up-face.
+//  - Jump: leap over a single adjacent die (friendly OR enemy) to the empty square
+//    just beyond it. Jumps chain — from the landing square you may jump the next die,
+//    and the chain MAY TURN (an "L-shape": e.g. jump north, then jump east). Because
+//    each hop lands on the empty square past the jumped die, consecutively jumped
+//    dice are always separated by a gap; you can never leap a tight cluster. A jumped
+//    die is unaffected and the jumper's up-face does NOT change during any jump.
+//  - Tilt + jump (mixed): tilt once (onto an EMPTY square), then jump one or more
+//    dice. The up-face changes only from the tilt, never from the jump portion.
+//  - Direct clash: a TILT onto an enemy die -> the die showing the LOWER up-value is
+//    removed; a tie removes both. You may not tilt onto your own die. Jumps always
+//    land on empty squares, so they never clash directly (but can trigger surrounds).
 //  - Surround clash (resolved after every move, repeated to stability): a die
 //    orthogonally adjacent to >= 2 enemy dice compares its up-value to the SUM of
 //    those enemies' up-values; the lower side is removed (tie removes all involved).
-//  - Win: get any one of your dice onto the opponent's base row. You also win if
-//    your opponent has no dice, or no legal move on their turn.
+//  - Win: get any one of your dice onto the opponent's base row (breakthrough). You
+//    also win if the opponent has no dice (elimination) or no legal move (stuck).
 
 export const SIZE = 7;
 export const DICE_PER_PLAYER = SIZE;
@@ -61,9 +68,9 @@ export function initialState() {
   return {
     board,
     turn: 0,            // whose turn (0 or 1)
-    status: 'playing',  // 'playing' | 'won'
+    status: 'playing',  // 'playing' | 'won' | 'draw'
     winner: null,       // 0 | 1 | null
-    lastMove: null,     // { from, to, dir } | null
+    lastMove: null,     // canonical move (see makeMove) | null
     moveCount: 0,
     endReason: null,    // 'breakthrough' | 'elimination' | 'stuck' | 'score' | null
   };
@@ -97,10 +104,9 @@ function allowedDirs(player) {
   return player === 0 ? ['N', 'E', 'W'] : ['S', 'E', 'W'];
 }
 
-// Landing squares reachable by jumping from `i` in `dir`. A jump leaps over a die
-// to the empty square just beyond it, and may chain: from that landing it can leap
-// the next die, and so on. Consecutive jumped dice are therefore separated by the
-// (empty) landing square between them. Returns 0+ landing indices.
+// Straight-line jump landings reachable from `i` in `dir` (leap a die, land on the
+// empty square beyond, and continue in the SAME direction). Kept for the AI's cheap
+// goal-threat heuristic; full move generation (with turns) lives in legalMoves.
 export function jumpLandings(board, i, dir) {
   const [dr, dc] = DIR_DELTA[dir];
   let r = rowOf(i), c = colOf(i);
@@ -116,25 +122,103 @@ export function jumpLandings(board, i, dir) {
   return lands;
 }
 
+// Build the canonical move object from a start square, an optional tilt direction,
+// and a sequence of jump-hop directions. `path` lists the squares visited after
+// `from` (tilt landing, then each jump landing) for UI highlighting.
+export function makeMove(from, tilt, jumps) {
+  const js = jumps ? jumps.slice() : [];
+  const path = [];
+  let pos = from;
+  if (tilt) { pos = stepIndex(from, tilt); path.push(pos); }
+  for (const d of js) { pos = stepIndex(stepIndex(pos, d), d); path.push(pos); }
+  const to = path.length ? path[path.length - 1] : from;
+  return {
+    from,
+    to,
+    tilt: tilt || null,
+    jumps: js,
+    jump: js.length > 0,
+    dir: tilt || js[0] || null,          // first step — used for move ordering / UI
+    kind: tilt ? (js.length ? 'tilt-jump' : 'tilt') : 'jump',
+    path,
+  };
+}
+
+// A stable string identity for a move: same key <=> same tilt + same jump path from
+// the same origin. Used to validate a client-submitted move against the legal set
+// (two different paths can share a start and end square, so from/to is not enough).
+export function moveKey(m) {
+  const mm = normalizeMove(m);
+  return `${mm.from}#${mm.tilt || ''}#${mm.jumps.join('')}`;
+}
+
+// Accept either a canonical move ({tilt, jumps}) or a legacy single-step move
+// ({dir, jump, to}) and return the canonical form.
+export function normalizeMove(move) {
+  if (move && (move.jumps !== undefined || move.tilt !== undefined)) {
+    return makeMove(move.from, move.tilt || null, move.jumps || []);
+  }
+  if (move && move.jump) {
+    // Legacy single-`dir` jump (possibly multi-hop, straight): rebuild the hops.
+    const jumps = [];
+    let pos = move.from;
+    while (pos !== move.to) {
+      jumps.push(move.dir);
+      const mid = stepIndex(pos, move.dir);
+      pos = mid === -1 ? move.to : stepIndex(mid, move.dir);
+      if (pos === -1) break;
+      if (jumps.length > SIZE) break; // safety
+    }
+    return makeMove(move.from, null, jumps);
+  }
+  return makeMove(move.from, move ? move.dir || null : null, []);
+}
+
+// Enumerate every legal jump chain from `pos`, appending complete moves to `out`.
+// `bd` is the board with the moving die already lifted off (so it can't be jumped).
+function enumerateJumps(bd, from, pos, dirs, tilt, jumpsSoFar, visited, out) {
+  for (const dir of dirs) {
+    const mid = stepIndex(pos, dir);
+    if (mid === -1 || !bd[mid]) continue;          // must leap over a die
+    const land = stepIndex(mid, dir);
+    if (land === -1 || bd[land] || visited.has(land)) continue; // land on empty, no revisits
+    const jumps = jumpsSoFar.concat(dir);
+    out.push(makeMove(from, tilt, jumps));
+    const nv = new Set(visited); nv.add(land);
+    enumerateJumps(bd, from, land, dirs, tilt, jumps, nv, out);   // chain (may turn)
+  }
+}
+
 // All legal moves for the player to move in `state`.
 export function legalMoves(state) {
   const { board, turn } = state;
-  const moves = [];
   const dirs = allowedDirs(turn);
-  for (let i = 0; i < board.length; i++) {
-    const die = board[i];
+  const moves = [];
+  for (let from = 0; from < board.length; from++) {
+    const die = board[from];
     if (!die || die.player !== turn) continue;
+
+    // Board with the mover lifted off — it must not be jumpable during its own move.
+    const lifted = board.slice();
+    lifted[from] = null;
+
+    // 1) Tilt-only (terminal): one square onto an empty square or an enemy (clash).
     for (const dir of dirs) {
-      // Tilt: one square, unless blocked by own die.
-      const to = stepIndex(i, dir);
-      if (to !== -1) {
-        const occ = board[to];
-        if (!(occ && occ.player === turn)) moves.push({ from: i, dir, to, jump: false });
-      }
-      // Jumps: leap over dice (friendly or enemy) along this line.
-      for (const land of jumpLandings(board, i, dir)) {
-        moves.push({ from: i, dir, to: land, jump: true });
-      }
+      const to = stepIndex(from, dir);
+      if (to === -1) continue;
+      const occ = board[to];
+      if (occ && occ.player === turn) continue; // blocked by own die
+      moves.push(makeMove(from, dir, []));
+    }
+
+    // 2) Pure jump chains (no tilt).
+    enumerateJumps(lifted, from, from, dirs, null, [], new Set([from]), moves);
+
+    // 3) Tilt + jump: tilt onto an EMPTY square, then jump one or more dice.
+    for (const dir of dirs) {
+      const t = stepIndex(from, dir);
+      if (t === -1 || board[t]) continue; // the tilt leg of a mixed move must land empty
+      enumerateJumps(lifted, from, t, dirs, dir, [], new Set([from, t]), moves);
     }
   }
   return moves;
@@ -220,61 +304,84 @@ export function scoreSide(board, player) {
   return s;
 }
 
-// Apply a move to a state, returning a NEW state. Does not mutate input.
+// Apply a move to a state, returning a NEW state. Does not mutate input. Accepts a
+// canonical move ({from, tilt, jumps}) or a legacy single-step move.
 export function applyMove(state, move) {
   if (state.status !== 'playing') throw new Error('game over');
+  const m = normalizeMove(move);
   const board = cloneBoard(state.board);
-  const mover = board[move.from];
-  if (!mover || mover.player !== state.turn) throw new Error('illegal: no die/own die at from');
-  const to = move.to !== undefined ? move.to : stepIndex(move.from, move.dir);
-  if (to === -1) throw new Error('illegal: off board');
-  const occ = board[to];
+  const mover = board[m.from];
+  if (!mover || mover.player !== state.turn) throw new Error('illegal: no own die at from');
 
-  if (move.jump) {
-    // Jump: lift the die over others and set it down unchanged on an empty square.
-    if (occ) throw new Error('illegal: jump must land on an empty square');
-    board[move.from] = null;
-    board[to] = { ...mover };
-  } else {
-    if (occ && occ.player === mover.player) throw new Error('illegal: blocked by own die');
-    const rolled = rollDie(mover, move.dir);
-    board[move.from] = null;
-    if (!occ) {
-      board[to] = rolled;
-    } else {
-      // direct clash: lower up-value removed; tie removes both
-      if (rolled.up > occ.up) board[to] = rolled;
-      else if (rolled.up < occ.up) board[to] = occ; // mover destroyed, defender stays
-      else board[to] = null;                        // tie: both gone
+  board[m.from] = null;
+  let die = mover;
+  let pos = m.from;
+
+  if (m.tilt) {
+    const to = stepIndex(pos, m.tilt);
+    if (to === -1) throw new Error('illegal: tilt off board');
+    die = rollDie(die, m.tilt); // the tilt is the only thing that changes the up-face
+    if (m.jumps.length === 0) {
+      // Terminal tilt — may clash with an enemy on the destination square.
+      const occ = board[to];
+      if (occ && occ.player === die.player) throw new Error('illegal: tilt onto own die');
+      if (!occ) board[to] = die;
+      else if (die.up > occ.up) board[to] = die;   // stronger mover wins the square
+      else if (die.up < occ.up) board[to] = occ;   // mover destroyed, defender stays
+      else board[to] = null;                        // tie: both removed
+      return finalize(state, board, m);
     }
+    // Mixed move: the tilt leg must land on an empty square before jumping.
+    if (board[to]) throw new Error('illegal: tilt+jump must tilt onto an empty square');
+    pos = to;
   }
 
+  // Jump hops (up-face unchanged). Each hop leaps one die to the empty square beyond.
+  for (const dir of m.jumps) {
+    const mid = stepIndex(pos, dir);
+    if (mid === -1 || !board[mid]) throw new Error('illegal: jump must leap over a die');
+    const land = stepIndex(mid, dir);
+    if (land === -1) throw new Error('illegal: jump off board');
+    if (board[land]) throw new Error('illegal: jump must land on an empty square');
+    pos = land;
+  }
+  board[pos] = die;
+  return finalize(state, board, m);
+}
+
+// Shared post-move resolution: surrounds, win detection, and next-state assembly.
+function finalize(state, board, m) {
   resolveSurrounds(board);
 
-  const mePlayer = state.turn;
-  const opp = 1 - mePlayer;
-
+  const me = state.turn;
+  const opp = 1 - me;
   let status = 'playing';
   let winner = null;
 
-  // Win: any of my dice reached the opponent's base row.
-  const myGoal = goalRow(mePlayer);
+  // Breakthrough: any of my dice reached the opponent's base row.
+  const myGoal = goalRow(me);
   for (let c = 0; c < SIZE; c++) {
     const d = board[idx(myGoal, c)];
-    if (d && d.player === mePlayer) { status = 'won'; winner = mePlayer; break; }
+    if (d && d.player === me) { status = 'won'; winner = me; break; }
   }
-
   // Elimination: opponent has no dice left.
-  if (status === 'playing' && countDice(board, opp) === 0) {
-    status = 'won'; winner = mePlayer;
-  }
+  if (status === 'playing' && countDice(board, opp) === 0) { status = 'won'; winner = me; }
 
   const next = {
     board,
     turn: opp,
     status,
     winner,
-    lastMove: { from: move.from, to, dir: move.dir, jump: !!move.jump },
+    lastMove: {
+      from: m.from,
+      to: m.to,
+      dir: m.dir,
+      tilt: m.tilt,
+      jumps: m.jumps.slice(),
+      jump: m.jump,
+      path: m.path.slice(),
+      kind: m.kind,
+    },
     moveCount: state.moveCount + 1,
     endReason: status === 'won' ? (countDice(board, opp) === 0 ? 'elimination' : 'breakthrough') : null,
   };
@@ -282,7 +389,7 @@ export function applyMove(state, move) {
   // If the next player has no legal move on their turn, they lose.
   if (next.status === 'playing' && legalMoves(next).length === 0) {
     next.status = 'won';
-    next.winner = mePlayer;
+    next.winner = me;
     next.endReason = 'stuck';
   }
 
@@ -306,7 +413,7 @@ export function cloneState(state) {
     turn: state.turn,
     status: state.status,
     winner: state.winner,
-    lastMove: state.lastMove ? { ...state.lastMove } : null,
+    lastMove: state.lastMove ? { ...state.lastMove, jumps: state.lastMove.jumps ? state.lastMove.jumps.slice() : [], path: state.lastMove.path ? state.lastMove.path.slice() : [] } : null,
     moveCount: state.moveCount,
     endReason: state.endReason || null,
     score: state.score ? { ...state.score } : undefined,
