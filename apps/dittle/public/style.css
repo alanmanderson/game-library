@@ -1,157 +1,267 @@
 :root {
-  --bg: #0f1220;
-  --bg2: #171b2e;
-  --card: #1e2338;
-  --ink: #eef1fb;
-  --muted: #98a0c0;
-  --accent: #6ea8fe;
-  --p0: #4f8cff;   /* you / player 0 - blue */
-  --p1: #ff5d6c;   /* opponent / player 1 - red */
-  --p0-dim: #2a3a63;
-  --p1-dim: #5c2b34;
-  --gold: #ffd76a;
-  --line: #2b3150;
-  --ok: #57d998;
-  --err: #ff7b8a;
+  /* Light "felt & wood" theme drawn from the Dice Board design */
+  --page-a: #ececeb;
+  --page-b: #d6d5d3;
+  --ink: #2c1410;          /* deep espresso — primary text / dark buttons */
+  --ink-soft: #54524f;
+  --muted: #6b6a68;
+  --faint: #9a9995;
+  --line: #b9b7b3;
+  --card: #ffffff;
+
+  /* Board (the tilted plate + wells) */
+  --board-a: #4b2721;
+  --board-b: #26100d;
+  --well: #1c0d0a;         /* inner sunken well */
+  --rim: #3a1e19;          /* home-row wells */
+
+  /* Dice */
+  --die-dark: #181614;     /* opponent (black) die face */
+  --die-dark-pip: #f4f1ec;
+  --die-light: #f4f1ec;    /* your (ivory) die face */
+  --die-light-pip: #1a1a18;
+
+  /* Signals */
+  --gold: #ffc85a;
+  --ok: #46c98a;
+  --danger: #e8574c;
+  --jump: #5aa9ff;
+
+  --shadow-lg: 0 30px 70px rgba(0,0,0,.28);
 }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
 body {
-  background: radial-gradient(1200px 800px at 50% -10%, #232a48 0%, var(--bg) 60%);
+  background: linear-gradient(160deg, var(--page-a), var(--page-b));
   color: var(--ink);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
-#app { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 20px; }
-.screen { width: 100%; max-width: 520px; }
+#app { min-height: 100%; display: flex; align-items: flex-start; justify-content: center; padding: 28px 16px 48px; }
+.screen { width: 100%; max-width: 860px; }
 .hidden { display: none !important; }
 
+/* ===================== Home ===================== */
+#home { max-width: 520px; }
 .logo {
-  font-size: 56px; letter-spacing: 10px; text-align: center; margin: 10px 0 4px;
-  background: linear-gradient(90deg, var(--p0), var(--gold), var(--p1));
-  -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: 800;
+  font-size: 54px; letter-spacing: 12px; text-align: center; margin: 14px 0 4px;
+  font-weight: 800; color: var(--ink);
 }
-.tagline { text-align: center; color: var(--muted); margin: 0 0 22px; }
+.tagline { text-align: center; color: var(--muted); margin: 0 0 24px; }
 
 .card {
-  background: linear-gradient(180deg, var(--card), var(--bg2));
-  border: 1px solid var(--line); border-radius: 16px; padding: 20px;
-  box-shadow: 0 20px 60px rgba(0,0,0,.4);
+  background: var(--card);
+  border: 1px solid rgba(0,0,0,.06); border-radius: 18px; padding: 22px;
+  box-shadow: var(--shadow-lg);
 }
 .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
-.field span { color: var(--muted); font-size: 13px; }
+.field span { color: var(--muted); font-size: 13px; font-weight: 600; }
 input, select {
-  background: #12162a; border: 1px solid var(--line); color: var(--ink);
+  background: #f4f3f1; border: 1px solid var(--line); color: var(--ink);
   border-radius: 10px; padding: 12px 14px; font-size: 16px; outline: none; width: 100%;
 }
-input:focus, select:focus { border-color: var(--accent); }
+input:focus, select:focus { border-color: var(--ink); background: #fff; }
 select { width: auto; }
 
 .btn-row { margin: 8px 0; }
 button {
-  cursor: pointer; border: 1px solid var(--line); background: #232a45; color: var(--ink);
+  cursor: pointer; border: 1px solid var(--line); background: #fff; color: var(--ink-soft);
   border-radius: 10px; padding: 12px 16px; font-size: 15px; font-weight: 600; width: 100%;
-  transition: transform .05s ease, background .15s ease, border-color .15s;
+  transition: transform .05s ease, background .15s ease, border-color .15s, filter .15s;
 }
-button:hover { background: #2b3352; }
+button:hover { background: #f4f3f1; }
 button:active { transform: translateY(1px); }
-button.primary { background: linear-gradient(90deg, var(--p0), #8a6bff); border: none; }
-button.primary:hover { filter: brightness(1.07); }
+button:disabled { opacity: .5; cursor: default; }
+button.primary { background: var(--ink); color: #f0e8e4; border: none; }
+button.primary:hover { background: #3d1e17; }
 button.ghost { width: auto; background: transparent; border-color: transparent; color: var(--muted); }
-button.ghost:hover { background: #232a45; color: var(--ink); }
+button.ghost:hover { background: rgba(0,0,0,.05); color: var(--ink); }
 
 .ai-opts { display: flex; justify-content: center; gap: 10px; color: var(--muted); font-size: 14px; margin: 6px 0 2px; }
 .ai-opts label { display: flex; align-items: center; gap: 8px; }
-hr { border: none; border-top: 1px solid var(--line); margin: 18px 0; }
+hr { border: none; border-top: 1px solid rgba(0,0,0,.08); margin: 18px 0; }
 .join-row { display: flex; gap: 8px; }
 .join-row input { text-transform: uppercase; letter-spacing: 4px; font-weight: 700; text-align: center; }
 .join-row button { width: auto; white-space: nowrap; }
-.error { color: var(--err); min-height: 18px; margin: 10px 0 0; font-size: 14px; text-align: center; }
+.error { color: var(--danger); min-height: 18px; margin: 10px 0 0; font-size: 14px; text-align: center; }
 
 .rules { margin: 18px 4px; color: var(--muted); }
 .rules summary { cursor: pointer; color: var(--ink); font-weight: 600; }
 .rules ul { line-height: 1.6; font-size: 14px; padding-left: 18px; }
-.footnote { text-align: center; color: #6b7196; font-size: 12px; margin-top: 18px; }
+.rules b { color: var(--ink); }
+.footnote { text-align: center; color: var(--faint); font-size: 12px; margin-top: 18px; }
 
-/* ===== Game ===== */
-.topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-.room-info { font-weight: 700; letter-spacing: 2px; color: var(--muted); }
-.status { text-align: center; font-size: 18px; font-weight: 700; min-height: 26px; margin-bottom: 12px; }
-.status.you { color: var(--p0); }
-.status.opp { color: var(--p1); }
+/* ===================== Game ===================== */
+#game { display: flex; flex-direction: column; align-items: center; gap: 18px; }
 
-.board-wrap { display: flex; justify-content: center; }
-.board {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  grid-template-rows: repeat(7, 1fr);
-  gap: 4px;
-  width: min(92vw, 480px); aspect-ratio: 1 / 1;
-  background: #0c0f1c; padding: 8px; border-radius: 14px; border: 1px solid var(--line);
-  touch-action: manipulation;
+.topbar {
+  width: 100%; max-width: 620px;
+  display: flex; align-items: center; justify-content: space-between;
 }
-.cell { min-width: 0; min-height: 0; }
-.cell {
-  position: relative; border-radius: 8px; background: #151a30;
-  display: flex; align-items: center; justify-content: center;
+.room-info { font-weight: 700; letter-spacing: 2px; color: var(--muted); font-size: 14px; }
+
+/* header label + dynamic help line, echoing the design */
+.headline { display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap; justify-content: center; text-align: center; }
+.headline .kicker {
+  font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 700;
 }
-.cell.home0 { background: #14203a; }
-.cell.home1 { background: #33202a; }
-.cell.selectable { outline: 2px solid var(--gold); cursor: pointer; }
-.cell.target { cursor: pointer; }
-.cell.target::after {
+.status { color: var(--faint); font-size: 14px; font-weight: 500; min-height: 20px; }
+.status.you { color: var(--ink); font-weight: 600; }
+.status.opp { color: var(--faint); }
+.status.win { color: var(--ok); font-weight: 700; }
+.status.lose { color: var(--danger); font-weight: 700; }
+
+.controls { display: flex; gap: 10px; }
+.controls button { width: auto; }
+
+/* ---------- 3D board scene ---------- */
+.board-viewport {
+  width: 100%; display: flex; justify-content: center;
+}
+/* .scene is the reserved (visual-sized) box, centred by the viewport flex.
+   .scene-inner holds the full-size 804px board and is scaled with a transform;
+   because transforms don't affect layout, JS positions/sizes the box to match. */
+.scene { position: relative; }
+.scene-inner {
+  position: absolute; top: 0; left: 0;
+  transform-origin: top left;
+  perspective: 2200px;
+  perspective-origin: 50% 30%;
+  will-change: transform;
+}
+.tilt {
+  transform: rotateX(50deg);
+  transform-style: preserve-3d;
+}
+.plate {
+  position: relative;
+  width: 804px; height: 804px;
+  background: linear-gradient(160deg, var(--board-a), var(--board-b));
+  border-radius: 22px;
+  box-shadow: 0 50px 90px rgba(0,0,0,.45), inset 0 2px 3px rgba(255,255,255,.08);
+  transform-style: preserve-3d;
+}
+
+/* wells */
+.well {
+  position: absolute; width: 100px; height: 100px; border-radius: 8px;
+  background: var(--well);
+  box-shadow: inset 0 7px 12px rgba(0,0,0,.65), inset 0 -1px 2px rgba(255,255,255,.04);
+}
+.well.rim {
+  background: var(--rim);
+  box-shadow: inset 0 1px 2px rgba(255,255,255,.05);
+}
+.well.selectable { cursor: pointer; }
+.well.target { cursor: pointer; }
+/* highlight rings (drawn on the tilted plane) */
+.well.target::after,
+.well.confirm::after {
   content: ""; position: absolute; inset: 0; border-radius: 8px;
-  border: 2px dashed var(--ok); background: rgba(87,217,152,.12);
+  border: 2px dashed var(--ok); background: rgba(70,201,138,.16);
 }
-.cell.target.capture::after { border-color: var(--err); background: rgba(255,123,138,.16); }
-.cell.target.jump::after { border-color: var(--accent); background: rgba(110,168,254,.16); }
-.cell.lastfrom { box-shadow: inset 0 0 0 2px rgba(255,215,106,.35); }
-.cell.lastto { box-shadow: inset 0 0 0 2px rgba(255,215,106,.7); }
-.cell.hint { outline: 3px solid var(--gold); animation: pulse 1s ease-in-out 3; }
-@keyframes pulse { 50% { outline-color: #fff2c0; } }
-/* squares already traversed in the move being built (tilt/jump chain) */
-.cell.path { box-shadow: inset 0 0 0 2px rgba(110,168,254,.55); }
-/* the current end square when the partial move is complete and can be confirmed */
-.cell.confirm { cursor: pointer; }
-.cell.confirm::after {
-  content: ""; position: absolute; inset: 0; border-radius: 8px;
-  border: 2px solid var(--gold); background: rgba(255,215,106,.18);
-  animation: pulse 1.1s ease-in-out infinite;
+.well.target.jump::after { border-color: var(--jump); background: rgba(90,169,255,.18); }
+.well.target.capture::after { border-color: var(--danger); background: rgba(232,87,76,.20); }
+.well.confirm::after {
+  border-style: solid; border-color: var(--gold); background: rgba(255,200,90,.22);
+  animation: pulse-ring 1.1s ease-in-out infinite;
+}
+.well.path { box-shadow: inset 0 0 0 2px rgba(90,169,255,.6); }
+.well.lastfrom { box-shadow: inset 0 0 0 2px rgba(255,200,90,.35); }
+.well.lastto { box-shadow: inset 0 0 0 2px rgba(255,200,90,.8); }
+.well.hint::after {
+  content: ""; position: absolute; inset: -2px; border-radius: 10px;
+  border: 3px solid var(--gold); animation: pulse-ring 1s ease-in-out 4;
 }
 
+/* dice layer sits above wells; only die wrappers catch clicks */
+.dice-layer {
+  position: absolute; left: 28px; top: 28px; width: 748px; height: 748px;
+  transform-style: preserve-3d; pointer-events: none;
+}
 .die {
-  width: 82%; height: 82%; border-radius: 22%; position: relative;
-  display: grid; grid-template-columns: repeat(3,1fr); grid-template-rows: repeat(3,1fr);
-  padding: 12%; box-shadow: 0 3px 0 rgba(0,0,0,.35), inset 0 2px 3px rgba(255,255,255,.25);
+  position: absolute; width: 100px; height: 100px;
+  pointer-events: auto; cursor: pointer;
+  transform-style: preserve-3d;
+  transition: left .45s cubic-bezier(.22,.9,.24,1), top .45s cubic-bezier(.22,.9,.24,1),
+              filter .2s ease, opacity .3s ease;
 }
-.die.p0 { background: linear-gradient(160deg, #6ea0ff, #3f6fd8); }
-.die.p1 { background: linear-gradient(160deg, #ff7d89, #e0424f); }
-.pip { border-radius: 50%; background: #10131f; align-self: center; justify-self: center; width: 74%; height: 74%; }
-.die.p1 .pip { background: #2a0d12; }
+.die.no-anim { transition: none; }
+.die.selected { filter: drop-shadow(0 0 10px rgba(255,200,90,.95)); }
+.die.movable .cube { cursor: pointer; }
+.die.removing { opacity: 0; transform: scale(.4); pointer-events: none; }
+
+.die-shadow {
+  position: absolute; left: 10px; top: 74px; width: 80px; height: 22px; border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(0,0,0,.42), rgba(0,0,0,0) 70%);
+  filter: blur(1.5px); pointer-events: none;
+}
+.cube-holder {
+  position: absolute; left: 8px; top: 8px; width: 84px; height: 84px;
+  transform-style: preserve-3d; transform: translateZ(42px);
+}
+.cube {
+  position: relative; width: 84px; height: 84px;
+  transform-style: preserve-3d;
+  transition: transform .6s cubic-bezier(.34,1.2,.5,1);
+}
+.cube.no-anim { transition: none; }
+.face {
+  position: absolute; inset: 0; width: 84px; height: 84px; border-radius: 14px;
+  box-sizing: border-box; padding: 13px;
+  display: grid; grid-template-columns: repeat(3,1fr); grid-template-rows: repeat(3,1fr);
+  /* No backface-visibility:hidden — the engine's two seats use mirror-chirality dice
+     (one orientation matrix is a reflection), which would cull the wrong faces.
+     Opaque faces + preserve-3d depth sorting show the correct face either way. */
+}
+/* colour by ownership */
+.die.dark .face { background: var(--die-dark); box-shadow: inset 0 0 0 1px rgba(255,255,255,.06); }
+.die.light .face { background: var(--die-light); box-shadow: inset 0 0 0 1px rgba(0,0,0,.06); }
+.die.dark .pip { background: var(--die-dark-pip); }
+.die.light .pip { background: var(--die-light-pip); }
+.pip { width: 15px; height: 15px; border-radius: 50%; place-self: center; }
+
 /* pip positions in a 3x3 grid */
-.p-tl { grid-area: 1/1; } .p-tc { grid-area: 1/2; } .p-tr { grid-area: 1/3; }
-.p-ml { grid-area: 2/1; } .p-mc { grid-area: 2/2; } .p-mr { grid-area: 2/3; }
-.p-bl { grid-area: 3/1; } .p-bc { grid-area: 3/2; } .p-br { grid-area: 3/3; }
+.p-tl { grid-column: 1; grid-row: 1; } .p-tc { grid-column: 2; grid-row: 1; } .p-tr { grid-column: 3; grid-row: 1; }
+.p-ml { grid-column: 1; grid-row: 2; } .p-mc { grid-column: 2; grid-row: 2; } .p-mr { grid-column: 3; grid-row: 2; }
+.p-bl { grid-column: 1; grid-row: 3; } .p-bc { grid-column: 2; grid-row: 3; } .p-br { grid-column: 3; grid-row: 3; }
 
-.die.selected { transform: scale(1.05); box-shadow: 0 0 0 3px var(--gold), 0 4px 0 rgba(0,0,0,.35); }
+/* face placement transforms (which value sits on which cube side) */
+.f1 { transform: rotateY(0deg)    translateZ(42px); }
+.f6 { transform: rotateY(180deg)  translateZ(42px); }
+.f2 { transform: rotateY(90deg)   translateZ(42px); }
+.f5 { transform: rotateY(-90deg)  translateZ(42px); }
+.f3 { transform: rotateX(90deg)   translateZ(42px); }
+.f4 { transform: rotateX(-90deg)  translateZ(42px); }
 
-.scorebar { display: flex; justify-content: space-between; margin: 14px 4px 0; }
-.score { display: flex; align-items: center; gap: 8px; color: var(--muted); font-weight: 600; }
-.score .dot { width: 12px; height: 12px; border-radius: 50%; }
-.score.you .dot { background: var(--p0); }
-.score.opp .dot { background: var(--p1); }
+@keyframes pulse-ring { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
 
-.game-over { text-align: center; margin-top: 16px; }
-.game-over #go-text { font-size: 22px; font-weight: 800; margin-bottom: 12px; }
+/* ---------- scorebar ---------- */
+.scorebar { width: 100%; max-width: 620px; display: flex; justify-content: space-between; }
+.score { display: flex; align-items: center; gap: 8px; color: var(--muted); font-weight: 600; font-size: 15px; }
+.score .dot { width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(0,0,0,.15); }
+.score.you .dot { background: var(--die-light); }
+.score.opp .dot { background: var(--die-dark); }
+
+/* ---------- panels ---------- */
+.game-over {
+  text-align: center; background: var(--card); border-radius: 16px; padding: 20px 28px;
+  box-shadow: var(--shadow-lg); border: 1px solid rgba(0,0,0,.06);
+}
+.game-over #go-text { font-size: 22px; font-weight: 800; margin-bottom: 14px; color: var(--ink); }
 .game-over.win #go-text { color: var(--ok); }
-.game-over.lose #go-text { color: var(--err); }
+.game-over.lose #go-text { color: var(--danger); }
 .game-over button { width: auto; padding: 12px 28px; }
 
-.waiting { text-align: center; margin-top: 20px; color: var(--muted); }
+.waiting {
+  text-align: center; color: var(--muted);
+  background: var(--card); border-radius: 16px; padding: 20px 28px;
+  box-shadow: var(--shadow-lg); border: 1px solid rgba(0,0,0,.06);
+}
 .big-code {
-  font-size: 44px; font-weight: 800; letter-spacing: 10px; color: var(--gold);
+  font-size: 44px; font-weight: 800; letter-spacing: 10px; color: var(--ink);
   margin: 10px 0; user-select: all;
 }
 .muted { color: var(--muted); }
