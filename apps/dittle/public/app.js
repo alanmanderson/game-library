@@ -13,8 +13,80 @@ let ws = null;
 let me = 0;                 // my seat
 let mode = 'pvp';
 let current = null;         // latest state message
-let selectedFrom = null;    // index of my selected die
-let hintCells = null;       // { from, to } to highlight
+let selectedFrom = null;    // index of my selected die (start of the move being built)
+let pathTilt = null;        // the single tilt direction chosen so far, or null
+let pathJumps = [];         // jump-hop directions chosen so far
+let currentPos = null;      // current end square of the partial move
+let hintCells = null;       // { from, to, path } to highlight
+
+function resetSelection() {
+  selectedFrom = null; pathTilt = null; pathJumps = []; currentPos = null;
+}
+
+// ---------- Move-path helpers (build tilt / jump-chain / tilt+jump moves) ----------
+const DELTA = { N: [1, 0], S: [-1, 0], E: [0, 1], W: [0, -1] };
+function stepIdx(i, dir) {
+  const [dr, dc] = DELTA[dir];
+  const r = Math.floor(i / SIZE) + dr, c = (i % SIZE) + dc;
+  if (r < 0 || r >= SIZE || c < 0 || c >= SIZE) return -1;
+  return r * SIZE + c;
+}
+// A move's ordered steps: [tilt?] then each jump hop.
+function stepSeq(m) {
+  const s = [];
+  if (m.tilt) s.push({ t: 'tilt', d: m.tilt });
+  for (const d of (m.jumps || [])) s.push({ t: 'jump', d });
+  return s;
+}
+function partialSteps() {
+  const s = [];
+  if (pathTilt) s.push({ t: 'tilt', d: pathTilt });
+  for (const d of pathJumps) s.push({ t: 'jump', d });
+  return s;
+}
+function isPrefix(p, seq) {
+  if (p.length > seq.length) return false;
+  for (let i = 0; i < p.length; i++) if (p[i].t !== seq[i].t || p[i].d !== seq[i].d) return false;
+  return true;
+}
+// Legal moves that still match the path built so far.
+function reachableMoves() {
+  const p = partialSteps();
+  return (current?.legalMoves || []).filter((m) => m.from === selectedFrom && isPrefix(p, stepSeq(m)));
+}
+// Map of next reachable square -> { type, dir, capture } from the current partial.
+function nextStepMap() {
+  const p = partialSteps();
+  const map = new Map();
+  for (const m of reachableMoves()) {
+    const seq = stepSeq(m);
+    if (seq.length <= p.length) continue;
+    const step = seq[p.length];
+    const land = m.path[p.length];
+    if (map.has(land)) continue;
+    const capture = step.t === 'tilt' && seq.length === p.length + 1 && !!current.state.board[land];
+    map.set(land, { type: step.t, dir: step.d, capture });
+  }
+  return map;
+}
+// The partial path is itself a complete, legal move.
+function canCommit() {
+  const p = partialSteps();
+  if (p.length === 0) return false;
+  return reachableMoves().some((m) => stepSeq(m).length === p.length);
+}
+// Squares visited after `from` in the partial path (for highlighting).
+function partialPathSquares() {
+  const sq = [];
+  let pos = selectedFrom;
+  if (pathTilt) { pos = stepIdx(pos, pathTilt); sq.push(pos); }
+  for (const d of pathJumps) { pos = stepIdx(stepIdx(pos, d), d); sq.push(pos); }
+  return sq;
+}
+function commitMove() {
+  sendMsg({ type: 'move', move: { from: selectedFrom, tilt: pathTilt, jumps: pathJumps.slice() } });
+  resetSelection();
+}
 
 // ---------- Networking ----------
 function connect() {
@@ -42,12 +114,12 @@ function onMessage(ev) {
     case 'state':
       me = msg.you; mode = msg.mode;
       current = msg;
-      selectedFrom = null;
+      resetSelection();
       render();
       break;
     case 'hint':
       if (msg.move) {
-        hintCells = { from: msg.move.from, to: msg.move.to };
+        hintCells = { from: msg.move.from, to: msg.move.to, path: msg.move.path || [] };
         render();
       }
       break;
@@ -156,17 +228,13 @@ function render() {
     cells.forEach((c) => (c.dataset.built = String(me)));
   }
 
-  // Legal-move map: from -> [{to, dir, capture}]
-  const fromMap = new Map();
-  for (const m of (legalMoves || [])) {
-    if (!fromMap.has(m.from)) fromMap.set(m.from, []);
-    const occ = state.board[m.to];
-    fromMap.get(m.from).push({ ...m, capture: !!occ });
-  }
+  // Which of my dice can start a move.
+  const movableFrom = new Set((legalMoves || []).map((m) => m.from));
 
-  // Paint cells
-  const targets = selectedFrom !== null ? (fromMap.get(selectedFrom) || []) : [];
-  const targetTo = new Map(targets.map((t) => [t.to, t]));
+  // Path being built: next-step targets, traversed squares, and whether it can commit.
+  const nexts = selectedFrom !== null ? nextStepMap() : new Map();
+  const pathSquares = selectedFrom !== null ? new Set(partialPathSquares()) : new Set();
+  const commitReady = selectedFrom !== null && canCommit();
 
   for (const cell of cells) {
     const real = Number(cell.dataset.real);
@@ -175,15 +243,20 @@ function render() {
     if (r === 0) cell.classList.add('home0');
     if (r === SIZE - 1) cell.classList.add('home1');
 
-    // last move highlight
+    // last move highlight (origin, destination, and any intermediate path squares)
     if (state.lastMove) {
       if (state.lastMove.from === real) cell.classList.add('lastfrom');
       if (state.lastMove.to === real) cell.classList.add('lastto');
+      if ((state.lastMove.path || []).includes(real) && state.lastMove.to !== real) {
+        cell.classList.add('path');
+      }
     }
     // hint highlight
-    if (hintCells && (hintCells.from === real || hintCells.to === real)) {
+    if (hintCells && (hintCells.from === real || hintCells.to === real || (hintCells.path || []).includes(real))) {
       cell.classList.add('hint');
     }
+    // squares already traversed in the move being built
+    if (pathSquares.has(real)) cell.classList.add('path');
 
     cell.innerHTML = '';
     const die = state.board[real];
@@ -191,18 +264,20 @@ function render() {
       const de = dieEl(die);
       if (real === selectedFrom) de.classList.add('selected');
       cell.appendChild(de);
-      // your movable dice are selectable on your turn
-      if (yourTurn && die.player === me && fromMap.has(real)) {
+      // your movable dice are selectable on your turn (before a move is started)
+      if (yourTurn && die.player === me && selectedFrom === null && movableFrom.has(real)) {
         cell.classList.add('selectable');
       }
     }
-    // movement targets
-    if (targetTo.has(real)) {
-      const t = targetTo.get(real);
+    // next-step targets of the move being built
+    if (nexts.has(real)) {
+      const t = nexts.get(real);
       cell.classList.add('target');
-      if (t.jump) cell.classList.add('jump');
+      if (t.type === 'jump') cell.classList.add('jump');
       else if (t.capture) cell.classList.add('capture');
     }
+    // the current end square, when the built move is complete and confirmable
+    if (commitReady && real === currentPos) cell.classList.add('confirm');
   }
 
   // Status text
@@ -216,7 +291,15 @@ function render() {
   } else if (waiting) {
     statusEl.textContent = '';
   } else if (yourTurn) {
-    statusEl.textContent = 'Your turn';
+    if (selectedFrom !== null && partialSteps().length > 0) {
+      statusEl.textContent = commitReady
+        ? (nexts.size > 0 ? 'Tap the glowing square to confirm, or keep jumping' : 'Tap the glowing square to confirm')
+        : 'Continue the jump';
+    } else if (selectedFrom !== null) {
+      statusEl.textContent = 'Choose where to tilt or jump';
+    } else {
+      statusEl.textContent = 'Your turn';
+    }
     statusEl.classList.add('you');
   } else {
     statusEl.textContent = mode === 'ai' ? 'Computer is thinking…' : "Opponent's turn";
@@ -261,32 +344,49 @@ function render() {
 }
 
 // ---------- Interaction ----------
+// A move is built up one step at a time: pick a die, then tap tilt/jump targets.
+// Simple moves (a tilt, or a jump with no possible continuation) commit instantly;
+// extendable jumps show a glowing "confirm" square you tap to finish.
 function onCellClick(real) {
   if (!current || current.state.status !== 'playing' || !current.yourTurn) return;
   hintCells = null;
   const { state, legalMoves } = current;
+  const die = state.board[real];
+  const isMyMovableDie = die && die.player === me && (legalMoves || []).some((m) => m.from === real);
 
-  // Clicking a target of the selected die -> make the move.
-  if (selectedFrom !== null) {
-    const move = (legalMoves || []).find((m) => m.from === selectedFrom && m.to === real);
-    if (move) {
-      sendMsg({ type: 'move', move: { from: move.from, to: move.to } });
-      selectedFrom = null;
-      return;
-    }
+  // Nothing selected yet: select one of my movable dice.
+  if (selectedFrom === null) {
+    if (isMyMovableDie) { selectedFrom = real; pathTilt = null; pathJumps = []; currentPos = real; render(); }
+    return;
   }
 
-  // Clicking one of my movable dice -> select it.
-  const die = state.board[real];
-  const canMove = (legalMoves || []).some((m) => m.from === real);
-  if (die && die.player === me && canMove) {
-    selectedFrom = (selectedFrom === real) ? null : real;
+  // Clicking the current end square: confirm a complete move, or deselect the origin.
+  if (real === currentPos) {
+    if (canCommit()) commitMove();
+    else { resetSelection(); }
     render();
     return;
   }
 
-  // Otherwise deselect.
-  selectedFrom = null;
+  // Clicking a valid next step: extend the path (and auto-commit if it can't continue).
+  const nexts = nextStepMap();
+  if (nexts.has(real)) {
+    const step = nexts.get(real);
+    if (step.type === 'tilt') pathTilt = step.dir; else pathJumps.push(step.dir);
+    currentPos = real;
+    if (nextStepMap().size === 0 && canCommit()) { commitMove(); }
+    render();
+    return;
+  }
+
+  // Clicking another of my movable dice before committing: switch selection.
+  if (partialSteps().length === 0 && isMyMovableDie) {
+    selectedFrom = real; currentPos = real; render();
+    return;
+  }
+
+  // Otherwise cancel the in-progress move.
+  resetSelection();
   render();
 }
 

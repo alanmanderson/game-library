@@ -59,6 +59,13 @@ Single `ws` endpoint on the same HTTP server. Client → server messages (JSON, 
 `hint`, `rematch`. Server → client: `created`, `joined`, `state` (authoritative state
 plus that seat's `legalMoves` and `yourTurn`), `hint`, `error`, `opponentLeft`.
 
+A **move** is a path: `{ from, tilt, jumps }` where `tilt` is a single tilt direction
+(`'N'|'S'|'E'|'W'`) or `null`, and `jumps` is an array of jump-hop directions (each hop
+leaps one die, and the chain may turn). This encodes all move kinds — a plain tilt
+(`jumps: []`), a jump chain (`tilt: null`), or a tilt-then-jump. The server validates a
+submitted move by `moveKey` identity against `legalMoves` (two different paths can share
+a start/end square, so matching on `from`/`to` alone is insufficient).
+
 ## Environment variables
 
 | Var | Description |

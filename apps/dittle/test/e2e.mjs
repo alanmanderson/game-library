@@ -38,7 +38,7 @@ async function testAiGame() {
       const lm = st.legalMoves;
       // pick a legal move that makes forward progress if possible
       const fwd = lm.find((m) => m.dir === 'N') || lm[Math.floor(Math.random() * lm.length)];
-      c.send({ type: 'move', move: { from: fwd.from, dir: fwd.dir } });
+      c.send({ type: 'move', move: { from: fwd.from, tilt: fwd.tilt, jumps: fwd.jumps } });
       moves++;
     }
     st = await waitFor(c, (m) => m.type === 'state');
@@ -62,7 +62,7 @@ async function testPvp() {
   // Alice (seat 0) moves first.
   let aState = await waitFor(a, (m) => m.type === 'state' && m.yourTurn);
   const mv = aState.legalMoves[0];
-  a.send({ type: 'move', move: { from: mv.from, dir: mv.dir } });
+  a.send({ type: 'move', move: { from: mv.from, tilt: mv.tilt, jumps: mv.jumps } });
   // Bob should now see it's his turn.
   const bState = await waitFor(b, (m) => m.type === 'state' && m.yourTurn);
   if (bState.state.moveCount !== 1) throw new Error('pvp move not applied');
