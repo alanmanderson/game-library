@@ -71,10 +71,19 @@
         <button id="btn-hint" class="ghost">💡 Hint</button>
       </header>
 
-      <div id="status" class="status"></div>
+      <div class="headline">
+        <span class="kicker">Dittle</span>
+        <div id="status" class="status"></div>
+      </div>
 
-      <div class="board-wrap">
-        <div id="board" class="board"></div>
+      <div class="board-viewport" id="sceneWrap">
+        <div class="scene" id="scene">
+          <div class="scene-inner" id="sceneInner">
+            <div class="tilt" id="tilt">
+              <div id="board" class="plate"></div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="scorebar">

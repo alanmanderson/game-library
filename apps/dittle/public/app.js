@@ -4,9 +4,13 @@ import { SIZE, countDice } from '/shared/engine.js';
 const $ = (id) => document.getElementById(id);
 const homeEl = $('home');
 const gameEl = $('game');
-const boardEl = $('board');
+const boardEl = $('board');       // the tilted plate
 const statusEl = $('status');
 const homeError = $('home-error');
+const sceneEl = $('scene');
+const sceneInner = $('sceneInner');
+const tiltEl = $('tilt');
+const sceneWrap = $('sceneWrap');
 
 // ---------- State ----------
 let ws = null;
@@ -115,6 +119,7 @@ function onMessage(ev) {
       me = msg.you; mode = msg.mode;
       current = msg;
       resetSelection();
+      syncDice(msg.state);
       render();
       break;
     case 'hint':
@@ -140,6 +145,7 @@ function onMessage(ev) {
 function showGame() {
   homeEl.classList.add('hidden');
   gameEl.classList.remove('hidden');
+  layout();
 }
 function showHome() {
   gameEl.classList.add('hidden');
@@ -150,41 +156,65 @@ function showHome() {
 
 let statusTimer = null;
 function flashStatus(text) {
-  const prev = statusEl.textContent;
-  const prevClass = statusEl.className;
   statusEl.textContent = text;
   statusEl.className = 'status';
   clearTimeout(statusTimer);
   statusTimer = setTimeout(() => { if (current) render(); }, 1600);
 }
 
-// ---------- Board display mapping ----------
-// Map a screen cell (sr,sc; screen row 0 = top) to a real board index, so that
-// "you" always sit at the bottom and move up the screen.
+// ---------- Board geometry (matches the Dice Board design) ----------
+const CELL = 100, GAP = 8, STEP = CELL + GAP, PAD = 28;
+
+// Map a screen cell (sr,sc; screen row 0 = far/top) to a real board index, so that
+// "you" always sit at the bottom of the board and move up-screen toward the goal.
 function realIndex(sr, sc) {
-  if (me === 0) return (6 - sr) * SIZE + sc;      // real (6-sr, sc)
-  return sr * SIZE + (6 - sc);                    // real (sr, 6-sc)
+  if (me === 0) return (SIZE - 1 - sr) * SIZE + sc;   // real (6-sr, sc)
+  return sr * SIZE + (SIZE - 1 - sc);                 // real (sr, 6-sc)
+}
+// Inverse: real index -> on-screen cell.
+function screenPos(real) {
+  const r = Math.floor(real / SIZE), c = real % SIZE;
+  if (me === 0) return { sr: SIZE - 1 - r, sc: c };
+  return { sr: r, sc: SIZE - 1 - c };
 }
 
-// Build the 49 cells once.
-const cells = [];
-function buildBoard() {
-  boardEl.innerHTML = '';
-  cells.length = 0;
-  for (let sr = 0; sr < SIZE; sr++) {
-    for (let sc = 0; sc < SIZE; sc++) {
-      const real = realIndex(sr, sc);
-      const cell = document.createElement('div');
-      cell.className = 'cell';
-      cell.dataset.real = real;
-      const r = Math.floor(real / SIZE);
-      if (r === 0) cell.classList.add('home0');
-      if (r === SIZE - 1) cell.classList.add('home1');
-      cell.addEventListener('click', () => onCellClick(real));
-      boardEl.appendChild(cell);
-      cells.push(cell);
+// ---------- 3D die geometry ----------
+// A die orientation is {player, up, north, east}. A physical die is a fixed cube;
+// we place value k's pip-face on a fixed side and then rotate the WHOLE cube so the
+// right value faces up / north / east. Because tilting is a real 90° roll, changing
+// orientation animates as the die tumbling to its new face.
+//
+// Fixed per-value local face normals (opposite faces sum to 7). Handedness is chosen
+// so a valid engine die yields a proper rotation (det +1).
+const NORMAL = {
+  1: [0, 0, 1], 6: [0, 0, -1],
+  2: [1, 0, 0], 5: [-1, 0, 0],
+  3: [0, -1, 0], 4: [0, 1, 0],
+};
+// Board-frame target axes: up -> +Z (out of plate), north -> -Y (up-screen), east -> +X.
+const AX_U = [0, 0, 1], AX_N = [0, -1, 0], AX_E = [1, 0, 0];
+
+// Build matrix3d(...) that orients a cube so faces `u`,`n`,`e` point up/north/east.
+function orientMatrix(u, n, e) {
+  const nu = NORMAL[u], nn = NORMAL[n], ne = NORMAL[e];
+  // R has columns [U N E]; L has columns [nu nn ne]; M = R * Lᵀ (L orthonormal).
+  const R = [
+    [AX_U[0], AX_N[0], AX_E[0]],
+    [AX_U[1], AX_N[1], AX_E[1]],
+    [AX_U[2], AX_N[2], AX_E[2]],
+  ];
+  const Lt = [nu, nn, ne]; // rows of Lᵀ
+  const M = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+  for (let i = 0; i < 3; i++)
+    for (let j = 0; j < 3; j++) {
+      let s = 0;
+      for (let k = 0; k < 3; k++) s += R[i][k] * Lt[k][j];
+      M[i][j] = s;
     }
-  }
+  // column-major matrix3d
+  return `matrix3d(${M[0][0]},${M[1][0]},${M[2][0]},0,` +
+         `${M[0][1]},${M[1][1]},${M[2][1]},0,` +
+         `${M[0][2]},${M[1][2]},${M[2][2]},0,0,0,0,1)`;
 }
 
 // Pip layout classes for each die value.
@@ -196,109 +226,247 @@ const PIPS = {
   5: ['p-tl', 'p-tr', 'p-mc', 'p-bl', 'p-br'],
   6: ['p-tl', 'p-tr', 'p-ml', 'p-mr', 'p-bl', 'p-br'],
 };
-function dieEl(die) {
-  const d = document.createElement('div');
-  d.className = `die p${die.player}`;
-  for (const pos of PIPS[die.up]) {
+
+function makeFace(value) {
+  const face = document.createElement('div');
+  face.className = `face f${value}`;
+  for (const pos of PIPS[value]) {
     const pip = document.createElement('div');
     pip.className = `pip ${pos}`;
-    d.appendChild(pip);
+    face.appendChild(pip);
   }
-  return d;
+  return face;
 }
 
-// ---------- Render ----------
+// Create one die element (all six faces built once). Returns { el, cube }.
+function createDie() {
+  const el = document.createElement('div');
+  el.className = 'die';
+  const shadow = document.createElement('div');
+  shadow.className = 'die-shadow';
+  const holder = document.createElement('div');
+  holder.className = 'cube-holder';
+  const cube = document.createElement('div');
+  cube.className = 'cube';
+  for (const v of [1, 2, 3, 4, 5, 6]) cube.appendChild(makeFace(v));
+  holder.appendChild(cube);
+  el.appendChild(shadow);
+  el.appendChild(holder);
+  el.addEventListener('click', () => onCellClick(Number(el.dataset.real)));
+  return { el, cube };
+}
+
+function positionDie(el, sr, sc) {
+  el.style.left = sc * STEP + 'px';
+  el.style.top = sr * STEP + 'px';
+}
+
+// Orient + colour a die element from its board die (with the per-seat display flip).
+function applyDie(rec, die) {
+  const light = die.player === me;
+  rec.el.classList.toggle('light', light);
+  rec.el.classList.toggle('dark', !light);
+  // Display flip: for seat 1 the board is viewed rotated 180° about the up axis,
+  // so the north/east faces swap to their opposites.
+  const n = me === 0 ? die.north : 7 - die.north;
+  const e = me === 0 ? die.east : 7 - die.east;
+  rec.cube.style.transform = orientMatrix(die.up, n, e);
+}
+
+// ---------- Wells (sunken board squares) ----------
+let diceLayer = null;
+let wells = [];       // screen-indexed .well elements
+let builtMe = null;   // orientation the board DOM was built for
+
+function buildBoard() {
+  boardEl.innerHTML = '';
+  wells = [];
+  for (let sr = 0; sr < SIZE; sr++) {
+    for (let sc = 0; sc < SIZE; sc++) {
+      const real = realIndex(sr, sc);
+      const well = document.createElement('div');
+      well.className = 'well';
+      const rr = Math.floor(real / SIZE);
+      if (rr === 0 || rr === SIZE - 1) well.classList.add('rim');
+      well.style.left = PAD + sc * STEP + 'px';
+      well.style.top = PAD + sr * STEP + 'px';
+      well.dataset.real = real;
+      well.addEventListener('click', () => onCellClick(real));
+      boardEl.appendChild(well);
+      wells.push(well);
+    }
+  }
+  diceLayer = document.createElement('div');
+  diceLayer.className = 'dice-layer';
+  boardEl.appendChild(diceLayer);
+  elByReal = new Map();
+  builtMe = me;
+}
+
+// ---------- Persistent die elements + move animation ----------
+let elByReal = new Map();   // real index -> { el, cube }
+
+function fadeRemove(el) {
+  el.classList.add('removing');
+  setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 360);
+}
+
+function spawnDie(real, die) {
+  const rec = createDie();
+  rec.el.classList.add('no-anim');
+  rec.cube.classList.add('no-anim');
+  diceLayer.appendChild(rec.el);
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    rec.el.classList.remove('no-anim');
+    rec.cube.classList.remove('no-anim');
+  }));
+  return rec;
+}
+
+// Reconcile the dice DOM with a new authoritative board, keeping elements stable so
+// the mover slides (position transition) and rolls (cube transition) into place.
+function syncDice(state) {
+  const board = state.board;
+  const fullRebuild = builtMe !== me || elByReal.size === 0 || !state.lastMove;
+
+  if (fullRebuild) {
+    if (builtMe !== me || !diceLayer) buildBoard();
+    diceLayer.innerHTML = '';
+    const created = [];
+    elByReal = new Map();
+    for (let real = 0; real < board.length; real++) {
+      const die = board[real];
+      if (!die) continue;
+      const rec = createDie();
+      rec.el.classList.add('no-anim');
+      rec.cube.classList.add('no-anim');
+      const { sr, sc } = screenPos(real);
+      positionDie(rec.el, sr, sc);
+      rec.el.dataset.real = real;
+      applyDie(rec, die);
+      diceLayer.appendChild(rec.el);
+      elByReal.set(real, rec);
+      created.push(rec);
+    }
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      created.forEach((rec) => { rec.el.classList.remove('no-anim'); rec.cube.classList.remove('no-anim'); });
+    }));
+    return;
+  }
+
+  // Incremental: exactly one die moved (state.lastMove.from -> .to); a clash or
+  // surround may additionally remove dice anywhere.
+  const lm = state.lastMove;
+  const moverPlayer = 1 - state.turn;                 // the side that just moved
+  const moverSurvived = !!(board[lm.to] && board[lm.to].player === moverPlayer);
+  const prev = elByReal;
+  const next = new Map();
+  const used = new Set();
+  const moverRec = prev.get(lm.from) || null;
+  if (moverRec) used.add(moverRec.el);
+
+  for (let real = 0; real < board.length; real++) {
+    const die = board[real];
+    if (!die) continue;
+    let rec;
+    if (moverSurvived && real === lm.to && moverRec) {
+      rec = moverRec;
+    } else if (prev.has(real) && !used.has(prev.get(real).el)) {
+      rec = prev.get(real);
+      used.add(rec.el);
+    } else {
+      rec = spawnDie(real, die);
+    }
+    const { sr, sc } = screenPos(real);
+    positionDie(rec.el, sr, sc);
+    rec.el.dataset.real = real;
+    applyDie(rec, die);
+    next.set(real, rec);
+  }
+
+  // Anything not carried over was captured / surrounded / is a destroyed mover.
+  for (const [, rec] of prev) {
+    if (!used.has(rec.el)) fadeRemove(rec.el);
+  }
+  if (moverRec && ![...next.values()].includes(moverRec)) fadeRemove(moverRec.el);
+
+  elByReal = next;
+}
+
+// ---------- Render (highlights, status, scores, panels) ----------
 function render() {
   if (!current) return;
   const { state, legalMoves, yourTurn, occupied, names } = current;
 
-  // Waiting for opponent (pvp, seat filled but no opponent)?
   const waiting = mode === 'pvp' && (!occupied[0] || !occupied[1]);
   $('waiting').classList.toggle('hidden', !waiting);
-  if (waiting) {
-    $('waiting-code').textContent = current.code;
-  }
+  if (waiting) $('waiting-code').textContent = current.code;
 
-  // Room label
   $('room-label').textContent = mode === 'ai' ? 'VS COMPUTER' : `ROOM ${current.code}`;
 
-  // Build cells if needed (once, or if orientation changed)
-  if (cells.length === 0 || cells[0].dataset.built !== String(me)) {
-    buildBoard();
-    cells.forEach((c) => (c.dataset.built = String(me)));
-  }
+  if (builtMe !== me || wells.length === 0) buildBoard();
 
-  // Which of my dice can start a move.
   const movableFrom = new Set((legalMoves || []).map((m) => m.from));
-
-  // Path being built: next-step targets, traversed squares, and whether it can commit.
   const nexts = selectedFrom !== null ? nextStepMap() : new Map();
   const pathSquares = selectedFrom !== null ? new Set(partialPathSquares()) : new Set();
   const commitReady = selectedFrom !== null && canCommit();
 
-  for (const cell of cells) {
-    const real = Number(cell.dataset.real);
-    cell.className = 'cell';
-    const r = Math.floor(real / SIZE);
-    if (r === 0) cell.classList.add('home0');
-    if (r === SIZE - 1) cell.classList.add('home1');
+  // Wells: reset then apply highlight classes.
+  for (const well of wells) {
+    const real = Number(well.dataset.real);
+    const rr = Math.floor(real / SIZE);
+    well.className = 'well' + (rr === 0 || rr === SIZE - 1 ? ' rim' : '');
 
-    // last move highlight (origin, destination, and any intermediate path squares)
     if (state.lastMove) {
-      if (state.lastMove.from === real) cell.classList.add('lastfrom');
-      if (state.lastMove.to === real) cell.classList.add('lastto');
-      if ((state.lastMove.path || []).includes(real) && state.lastMove.to !== real) {
-        cell.classList.add('path');
-      }
+      if (state.lastMove.from === real) well.classList.add('lastfrom');
+      if (state.lastMove.to === real) well.classList.add('lastto');
+      if ((state.lastMove.path || []).includes(real) && state.lastMove.to !== real) well.classList.add('path');
     }
-    // hint highlight
     if (hintCells && (hintCells.from === real || hintCells.to === real || (hintCells.path || []).includes(real))) {
-      cell.classList.add('hint');
+      well.classList.add('hint');
     }
-    // squares already traversed in the move being built
-    if (pathSquares.has(real)) cell.classList.add('path');
+    if (pathSquares.has(real)) well.classList.add('path');
 
-    cell.innerHTML = '';
-    const die = state.board[real];
-    if (die) {
-      const de = dieEl(die);
-      if (real === selectedFrom) de.classList.add('selected');
-      cell.appendChild(de);
-      // your movable dice are selectable on your turn (before a move is started)
-      if (yourTurn && die.player === me && selectedFrom === null && movableFrom.has(real)) {
-        cell.classList.add('selectable');
-      }
+    const under = state.board[real];
+    if (yourTurn && under && under.player === me && selectedFrom === null && movableFrom.has(real)) {
+      well.classList.add('selectable');
     }
-    // next-step targets of the move being built
     if (nexts.has(real)) {
       const t = nexts.get(real);
-      cell.classList.add('target');
-      if (t.type === 'jump') cell.classList.add('jump');
-      else if (t.capture) cell.classList.add('capture');
+      well.classList.add('target');
+      if (t.type === 'jump') well.classList.add('jump');
+      else if (t.capture) well.classList.add('capture');
     }
-    // the current end square, when the built move is complete and confirmable
-    if (commitReady && real === currentPos) cell.classList.add('confirm');
+    if (commitReady && real === currentPos) well.classList.add('confirm');
   }
 
-  // Status text
+  // Dice: selection glow + movable cursor.
+  for (const [real, rec] of elByReal) {
+    rec.el.classList.toggle('selected', real === selectedFrom);
+    const under = state.board[real];
+    const movable = yourTurn && under && under.player === me && selectedFrom === null && movableFrom.has(real);
+    rec.el.classList.toggle('movable', !!movable);
+  }
+
+  // Status / help line
   statusEl.className = 'status';
   if (state.status === 'won') {
     const iWon = state.winner === me;
     statusEl.textContent = iWon ? 'You win! 🎉' : 'You lose.';
-    statusEl.classList.add(iWon ? 'you' : 'opp');
+    statusEl.classList.add(iWon ? 'win' : 'lose');
   } else if (state.status === 'draw') {
     statusEl.textContent = "It's a draw.";
   } else if (waiting) {
-    statusEl.textContent = '';
+    statusEl.textContent = 'Waiting for an opponent…';
   } else if (yourTurn) {
     if (selectedFrom !== null && partialSteps().length > 0) {
       statusEl.textContent = commitReady
-        ? (nexts.size > 0 ? 'Tap the glowing square to confirm, or keep jumping' : 'Tap the glowing square to confirm')
+        ? (nexts.size > 0 ? 'Tap the glowing well to confirm, or keep jumping' : 'Tap the glowing well to confirm')
         : 'Continue the jump';
     } else if (selectedFrom !== null) {
       statusEl.textContent = 'Choose where to tilt or jump';
     } else {
-      statusEl.textContent = 'Your turn';
+      statusEl.textContent = 'Your turn — tap a die';
     }
     statusEl.classList.add('you');
   } else {
@@ -306,12 +474,10 @@ function render() {
     statusEl.classList.add('opp');
   }
 
-  // Scores (dice remaining). Dot colors follow each seat's actual die color.
+  // Scores (dice remaining).
   const oppSeat = 1 - me;
   $('score-you').textContent = `You — ${countDice(state.board, me)} dice`;
   $('score-opp').textContent = `${mode === 'ai' ? 'Computer' : (names?.[oppSeat] || 'Opponent')} — ${countDice(state.board, oppSeat)} dice`;
-  document.querySelector('.score.you .dot').style.background = `var(--p${me})`;
-  document.querySelector('.score.opp .dot').style.background = `var(--p${oppSeat})`;
 
   // Game over panel
   const go = $('game-over');
@@ -339,14 +505,61 @@ function render() {
     go.classList.add('hidden');
   }
 
-  // Hint button only usable on your turn
   $('btn-hint').disabled = !(yourTurn && state.status === 'playing');
+  layout();
 }
+
+// ---------- Responsive scale of the fixed-size 3D scene ----------
+// The board is a fixed 804px 3D scene scaled to fit. Transforms don't reserve
+// layout space, so we size the .scene box to the board's real rendered extent
+// (measured post-tilt/-scale) and position the scaled inner to sit inside it.
+const VPAD = 8;
+// Union of the plate and every die (dice pop out via translateZ, so the plate's
+// own rect understates the rendered extent on all four sides).
+function boardBounds() {
+  let top = Infinity, bottom = -Infinity, left = Infinity, right = -Infinity;
+  // Measure the cubes (they carry the translateZ pop-up) rather than the flat
+  // .die wrappers, whose rects sit on the plate and understate the height.
+  const els = [tiltEl];
+  if (diceLayer) els.push(...diceLayer.querySelectorAll('.cube'));
+  for (const el of els) {
+    const r = el.getBoundingClientRect();
+    top = Math.min(top, r.top); bottom = Math.max(bottom, r.bottom);
+    left = Math.min(left, r.left); right = Math.max(right, r.right);
+  }
+  return { top, bottom, left, right, width: right - left, height: bottom - top };
+}
+function layout() {
+  if (gameEl.classList.contains('hidden')) return;
+  const avail = Math.min(window.innerWidth - 24, 660);
+  const s = Math.max(0.30, avail / 804);
+  sceneInner.style.transform = `scale(${s})`;
+  sceneInner.style.top = '0px';
+  sceneInner.style.left = '0px';
+  sceneEl.style.width = Math.ceil(804 * s) + 'px';
+  sceneEl.style.height = '4px';
+
+  // Vertical: pull the board up so its highest rendered pixel sits below the box top.
+  let bd = boardBounds();
+  let bx = sceneEl.getBoundingClientRect();
+  sceneInner.style.top = Math.round(-(bd.top - bx.top) + VPAD) + 'px';
+
+  // Reserve the true visual height and width, then centre horizontally.
+  bd = boardBounds();
+  bx = sceneEl.getBoundingClientRect();
+  sceneEl.style.height = Math.round(bd.height + VPAD * 2) + 'px';
+  sceneEl.style.width = Math.round(bd.width) + 'px';
+
+  bx = sceneEl.getBoundingClientRect();
+  bd = boardBounds();
+  const dx = (bx.left + bx.width / 2) - (bd.left + bd.width / 2);
+  sceneInner.style.left = Math.round(dx) + 'px';
+}
+window.addEventListener('resize', layout);
 
 // ---------- Interaction ----------
 // A move is built up one step at a time: pick a die, then tap tilt/jump targets.
-// Simple moves (a tilt, or a jump with no possible continuation) commit instantly;
-// extendable jumps show a glowing "confirm" square you tap to finish.
+// Simple moves commit instantly; extendable jumps show a glowing confirm well.
 function onCellClick(real) {
   if (!current || current.state.status !== 'playing' || !current.yourTurn) return;
   hintCells = null;
@@ -354,38 +567,33 @@ function onCellClick(real) {
   const die = state.board[real];
   const isMyMovableDie = die && die.player === me && (legalMoves || []).some((m) => m.from === real);
 
-  // Nothing selected yet: select one of my movable dice.
   if (selectedFrom === null) {
     if (isMyMovableDie) { selectedFrom = real; pathTilt = null; pathJumps = []; currentPos = real; render(); }
     return;
   }
 
-  // Clicking the current end square: confirm a complete move, or deselect the origin.
   if (real === currentPos) {
     if (canCommit()) commitMove();
-    else { resetSelection(); }
+    else resetSelection();
     render();
     return;
   }
 
-  // Clicking a valid next step: extend the path (and auto-commit if it can't continue).
   const nexts = nextStepMap();
   if (nexts.has(real)) {
     const step = nexts.get(real);
     if (step.type === 'tilt') pathTilt = step.dir; else pathJumps.push(step.dir);
     currentPos = real;
-    if (nextStepMap().size === 0 && canCommit()) { commitMove(); }
+    if (nextStepMap().size === 0 && canCommit()) commitMove();
     render();
     return;
   }
 
-  // Clicking another of my movable dice before committing: switch selection.
   if (partialSteps().length === 0 && isMyMovableDie) {
     selectedFrom = real; currentPos = real; render();
     return;
   }
 
-  // Otherwise cancel the in-progress move.
   resetSelection();
   render();
 }
