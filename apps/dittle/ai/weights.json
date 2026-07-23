@@ -1,0 +1,25 @@
+{
+  "weights": {
+    "material": 100,
+    "advance": 6,
+    "lead": 14,
+    "strength": 3,
+    "goalThreat": 40,
+    "vulnerability": -12,
+    "center": 1
+  },
+  "meta": {
+    "method": "self-play coordinate-ascent policy search",
+    "sweeps": 6,
+    "trainSeeds": 60,
+    "trainDepth": 2,
+    "valDepth": 3,
+    "startWinRateVsDefault": 0.5,
+    "trainWinRateVsDefault": 0.654,
+    "validationWinRateVsDefault": 0.475,
+    "accepted": false,
+    "seed": 12345,
+    "trainedSeconds": 972.1,
+    "trainedAt": "2026-07-23T07:02:06.631Z"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "dittle-web",
+  "version": "1.0.0",
+  "description": "Web-based Dittle dice battle with online rooms and a self-play-trained AI opponent",
+  "type": "module",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "train": "node ai/train.js",
+    "test": "node test/engine.test.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "ws": "^8.18.0"
+  }
+}
