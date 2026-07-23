@@ -149,7 +149,11 @@ wss.on('connection', (ws) => {
 function handleMessage(ws, msg) {
     switch (msg.type) {
       case 'create': {
-        const room = rooms.createRoom({ mode: msg.mode || 'pvp', aiDepth: msg.aiDepth || 3 });
+        // Clamp client-supplied search depth to a sane range: an unbounded
+        // depth would let a single message trigger an exponential AI search (DoS).
+        const requestedDepth = Math.floor(Number(msg.aiDepth));
+        const aiDepth = Number.isFinite(requestedDepth) ? Math.max(1, Math.min(7, requestedDepth)) : 3;
+        const room = rooms.createRoom({ mode: msg.mode === 'ai' ? 'ai' : 'pvp', aiDepth });
         room.players[0] = ws;
         if (msg.name) room.names[0] = String(msg.name).slice(0, 20);
         ws.roomCode = room.code;
