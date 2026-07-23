@@ -301,6 +301,17 @@ const games = [
         icon: "lemonade",
     },
     {
+        name: "Dittle",
+        genre: "Dice Game",
+        desc: "A two-player dice battle on a shared board. Tilt and jump your dice to break through the opponent's wall, with an AI opponent trained by self-play and alpha-beta look-ahead.",
+        url: "https://dittle.games.alanmanderson.com",
+        players: "2 players",
+        duration: "10 min",
+        bot: true,
+        color: ["#27ae60", "#1e8449"],
+        icon: "dittle",
+    },
+    {
         name: "Spades",
         genre: "Card Game",
         desc: "Classic partnership trick-taking with spades always trump. Bid wisely and work with your partner to hit your contract.",
@@ -389,6 +400,19 @@ const icons = {
     spades: `<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M32 10 C32 10 12 28 12 38 C12 44 17 48 23 46 C27 44.5 30 42 32 38 C34 42 37 44.5 41 46 C47 48 52 44 52 38 C52 28 32 10 32 10Z" fill="white" fill-opacity="0.85" stroke="white" stroke-width="1.5"/>
         <path d="M28 46 Q30 54 32 54 Q34 54 36 46" stroke="white" stroke-width="2" stroke-linecap="round" fill="none" stroke-opacity="0.6"/>
+    </svg>`,
+
+    dittle: `<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="30" y="10" width="26" height="26" rx="6" fill="white" fill-opacity="0.3" stroke="white" stroke-width="2"/>
+        <circle cx="38" cy="18" r="2.2" fill="white" fill-opacity="0.9"/>
+        <circle cx="43" cy="23" r="2.2" fill="white" fill-opacity="0.9"/>
+        <circle cx="48" cy="28" r="2.2" fill="white" fill-opacity="0.9"/>
+        <rect x="6" y="26" width="30" height="30" rx="6" fill="white" fill-opacity="0.9" stroke="white" stroke-width="2"/>
+        <circle cx="14" cy="34" r="2.6" fill="#1e8449"/>
+        <circle cx="28" cy="34" r="2.6" fill="#1e8449"/>
+        <circle cx="21" cy="41" r="2.6" fill="#1e8449"/>
+        <circle cx="14" cy="48" r="2.6" fill="#1e8449"/>
+        <circle cx="28" cy="48" r="2.6" fill="#1e8449"/>
     </svg>`,
 };
 

@@ -9,6 +9,9 @@ import { dirname, join } from 'node:path';
 import { initialState, applyMove, legalMoves } from '../shared/engine.js';
 import { bestMove, DEFAULT_WEIGHTS } from '../shared/ai.js';
 import { RoomManager } from './rooms.js';
+import { LogService, expressErrorLogger } from './logservice.js';
+
+const logService = new LogService('dittle');
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -26,6 +29,9 @@ function loadWeights() {
       }
     } catch (e) {
       console.warn('Could not parse weights.json, using defaults:', e.message);
+      logService.warn('Could not parse ai/weights.json, using default weights', {
+        error: e.message,
+      });
     }
   }
   console.log('Using default AI weights (run `npm run train` to learn better ones).');
@@ -37,6 +43,9 @@ const app = express();
 app.use(express.static(join(ROOT, 'public')));
 app.use('/shared', express.static(join(ROOT, 'shared')));
 app.get('/health', (_req, res) => res.json({ ok: true, rooms: rooms.rooms.size }));
+
+// Log unhandled route errors to the centralized log service (after all routes).
+app.use(expressErrorLogger(logService));
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
@@ -112,6 +121,32 @@ wss.on('connection', (ws) => {
     let msg;
     try { msg = JSON.parse(raw.toString()); } catch { return; }
 
+    try {
+      handleMessage(ws, msg);
+    } catch (e) {
+      logService.error('Unhandled error handling WebSocket message', {
+        error_type: e.name,
+        stack_trace: e.stack,
+        context: { messageType: msg?.type },
+      });
+      send(ws, { type: 'error', message: 'Server error.' });
+    }
+  });
+
+  ws.on('close', () => {
+    const room = rooms.getRoom(ws.roomCode);
+    if (!room) return;
+    const seat = room.players.indexOf(ws);
+    if (seat !== -1) room.players[seat] = null;
+    // Notify the other player.
+    const other = room.players[1 - seat];
+    if (other) send(other, { type: 'opponentLeft' });
+    // Clean up empty rooms.
+    if (!room.players[0] && !room.players[1]) rooms.deleteRoom(room.code);
+  });
+});
+
+function handleMessage(ws, msg) {
     switch (msg.type) {
       case 'create': {
         const room = rooms.createRoom({ mode: msg.mode || 'pvp', aiDepth: msg.aiDepth || 3 });
@@ -166,20 +201,7 @@ wss.on('connection', (ws) => {
       default:
         break;
     }
-  });
-
-  ws.on('close', () => {
-    const room = rooms.getRoom(ws.roomCode);
-    if (!room) return;
-    const seat = room.players.indexOf(ws);
-    if (seat !== -1) room.players[seat] = null;
-    // Notify the other player.
-    const other = room.players[1 - seat];
-    if (other) send(other, { type: 'opponentLeft' });
-    // Clean up empty rooms.
-    if (!room.players[0] && !room.players[1]) rooms.deleteRoom(room.code);
-  });
-});
+}
 
 server.listen(PORT, () => {
   console.log(`Dittle server listening on http://localhost:${PORT}`);

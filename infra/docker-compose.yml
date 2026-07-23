@@ -17,6 +17,7 @@ services:
       - lemonadestand
       - spades
       - telestrations
+      - dittle
       - logservice
 
   postgres:
@@ -159,6 +160,17 @@ services:
   telestrations:
     build:
       context: ../apps/telestrations
+      args:
+        GIT_SHA: ${GIT_SHA}
+    environment:
+      PORT: "8080"
+      LOG_SERVICE_URL: http://logservice:3100/api/ingest
+      LOG_SERVICE_API_KEY: ${LOG_SERVICE_API_KEY}
+    restart: unless-stopped
+
+  dittle:
+    build:
+      context: ../apps/dittle
       args:
         GIT_SHA: ${GIT_SHA}
     environment:

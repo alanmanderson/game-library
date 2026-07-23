@@ -29,6 +29,7 @@ jobs:
       lemonadestand: ${{ steps.changes.outputs.lemonadestand }}
       spades: ${{ steps.changes.outputs.spades }}
       telestrations: ${{ steps.changes.outputs.telestrations }}
+      dittle: ${{ steps.changes.outputs.dittle }}
       landing: ${{ steps.changes.outputs.landing }}
       infra-compose: ${{ steps.changes.outputs.infra-compose }}
       infra-caddyfile: ${{ steps.changes.outputs.infra-caddyfile }}
@@ -53,6 +54,8 @@ jobs:
               - 'apps/spades/**'
             telestrations:
               - 'apps/telestrations/**'
+            dittle:
+              - 'apps/dittle/**'
             landing:
               - 'apps/landing/**'
             infra-compose:
@@ -93,6 +96,7 @@ jobs:
       needs.detect-changes.outputs.lemonadestand == 'true' ||
       needs.detect-changes.outputs.spades == 'true' ||
       needs.detect-changes.outputs.telestrations == 'true' ||
+      needs.detect-changes.outputs.dittle == 'true' ||
       needs.detect-changes.outputs.landing == 'true' ||
       needs.detect-changes.outputs.infra-compose == 'true' ||
       needs.detect-changes.outputs.infra-caddyfile == 'true' ||
@@ -146,13 +150,14 @@ jobs:
           [ "${{ needs.detect-changes.outputs.lemonadestand }}" == "true" ] && SERVICES="$SERVICES lemonadestand"
           [ "${{ needs.detect-changes.outputs.spades }}" == "true" ] && SERVICES="$SERVICES spades"
           [ "${{ needs.detect-changes.outputs.telestrations }}" == "true" ] && SERVICES="$SERVICES telestrations"
+          [ "${{ needs.detect-changes.outputs.dittle }}" == "true" ] && SERVICES="$SERVICES dittle"
 
           # 2) docker-compose.yml changed — parse the diff to find affected services
           #    instead of rebuilding everything
           if [ "${{ needs.detect-changes.outputs.infra-compose }}" == "true" ]; then
             DIFF=$(git diff HEAD~1 HEAD -- infra/docker-compose.yml)
             COMPOSE_SERVICES=""
-            for svc in ai-pinochle gnubg backgammon bughouse forbidden-island lemonadestand spades telestrations caddy postgres; do
+            for svc in ai-pinochle gnubg backgammon bughouse forbidden-island lemonadestand spades telestrations dittle caddy postgres; do
               # Only match actual change lines (+ or -), not diff context
               if echo "$DIFF" | grep -qE "^[+-].*${svc}"; then
                 COMPOSE_SERVICES="$COMPOSE_SERVICES $svc"
@@ -161,7 +166,7 @@ jobs:
             # If compose changed but no specific services identified (e.g., volumes
             # or top-level keys), fall back to rebuilding all app services
             if [ -z "$COMPOSE_SERVICES" ] && [ -n "$DIFF" ]; then
-              COMPOSE_SERVICES="ai-pinochle gnubg backgammon bughouse forbidden-island lemonadestand spades telestrations"
+              COMPOSE_SERVICES="ai-pinochle gnubg backgammon bughouse forbidden-island lemonadestand spades telestrations dittle"
             fi
             SERVICES="$SERVICES $COMPOSE_SERVICES"
             echo "Compose-affected services: $COMPOSE_SERVICES"

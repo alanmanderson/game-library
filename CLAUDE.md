@@ -1,6 +1,6 @@
 # Game Library Monorepo
 
-Monorepo of 7 web-based multiplayer games deployed to a single VM via Docker Compose with subdomain-per-game routing under `*.games.alanmanderson.com`.
+Monorepo of 8 web-based multiplayer games deployed to a single VM via Docker Compose with subdomain-per-game routing under `*.games.alanmanderson.com`.
 
 ## Repository Layout
 
@@ -9,6 +9,7 @@ apps/
   ai-pinochle/       React + FastAPI + PostgreSQL      (pinochle.games.alanmanderson.com)
   backgammon/        React + FastAPI + PostgreSQL      (backgammon.games.alanmanderson.com)
   bughouse/          React + FastAPI + PostgreSQL      (bughouse.games.alanmanderson.com)
+  dittle/            Node + Express + ws (in-memory)   (dittle.games.alanmanderson.com)
   forbidden-island/  React + Fastify (in-memory)       (fi.games.alanmanderson.com)
   lemonadestand/     React + .NET 8 + SQLite           (lemonade.games.alanmanderson.com)
   spades/            Flask + SQLite                     (spades.games.alanmanderson.com)
@@ -33,6 +34,7 @@ Each game has its own CLAUDE.md with game-specific architecture, commands, and c
 | .NET | lemonadestand | C# .NET 8 Web API (3-tier) | React 19 + Vite + Tailwind + Zustand | SQLite |
 | Flask | spades | Python 3.12, Flask, SQLAlchemy (sync) | Server-rendered | SQLite |
 | Express | telestrations | Node 20, Express, Socket.IO, zod | Vanilla TypeScript + Vite | None (in-memory) |
+| Express | dittle | Node 20, Express, ws | Vanilla JS (static, no build) | None (in-memory) |
 
 ## Deployment Architecture
 
@@ -44,7 +46,8 @@ Internet → Caddy (ports 80/443, auto-HTTPS via Let's Encrypt)
              ├── fi.games.*         → forbidden-island:3000
              ├── lemonade.games.*   → lemonadestand:5000
              ├── spades.games.*     → spades:5000
-             └── telestrations.games.* → telestrations:8080
+             ├── telestrations.games.* → telestrations:8080
+             └── dittle.games.*     → dittle:8080
 
 PostgreSQL 16 (internal only, shared by ai-pinochle, backgammon, bughouse)
 ```
