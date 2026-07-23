@@ -26,9 +26,9 @@ describe("landing page", () => {
     expect(h1!.textContent).toBe("Game Library");
   });
 
-  it("renders exactly 8 game cards", () => {
+  it("renders exactly 9 game cards", () => {
     const cards = doc.querySelectorAll(".card");
-    expect(cards.length).toBe(8);
+    expect(cards.length).toBe(9);
   });
 
   describe("game tiles", () => {
@@ -40,6 +40,7 @@ describe("landing page", () => {
       { name: "Telestrations", url: "https://telestrations.games.alanmanderson.com", players: "2 \u2013 8 players", duration: "20 min", hasBot: false },
       { name: "Lemonade Stand", url: "https://lemonade.games.alanmanderson.com", players: "1 player", duration: "30 min", hasBot: false },
       { name: "Sneaky Sabotage", url: "https://sabotage.games.alanmanderson.com", players: "3 \u2013 8 players", duration: "30 min", hasBot: false },
+      { name: "Dittle", url: "https://dittle.games.alanmanderson.com", players: "2 players", duration: "10 min", hasBot: true },
       { name: "Spades", url: "#", players: "4 players", duration: "30 min", hasBot: false },
     ];
 
@@ -98,7 +99,7 @@ describe("landing page", () => {
 
   it("every card has an icon area with a gradient background", () => {
     const icons = doc.querySelectorAll(".card-icon");
-    expect(icons.length).toBe(8);
+    expect(icons.length).toBe(9);
     icons.forEach((icon) => {
       const style = (icon as HTMLElement).getAttribute("style");
       expect(style).toContain("linear-gradient");

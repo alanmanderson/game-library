@@ -35,6 +35,7 @@ jobs:
       lemonadestand: ${{ steps.changes.outputs.lemonadestand }}
       spades: ${{ steps.changes.outputs.spades }}
       telestrations: ${{ steps.changes.outputs.telestrations }}
+      dittle: ${{ steps.changes.outputs.dittle }}
       sneaky-sabotage: ${{ steps.changes.outputs.sneaky-sabotage }}
       landing: ${{ steps.changes.outputs.landing }}
       infra-compose: ${{ steps.changes.outputs.infra-compose }}
@@ -60,6 +61,8 @@ jobs:
               - 'apps/spades/**'
             telestrations:
               - 'apps/telestrations/**'
+            dittle:
+              - 'apps/dittle/**'
             sneaky-sabotage:
               - 'apps/sneaky-sabotage/**'
             landing:
@@ -103,6 +106,7 @@ jobs:
       needs.detect-changes.outputs.lemonadestand == 'true' ||
       needs.detect-changes.outputs.spades == 'true' ||
       needs.detect-changes.outputs.telestrations == 'true' ||
+      needs.detect-changes.outputs.dittle == 'true' ||
       needs.detect-changes.outputs.sneaky-sabotage == 'true' ||
       needs.detect-changes.outputs.landing == 'true' ||
       needs.detect-changes.outputs.infra-compose == 'true' ||
@@ -147,7 +151,7 @@ jobs:
       - name: Determine which services to rebuild
         id: services
         run: |
-          ALL_SERVICES="ai-pinochle gnubg backgammon bughouse forbidden-island lemonadestand spades telestrations sneaky-sabotage"
+          ALL_SERVICES="ai-pinochle gnubg backgammon bughouse forbidden-island lemonadestand spades telestrations sneaky-sabotage dittle"
 
           # Manual trigger: use the input directly
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
@@ -172,6 +176,7 @@ jobs:
           [ "${{ needs.detect-changes.outputs.lemonadestand }}" == "true" ] && SERVICES="$SERVICES lemonadestand"
           [ "${{ needs.detect-changes.outputs.spades }}" == "true" ] && SERVICES="$SERVICES spades"
           [ "${{ needs.detect-changes.outputs.telestrations }}" == "true" ] && SERVICES="$SERVICES telestrations"
+          [ "${{ needs.detect-changes.outputs.dittle }}" == "true" ] && SERVICES="$SERVICES dittle"
           [ "${{ needs.detect-changes.outputs.sneaky-sabotage }}" == "true" ] && SERVICES="$SERVICES sneaky-sabotage"
 
           # 2) docker-compose.yml changed — parse the diff to find affected services
@@ -179,7 +184,7 @@ jobs:
           if [ "${{ needs.detect-changes.outputs.infra-compose }}" == "true" ]; then
             DIFF=$(git diff HEAD~1 HEAD -- infra/docker-compose.yml)
             COMPOSE_SERVICES=""
-            for svc in ai-pinochle gnubg backgammon bughouse forbidden-island lemonadestand spades telestrations sneaky-sabotage caddy postgres; do
+            for svc in ai-pinochle gnubg backgammon bughouse forbidden-island lemonadestand spades telestrations sneaky-sabotage dittle caddy postgres; do
               # Only match actual change lines (+ or -), not diff context
               if echo "$DIFF" | grep -qE "^[+-].*${svc}"; then
                 COMPOSE_SERVICES="$COMPOSE_SERVICES $svc"

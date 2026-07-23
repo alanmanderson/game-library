@@ -35,6 +35,10 @@ sabotage.games.alanmanderson.com {
 	reverse_proxy sneaky-sabotage:8000
 }
 
+dittle.games.alanmanderson.com {
+	reverse_proxy dittle:8080
+}
+
 logs.games.alanmanderson.com {
 	reverse_proxy logservice:3100
 }

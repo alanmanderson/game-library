@@ -24,6 +24,7 @@ services:
       - spades
       - telestrations
       - sneaky-sabotage
+      - dittle
       - logservice
 
   postgres:
@@ -196,6 +197,18 @@ services:
       LOG_SERVICE_API_KEY: ${LOG_SERVICE_API_KEY}
     depends_on:
       - postgres
+    logging: *default-logging
+    restart: unless-stopped
+
+  dittle:
+    build:
+      context: ../apps/dittle
+      args:
+        GIT_SHA: ${GIT_SHA}
+    environment:
+      PORT: "8080"
+      LOG_SERVICE_URL: http://logservice:3100/api/ingest
+      LOG_SERVICE_API_KEY: ${LOG_SERVICE_API_KEY}
     logging: *default-logging
     restart: unless-stopped
 
