@@ -227,9 +227,9 @@ hr { border: none; border-top: 1px solid rgba(0,0,0,.08); margin: 18px 0; }
 .die.removing { opacity: 0; transform: scale(.4); pointer-events: none; }
 
 /* Ghost preview dice: translucent "shadows" of where the selected die can land,
-   oriented exactly as it would arrive. Non-interactive — clicks fall through to
-   the well underneath. Live in their own layer above the wells. */
-.ghost-layer {
+   oriented exactly as it would arrive. Clickable so they remain a reliable hit
+   target even when a popped-up 3D die overlaps an empty well. Live in their own
+   layer above the wells. */
   position: absolute; left: 28px; top: 28px; width: 748px; height: 748px;
   transform-style: preserve-3d; pointer-events: none;
 }
