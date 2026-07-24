@@ -77,9 +77,36 @@ async function testPvp() {
   return true;
 }
 
+// Pure-race room (clash: false): play a full AI game and assert nothing is captured.
+async function testRace() {
+  const c = client();
+  await c.ready;
+  c.send({ type: 'create', mode: 'ai', aiDepth: 3, clash: false, name: 'Racer' });
+  let st = await waitFor(c, (m) => m.type === 'state');
+  if (!st.state.rules || st.state.rules.clash !== false) throw new Error('race room not flagged clash:false');
+  let moves = 0;
+  while (st.state.status === 'playing' && moves < 400) {
+    if (st.yourTurn) {
+      const lm = st.legalMoves;
+      const fwd = lm.find((m) => m.dir === 'N') || lm[Math.floor(Math.random() * lm.length)];
+      c.send({ type: 'move', move: { from: fwd.from, tilt: fwd.tilt, jumps: fwd.jumps } });
+      moves++;
+    }
+    st = await waitFor(c, (m) => m.type === 'state');
+  }
+  c.close();
+  const p0 = st.state.board.filter((d) => d && d.player === 0).length;
+  const p1 = st.state.board.filter((d) => d && d.player === 1).length;
+  if (p0 !== 7 || p1 !== 7) throw new Error(`pure race captured dice (p0=${p0}, p1=${p1})`);
+  if (st.state.status !== 'won' && st.state.status !== 'draw') throw new Error('race game did not finish');
+  console.log(`Pure-race game finished after ${moves} human moves with all 14 dice intact.`);
+  return true;
+}
+
 try {
   await testAiGame();
   await testPvp();
+  await testRace();
   console.log('\nE2E: all checks passed.');
   process.exit(0);
 } catch (e) {

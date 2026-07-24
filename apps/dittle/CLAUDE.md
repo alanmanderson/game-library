@@ -55,9 +55,16 @@ running server over WebSocket.
 ### WebSocket protocol
 
 Single `ws` endpoint on the same HTTP server. Client → server messages (JSON, keyed by
-`type`): `create` (`mode`, `aiDepth`, `name`), `join` (`code`, `name`), `move` (`move`),
-`hint`, `rematch`. Server → client: `created`, `joined`, `state` (authoritative state
-plus that seat's `legalMoves` and `yourTurn`), `hint`, `error`, `opponentLeft`.
+`type`): `create` (`mode`, `aiDepth`, `clash`, `name`), `join` (`code`, `name`), `move`
+(`move`), `hint`, `rematch`. Server → client: `created`, `joined`, `state` (authoritative
+state plus that seat's `legalMoves` and `yourTurn`), `hint`, `error`, `opponentLeft`.
+
+The **rules variant** is chosen at room creation via `create.clash` (default `true`):
+`true` runs full **Clash** rules (tilting onto an enemy removes the lower die; a die
+adjacent to ≥2 enemies can be surrounded), while `false` is a **pure race** — no die is
+ever removed, tilting onto an enemy is illegal, and only breakthrough/stuck/score decide
+the game. The engine carries this on `state.rules.clash`, so `legalMoves`/`applyMove`
+apply the right rules automatically and the client reads it for the "· RACE" label.
 
 A **move** is a path: `{ from, tilt, jumps }` where `tilt` is a single tilt direction
 (`'N'|'S'|'E'|'W'`) or `null`, and `jumps` is an array of jump-hop directions (each hop
