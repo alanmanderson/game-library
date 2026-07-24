@@ -57,7 +57,15 @@ export function forwardDir(player) {
 }
 
 // Create the initial position.
-export function initialState() {
+//
+// `options.clash` (default true) selects the rules variant:
+//   - true  → full "Dittle Clash": tilting onto an enemy removes the lower die and
+//             a die surrounded by >=2 enemies can be wiped out (the combat layer).
+//   - false → "pure race": no die is ever removed. Tilting onto an enemy is illegal
+//             (it blocks like your own die) and surrounds are not resolved, so the
+//             only outcomes are breakthrough / stuck / score.
+export function initialState(options = {}) {
+  const clash = options.clash !== false; // default to Clash rules
   const board = new Array(SIZE * SIZE).fill(null);
   for (let c = 0; c < SIZE; c++) {
     // Player 0 on row 0. Start: up=6, facing player (south)=3 => north=4.
@@ -73,7 +81,14 @@ export function initialState() {
     lastMove: null,     // canonical move (see makeMove) | null
     moveCount: 0,
     endReason: null,    // 'breakthrough' | 'elimination' | 'stuck' | 'score' | null
+    rules: { clash },   // which rules variant this game runs under
   };
+}
+
+// Whether captures (direct clash + surround) are active for `state`. States created
+// before this option existed (no `rules`) default to Clash rules for back-compat.
+export function clashEnabled(state) {
+  return !state || !state.rules ? true : state.rules.clash !== false;
 }
 
 // Roll a die one step in a compass direction, returning a NEW orientation.
@@ -192,6 +207,7 @@ function enumerateJumps(bd, from, pos, dirs, tilt, jumpsSoFar, visited, out) {
 // All legal moves for the player to move in `state`.
 export function legalMoves(state) {
   const { board, turn } = state;
+  const clash = clashEnabled(state);
   const dirs = allowedDirs(turn);
   const moves = [];
   for (let from = 0; from < board.length; from++) {
@@ -202,12 +218,13 @@ export function legalMoves(state) {
     const lifted = board.slice();
     lifted[from] = null;
 
-    // 1) Tilt-only (terminal): one square onto an empty square or an enemy (clash).
+    // 1) Tilt-only (terminal): one square onto an empty square, or an enemy (clash).
+    //    In pure-race (no-clash) rooms an enemy die blocks the tilt just like a friend.
     for (const dir of dirs) {
       const to = stepIndex(from, dir);
       if (to === -1) continue;
       const occ = board[to];
-      if (occ && occ.player === turn) continue; // blocked by own die
+      if (occ && (occ.player === turn || !clash)) continue; // own die always blocks; enemy blocks with clashes off
       moves.push(makeMove(from, dir, []));
     }
 
@@ -325,6 +342,7 @@ export function applyMove(state, move) {
       // Terminal tilt — may clash with an enemy on the destination square.
       const occ = board[to];
       if (occ && occ.player === die.player) throw new Error('illegal: tilt onto own die');
+      if (occ && !clashEnabled(state)) throw new Error('illegal: captures are off in this room');
       if (!occ) board[to] = die;
       else if (die.up > occ.up) board[to] = die;   // stronger mover wins the square
       else if (die.up < occ.up) board[to] = occ;   // mover destroyed, defender stays
@@ -351,7 +369,7 @@ export function applyMove(state, move) {
 
 // Shared post-move resolution: surrounds, win detection, and next-state assembly.
 function finalize(state, board, m) {
-  resolveSurrounds(board);
+  if (clashEnabled(state)) resolveSurrounds(board); // no captures in pure-race rooms
 
   const me = state.turn;
   const opp = 1 - me;
@@ -372,6 +390,7 @@ function finalize(state, board, m) {
     turn: opp,
     status,
     winner,
+    rules: state.rules ? { ...state.rules } : { clash: true },
     lastMove: {
       from: m.from,
       to: m.to,
@@ -416,6 +435,7 @@ export function cloneState(state) {
     lastMove: state.lastMove ? { ...state.lastMove, jumps: state.lastMove.jumps ? state.lastMove.jumps.slice() : [], path: state.lastMove.path ? state.lastMove.path.slice() : [] } : null,
     moveCount: state.moveCount,
     endReason: state.endReason || null,
+    rules: state.rules ? { ...state.rules } : { clash: true },
     score: state.score ? { ...state.score } : undefined,
   };
 }

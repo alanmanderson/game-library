@@ -1,4 +1,4 @@
-import { SIZE, countDice } from '/shared/engine.js';
+import { SIZE, countDice, rollDie } from '/shared/engine.js';
 
 // ---------- DOM ----------
 const $ = (id) => document.getElementById(id);
@@ -17,78 +17,68 @@ let ws = null;
 let me = 0;                 // my seat
 let mode = 'pvp';
 let current = null;         // latest state message
-let selectedFrom = null;    // index of my selected die (start of the move being built)
-let pathTilt = null;        // the single tilt direction chosen so far, or null
-let pathJumps = [];         // jump-hop directions chosen so far
-let currentPos = null;      // current end square of the partial move
+let selectedFrom = null;    // index of my selected die (start of the move), or null
+let pendingTarget = null;   // an ambiguous end square being disambiguated (real index), or null
 let hintCells = null;       // { from, to, path } to highlight
 
 function resetSelection() {
-  selectedFrom = null; pathTilt = null; pathJumps = []; currentPos = null;
+  selectedFrom = null; pendingTarget = null;
 }
 
-// ---------- Move-path helpers (build tilt / jump-chain / tilt+jump moves) ----------
-const DELTA = { N: [1, 0], S: [-1, 0], E: [0, 1], W: [0, -1] };
-function stepIdx(i, dir) {
-  const [dr, dc] = DELTA[dir];
-  const r = Math.floor(i / SIZE) + dr, c = (i % SIZE) + dc;
-  if (r < 0 || r >= SIZE || c < 0 || c >= SIZE) return -1;
-  return r * SIZE + c;
+// ---------- Move helpers: reachable ends, ghost orientation, disambiguation ----------
+// The whole effect of a Dittle move is just the mover's final square and its final
+// orientation (jumps never touch other dice; a terminal tilt clash is resolved from
+// the destination). So two moves are visibly equivalent iff they share (to, orient),
+// and a move's orient is fixed entirely by its optional single tilt.
+function movesFrom(from) {
+  return (current?.legalMoves || []).filter((m) => m.from === from);
 }
-// A move's ordered steps: [tilt?] then each jump hop.
-function stepSeq(m) {
-  const s = [];
-  if (m.tilt) s.push({ t: 'tilt', d: m.tilt });
-  for (const d of (m.jumps || [])) s.push({ t: 'jump', d });
-  return s;
+
+// Orientation the selected die would show at the end of move `m` (only the tilt, if
+// any, changes the up-face; jump hops never do).
+function finalOrient(die, m) {
+  return m.tilt ? rollDie(die, m.tilt)
+                : { player: die.player, up: die.up, north: die.north, east: die.east };
 }
-function partialSteps() {
-  const s = [];
-  if (pathTilt) s.push({ t: 'tilt', d: pathTilt });
-  for (const d of pathJumps) s.push({ t: 'jump', d });
-  return s;
-}
-function isPrefix(p, seq) {
-  if (p.length > seq.length) return false;
-  for (let i = 0; i < p.length; i++) if (p[i].t !== seq[i].t || p[i].d !== seq[i].d) return false;
-  return true;
-}
-// Legal moves that still match the path built so far.
-function reachableMoves() {
-  const p = partialSteps();
-  return (current?.legalMoves || []).filter((m) => m.from === selectedFrom && isPrefix(p, stepSeq(m)));
-}
-// Map of next reachable square -> { type, dir, capture } from the current partial.
-function nextStepMap() {
-  const p = partialSteps();
+function orientKey(o) { return `${o.up}.${o.north}.${o.east}`; }
+
+// Reachable end squares for the selected die: end index -> { moves, outcomes }, where
+// `outcomes` is a Map<orientKey, {move, orient}>. outcomes.size === 1 means the square
+// has one unambiguous result (tap to play); > 1 means it can be reached with visibly
+// different results (tap to pick a route).
+function endMap(from) {
+  const die = current.state.board[from];
   const map = new Map();
-  for (const m of reachableMoves()) {
-    const seq = stepSeq(m);
-    if (seq.length <= p.length) continue;
-    const step = seq[p.length];
-    const land = m.path[p.length];
-    if (map.has(land)) continue;
-    const capture = step.t === 'tilt' && seq.length === p.length + 1 && !!current.state.board[land];
-    map.set(land, { type: step.t, dir: step.d, capture });
+  if (!die) return map;
+  for (const m of movesFrom(from)) {
+    let e = map.get(m.to);
+    if (!e) { e = { moves: [], outcomes: new Map() }; map.set(m.to, e); }
+    e.moves.push(m);
+    const o = finalOrient(die, m);
+    const k = orientKey(o);
+    if (!e.outcomes.has(k)) e.outcomes.set(k, { move: m, orient: o });
   }
   return map;
 }
-// The partial path is itself a complete, legal move.
-function canCommit() {
-  const p = partialSteps();
-  if (p.length === 0) return false;
-  return reachableMoves().some((m) => stepSeq(m).length === p.length);
+
+// Distinct routes to an ambiguous target: first-hop landing square -> { move, orient }.
+// Each visibly-different result is reached by a distinct first hop (the tilt, or the
+// first jump for a pure jump), so choosing the first hop picks the result.
+function routesTo(from, target) {
+  const die = current.state.board[from];
+  const map = new Map();
+  if (!die) return map;
+  for (const m of movesFrom(from)) {
+    if (m.to !== target) continue;
+    const land = m.path[0];
+    if (map.has(land)) continue;
+    map.set(land, { move: m, orient: finalOrient(die, m) });
+  }
+  return map;
 }
-// Squares visited after `from` in the partial path (for highlighting).
-function partialPathSquares() {
-  const sq = [];
-  let pos = selectedFrom;
-  if (pathTilt) { pos = stepIdx(pos, pathTilt); sq.push(pos); }
-  for (const d of pathJumps) { pos = stepIdx(stepIdx(pos, d), d); sq.push(pos); }
-  return sq;
-}
-function commitMove() {
-  sendMsg({ type: 'move', move: { from: selectedFrom, tilt: pathTilt, jumps: pathJumps.slice() } });
+
+function commitMoveObj(m) {
+  sendMsg({ type: 'move', move: { from: m.from, tilt: m.tilt || null, jumps: (m.jumps || []).slice() } });
   resetSelection();
 }
 
@@ -275,6 +265,7 @@ function applyDie(rec, die) {
 
 // ---------- Wells (sunken board squares) ----------
 let diceLayer = null;
+let ghostLayer = null; // translucent preview dice for reachable squares
 let wells = [];       // screen-indexed .well elements
 let builtMe = null;   // orientation the board DOM was built for
 
@@ -299,8 +290,47 @@ function buildBoard() {
   diceLayer = document.createElement('div');
   diceLayer.className = 'dice-layer';
   boardEl.appendChild(diceLayer);
+  ghostLayer = document.createElement('div');
+  ghostLayer.className = 'ghost-layer';
+  boardEl.appendChild(ghostLayer);   // above the dice so previews stay visible
   elByReal = new Map();
   builtMe = me;
+}
+
+// ---------- Ghost preview dice ----------
+// Build a translucent die element oriented like a real one. It sits above the board
+// and is itself clickable (dice pop up in 3D and can overlap the target's well, so
+// the ghost is the reliable hit target — a click routes through the same handler).
+function createGhost(real, orient, cls) {
+  const el = document.createElement('div');
+  el.className = 'die ghost ' + cls + (orient.player === me ? ' light' : ' dark');
+  el.dataset.real = real;
+  const holder = document.createElement('div');
+  holder.className = 'cube-holder';
+  const cube = document.createElement('div');
+  cube.className = 'cube no-anim';
+  for (const v of [1, 2, 3, 4, 5, 6]) cube.appendChild(makeFace(v));
+  // Same per-seat display flip as live dice (seat 1 views the board rotated 180°).
+  const n = me === 0 ? orient.north : 7 - orient.north;
+  const e = me === 0 ? orient.east : 7 - orient.east;
+  cube.style.transform = orientMatrix(orient.up, n, e);
+  holder.appendChild(cube);
+  el.appendChild(holder);
+  el.addEventListener('click', () => onCellClick(real));
+  return el;
+}
+
+// Redraw the ghost layer from a list of { real, orient, cls }.
+function renderGhosts(list) {
+  if (!ghostLayer) return;
+  ghostLayer.innerHTML = '';
+  for (const g of list) {
+    const el = createGhost(g.real, g.orient, g.cls);
+    const { sr, sc } = screenPos(g.real);
+    el.style.left = sc * STEP + 'px';
+    el.style.top = sr * STEP + 'px';
+    ghostLayer.appendChild(el);
+  }
 }
 
 // ---------- Persistent die elements + move animation ----------
@@ -402,14 +432,37 @@ function render() {
   $('waiting').classList.toggle('hidden', !waiting);
   if (waiting) $('waiting-code').textContent = current.code;
 
-  $('room-label').textContent = mode === 'ai' ? 'VS COMPUTER' : `ROOM ${current.code}`;
+  const raceLabel = (state.rules && state.rules.clash === false) ? ' · RACE' : '';
+  $('room-label').textContent = (mode === 'ai' ? 'VS COMPUTER' : `ROOM ${current.code}`) + raceLabel;
 
   if (builtMe !== me || wells.length === 0) buildBoard();
 
   const movableFrom = new Set((legalMoves || []).map((m) => m.from));
-  const nexts = selectedFrom !== null ? nextStepMap() : new Map();
-  const pathSquares = selectedFrom !== null ? new Set(partialPathSquares()) : new Set();
-  const commitReady = selectedFrom !== null && canCommit();
+
+  // Selection preview: ghost dice at reachable ends, or the route choices while
+  // disambiguating an ambiguous target. Collect ghost dice + well highlight classes.
+  const ghosts = [];              // { real, orient, cls }
+  const wellClass = new Map();    // real -> extra well class
+  let goalSquare = null;          // the ambiguous target being resolved (if any)
+
+  if (yourTurn && selectedFrom !== null) {
+    if (pendingTarget !== null) {
+      // Choosing among the distinct routes (landing faces) to the ambiguous target.
+      goalSquare = pendingTarget;
+      for (const [land, r] of routesTo(selectedFrom, pendingTarget)) {
+        ghosts.push({ real: land, orient: r.orient, cls: 'route' });
+        wellClass.set(land, 'route');
+      }
+    } else {
+      // Preview every square the die can reach, oriented as it would arrive.
+      for (const [to, e] of endMap(selectedFrom)) {
+        const unique = e.outcomes.size === 1;
+        const first = e.outcomes.values().next().value;
+        ghosts.push({ real: to, orient: first.orient, cls: unique ? 'playable' : 'ambiguous' });
+        wellClass.set(to, unique ? 'ghost-playable' : 'ghost-ambiguous');
+      }
+    }
+  }
 
   // Wells: reset then apply highlight classes.
   for (const well of wells) {
@@ -425,20 +478,16 @@ function render() {
     if (hintCells && (hintCells.from === real || hintCells.to === real || (hintCells.path || []).includes(real))) {
       well.classList.add('hint');
     }
-    if (pathSquares.has(real)) well.classList.add('path');
 
     const under = state.board[real];
     if (yourTurn && under && under.player === me && selectedFrom === null && movableFrom.has(real)) {
       well.classList.add('selectable');
     }
-    if (nexts.has(real)) {
-      const t = nexts.get(real);
-      well.classList.add('target');
-      if (t.type === 'jump') well.classList.add('jump');
-      else if (t.capture) well.classList.add('capture');
-    }
-    if (commitReady && real === currentPos) well.classList.add('confirm');
+    if (wellClass.has(real)) well.classList.add(wellClass.get(real));
+    if (real === goalSquare) well.classList.add('goal');
   }
+
+  renderGhosts(ghosts);
 
   // Dice: selection glow + movable cursor.
   for (const [real, rec] of elByReal) {
@@ -459,12 +508,10 @@ function render() {
   } else if (waiting) {
     statusEl.textContent = 'Waiting for an opponent…';
   } else if (yourTurn) {
-    if (selectedFrom !== null && partialSteps().length > 0) {
-      statusEl.textContent = commitReady
-        ? (nexts.size > 0 ? 'Tap the glowing well to confirm, or keep jumping' : 'Tap the glowing well to confirm')
-        : 'Continue the jump';
+    if (pendingTarget !== null) {
+      statusEl.textContent = 'Several ways here — tap a glowing die to pick the landing';
     } else if (selectedFrom !== null) {
-      statusEl.textContent = 'Choose where to tilt or jump';
+      statusEl.textContent = 'Tap a ghost die to move there — or tap your die again to cancel';
     } else {
       statusEl.textContent = 'Your turn — tap a die';
     }
@@ -558,8 +605,9 @@ function layout() {
 window.addEventListener('resize', layout);
 
 // ---------- Interaction ----------
-// A move is built up one step at a time: pick a die, then tap tilt/jump targets.
-// Simple moves commit instantly; extendable jumps show a glowing confirm well.
+// Pick a die → ghost previews appear at every square it can reach. Tap a ghost to
+// play that move directly. When a square can be reached with visibly different
+// results (a different landing face), tapping it instead offers the routes to choose.
 function onCellClick(real) {
   if (!current || current.state.status !== 'playing' || !current.yourTurn) return;
   hintCells = null;
@@ -567,33 +615,38 @@ function onCellClick(real) {
   const die = state.board[real];
   const isMyMovableDie = die && die.player === me && (legalMoves || []).some((m) => m.from === real);
 
+  // Nothing selected yet: pick one of my movable dice.
   if (selectedFrom === null) {
-    if (isMyMovableDie) { selectedFrom = real; pathTilt = null; pathJumps = []; currentPos = real; render(); }
+    if (isMyMovableDie) { selectedFrom = real; pendingTarget = null; render(); }
     return;
   }
 
-  if (real === currentPos) {
-    if (canCommit()) commitMove();
-    else resetSelection();
+  // Tapping a different movable die re-selects it.
+  if (isMyMovableDie && real !== selectedFrom) {
+    selectedFrom = real; pendingTarget = null; render();
+    return;
+  }
+
+  // Disambiguating an ambiguous target: a tap picks one of the routes to it.
+  if (pendingTarget !== null) {
+    const routes = routesTo(selectedFrom, pendingTarget);
+    if (routes.has(real)) { commitMoveObj(routes.get(real).move); render(); return; }
+    pendingTarget = null;                         // tap elsewhere → back to the full preview
+    if (real === selectedFrom) resetSelection();  // tap the die again → deselect
     render();
     return;
   }
 
-  const nexts = nextStepMap();
-  if (nexts.has(real)) {
-    const step = nexts.get(real);
-    if (step.type === 'tilt') pathTilt = step.dir; else pathJumps.push(step.dir);
-    currentPos = real;
-    if (nextStepMap().size === 0 && canCommit()) commitMove();
+  // Full preview: tap a reachable end square.
+  const e = endMap(selectedFrom).get(real);
+  if (e) {
+    if (e.outcomes.size === 1) commitMoveObj(e.outcomes.values().next().value.move); // unique → play
+    else pendingTarget = real;                                                       // ambiguous → choose route
     render();
     return;
   }
 
-  if (partialSteps().length === 0 && isMyMovableDie) {
-    selectedFrom = real; currentPos = real; render();
-    return;
-  }
-
+  // Tap on the selected die again, or on empty space → deselect.
   resetSelection();
   render();
 }
@@ -603,12 +656,12 @@ async function startAi() {
   homeError.textContent = '';
   await connect();
   const depth = Number($('ai-depth').value);
-  sendMsg({ type: 'create', mode: 'ai', aiDepth: depth, name: $('name').value.trim() });
+  sendMsg({ type: 'create', mode: 'ai', aiDepth: depth, clash: $('clash-rules').checked, name: $('name').value.trim() });
 }
 async function createRoom() {
   homeError.textContent = '';
   await connect();
-  sendMsg({ type: 'create', mode: 'pvp', name: $('name').value.trim() });
+  sendMsg({ type: 'create', mode: 'pvp', clash: $('clash-rules').checked, name: $('name').value.trim() });
 }
 async function joinRoom() {
   homeError.textContent = '';
@@ -618,6 +671,11 @@ async function joinRoom() {
   sendMsg({ type: 'join', code, name: $('name').value.trim() });
 }
 
+$('clash-rules').addEventListener('change', (e) => {
+  $('clash-desc').textContent = e.target.checked
+    ? 'Dice capture by clashing and surrounding.'
+    : 'Pure race — no captures, first die across wins.';
+});
 $('btn-ai').addEventListener('click', startAi);
 $('btn-create').addEventListener('click', createRoom);
 $('btn-join').addEventListener('click', joinRoom);

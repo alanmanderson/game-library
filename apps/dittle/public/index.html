@@ -19,6 +19,14 @@
           <input id="name" maxlength="20" placeholder="Player" autocomplete="off" />
         </label>
 
+        <label class="rules-opt" title="Applies to the game you start (vs Computer or a new room).">
+          <input type="checkbox" id="clash-rules" checked />
+          <span class="rules-opt-text">
+            <b>Clash rules</b>
+            <span class="rules-opt-desc" id="clash-desc">Dice capture by clashing and surrounding.</span>
+          </span>
+        </label>
+
         <div class="btn-row">
           <button id="btn-ai" class="primary">Play vs Computer</button>
         </div>
@@ -56,6 +64,7 @@
           <li><b>Clash:</b> tilt onto an enemy die and the <b>lower</b> top-number is removed (a tie removes both). You can't land on your own die.</li>
           <li><b>Surround:</b> a die flanked by two or more enemies compares its number to their <b>sum</b> — the lower side is wiped out.</li>
           <li><b>Win:</b> get any one die to the <b>opponent's home row</b>, or leave them with no dice / no move.</li>
+          <li><b>Clash rules toggle:</b> when you start a game you can turn <b>Clash rules</b> off for a <b>pure race</b> — dice never capture (no clashing or surrounding), so it's first die across wins.</li>
         </ul>
       </details>
       <p class="footnote">A faithful digital adaptation of Dittle: Dice Battle. AI opponent uses alpha-beta lookahead over a self-play-trained evaluation.</p>

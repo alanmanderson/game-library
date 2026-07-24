@@ -155,7 +155,9 @@ function handleMessage(ws, msg) {
         // depth would let a single message trigger an exponential AI search (DoS).
         const requestedDepth = Math.floor(Number(msg.aiDepth));
         const aiDepth = Number.isFinite(requestedDepth) ? Math.max(1, Math.min(7, requestedDepth)) : 3;
-        const room = rooms.createRoom({ mode: msg.mode === 'ai' ? 'ai' : 'pvp', aiDepth });
+        // Clash rules default ON; only an explicit `false` opts into the pure-race variant.
+        const clash = msg.clash !== false;
+        const room = rooms.createRoom({ mode: msg.mode === 'ai' ? 'ai' : 'pvp', aiDepth, clash });
         room.players[0] = ws;
         if (msg.name) room.names[0] = String(msg.name).slice(0, 20);
         ws.roomCode = room.code;
@@ -199,7 +201,7 @@ function handleMessage(ws, msg) {
       case 'rematch': {
         const room = rooms.getRoom(ws.roomCode);
         if (!room) break;
-        room.state = initialState();
+        room.state = initialState({ clash: room.clash });
         broadcastState(room);
         break;
       }

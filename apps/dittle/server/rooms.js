@@ -16,14 +16,15 @@ export class RoomManager {
     this.rooms = new Map(); // code -> room
   }
 
-  createRoom({ mode = 'pvp', aiDepth = 3 } = {}) {
+  createRoom({ mode = 'pvp', aiDepth = 3, clash = true } = {}) {
     let code;
     do { code = randomCode(); } while (this.rooms.has(code));
     const room = {
       code,
       mode,               // 'pvp' | 'ai'
       aiDepth,
-      state: initialState(),
+      clash,              // true = Clash (captures) | false = pure race
+      state: initialState({ clash }),
       players: [null, null], // sockets by player index
       names: ['Player 1', mode === 'ai' ? 'Computer' : 'Player 2'],
       createdAt: Date.now(),

@@ -255,5 +255,52 @@ function eq(a, b, msg) { ok(a === b, `${msg} (got ${a}, want ${b})`); }
   ok(ns.board[idx(4, 3)] && ns.board[idx(4, 3)].player === 0, 'legacy {from,dir,to} tilt still works');
 }
 
+// --- Pure-race (Clash rules off) variant. ---
+{
+  const s = initialState({ clash: false });
+  ok(s.rules && s.rules.clash === false, 'initialState({clash:false}) marks the room pure-race');
+  const d = initialState();
+  ok(d.rules && d.rules.clash === true, 'initialState() defaults to Clash rules');
+}
+
+// Pure race: a tilt onto an enemy die is not offered and is rejected if forced.
+{
+  const s = initialState({ clash: false });
+  s.board = new Array(SIZE * SIZE).fill(null);
+  s.board[idx(3, 3)] = { player: 0, up: 5, north: 4, east: 2 };
+  s.board[idx(4, 3)] = { player: 1, up: 2, north: 3, east: 2 }; // enemy directly north
+  s.turn = 0;
+  const lm = legalMoves(s).filter((m) => m.from === idx(3, 3));
+  ok(!lm.some((m) => m.to === idx(4, 3) && !m.jump), 'pure race: no tilt onto an enemy die');
+  let threw = false;
+  try { applyMove(s, { from: idx(3, 3), dir: 'N', to: idx(4, 3) }); } catch { threw = true; }
+  ok(threw, 'pure race: applyMove rejects a tilt onto an enemy');
+}
+
+// Pure race: a die that would be surrounded is NOT removed, and the flag carries on.
+{
+  const s = initialState({ clash: false });
+  s.board = new Array(SIZE * SIZE).fill(null);
+  s.board[idx(3, 3)] = { player: 1, up: 1, north: 3, east: 2 };
+  s.board[idx(3, 2)] = { player: 0, up: 5, north: 4, east: 2 };
+  s.board[idx(2, 4)] = { player: 0, up: 6, north: 4, east: 5 };
+  s.turn = 0;
+  const ns = applyMove(s, { from: idx(2, 4), dir: 'N', to: idx(3, 4) });
+  ok(ns.board[idx(3, 3)] && ns.board[idx(3, 3)].player === 1, 'pure race: surrounded die survives');
+  ok(ns.rules && ns.rules.clash === false, 'pure race flag carries into the next state');
+}
+
+// Clash on (default): the same surround still removes the die (regression guard).
+{
+  const s = initialState({ clash: true });
+  s.board = new Array(SIZE * SIZE).fill(null);
+  s.board[idx(3, 3)] = { player: 1, up: 1, north: 3, east: 2 };
+  s.board[idx(3, 2)] = { player: 0, up: 5, north: 4, east: 2 };
+  s.board[idx(2, 4)] = { player: 0, up: 6, north: 4, east: 5 };
+  s.turn = 0;
+  const ns = applyMove(s, { from: idx(2, 4), dir: 'N', to: idx(3, 4) });
+  eq(ns.board[idx(3, 3)], null, 'clash on: surrounded die is still removed');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
