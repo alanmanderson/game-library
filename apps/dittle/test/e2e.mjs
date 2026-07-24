@@ -27,13 +27,15 @@ function waitFor(c, pred, timeout = 8000) {
   });
 }
 
-async function testAiGame() {
+async function testAiGame(gameVariant) {
   const c = client();
   await c.ready;
-  c.send({ type: 'create', mode: 'ai', aiDepth: 3, name: 'Tester' });
+  c.send({ type: 'create', mode: 'ai', aiDepth: 3, variant: gameVariant, name: 'Tester' });
   let st = await waitFor(c, (m) => m.type === 'state');
+  if (st.state.variant !== gameVariant) throw new Error(`variant not applied (got ${st.state.variant})`);
+  if (gameVariant === 'clash' && st.legalMoves.some((m) => m.jump)) throw new Error('clash produced a jump move');
   let moves = 0;
-  while (st.state.status === 'playing' && moves < 300) {
+  while (st.state.status === 'playing' && moves < 400) {
     if (st.yourTurn) {
       const lm = st.legalMoves;
       // pick a legal move that makes forward progress if possible
@@ -44,14 +46,16 @@ async function testAiGame() {
     st = await waitFor(c, (m) => m.type === 'state');
   }
   c.close();
-  if (st.state.status !== 'won') throw new Error('AI game did not finish (moves=' + moves + ')');
-  console.log(`AI game finished after ${moves} human moves. Winner: player ${st.state.winner}`);
+  if (st.state.status !== 'won' && st.state.status !== 'draw') {
+    throw new Error(`${gameVariant} AI game did not finish (moves=${moves})`);
+  }
+  console.log(`AI ${gameVariant} game finished after ${moves} human moves. Status: ${st.state.status}, winner: ${st.state.winner}, reason: ${st.state.endReason}`);
   return true;
 }
 
 async function testPvp() {
   const a = client(); await a.ready;
-  a.send({ type: 'create', mode: 'pvp', name: 'Alice' });
+  a.send({ type: 'create', mode: 'pvp', variant: 'clash', name: 'Alice' });
   const created = await waitFor(a, (m) => m.type === 'created');
   const code = created.code;
 
@@ -78,7 +82,8 @@ async function testPvp() {
 }
 
 try {
-  await testAiGame();
+  await testAiGame('clash');
+  await testAiGame('traditional');
   await testPvp();
   console.log('\nE2E: all checks passed.');
   process.exit(0);

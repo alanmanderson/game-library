@@ -1,25 +1,60 @@
 {
-  "weights": {
-    "material": 100,
-    "advance": 6,
-    "lead": 14,
-    "strength": 3,
-    "goalThreat": 40,
-    "vulnerability": -12,
-    "center": 1
+  "traditional": {
+    "weights": {
+      "across": 90,
+      "acrossScore": 30,
+      "advance": 8,
+      "lead": 4,
+      "nearGoal": 18,
+      "strength": 2,
+      "center": 1
+    },
+    "meta": {
+      "variant": "traditional",
+      "method": "self-play coordinate-ascent policy search",
+      "sweeps": 5,
+      "trainSeeds": 24,
+      "valSeeds": 16,
+      "restarts": 1,
+      "gamePlyCap": 120,
+      "trainDepth": 2,
+      "valDepth": 3,
+      "startWinRateVsDefault": 0.5,
+      "trainWinRateVsDefault": 0.521,
+      "validationWinRateVsDefault": 0.5,
+      "accepted": false,
+      "seed": 12345,
+      "trainedSeconds": 329.9,
+      "trainedAt": "2026-07-24T07:24:35.553Z"
+    }
   },
-  "meta": {
-    "method": "self-play coordinate-ascent policy search",
-    "sweeps": 6,
-    "trainSeeds": 60,
-    "trainDepth": 2,
-    "valDepth": 3,
-    "startWinRateVsDefault": 0.5,
-    "trainWinRateVsDefault": 0.654,
-    "validationWinRateVsDefault": 0.475,
-    "accepted": false,
-    "seed": 12345,
-    "trainedSeconds": 972.1,
-    "trainedAt": "2026-07-23T07:02:06.631Z"
+  "clash": {
+    "weights": {
+      "material": 100,
+      "advance": 6,
+      "lead": 19.599999999999998,
+      "strength": 3,
+      "goalThreat": 40,
+      "vulnerability": -12,
+      "center": 1
+    },
+    "meta": {
+      "variant": "clash",
+      "method": "self-play coordinate-ascent policy search",
+      "sweeps": 5,
+      "trainSeeds": 24,
+      "valSeeds": 16,
+      "restarts": 1,
+      "gamePlyCap": 120,
+      "trainDepth": 2,
+      "valDepth": 3,
+      "startWinRateVsDefault": 0.5,
+      "trainWinRateVsDefault": 0.521,
+      "validationWinRateVsDefault": 0.516,
+      "accepted": true,
+      "seed": 12345,
+      "trainedSeconds": 149.9,
+      "trainedAt": "2026-07-24T07:27:05.450Z"
+    }
   }
 }

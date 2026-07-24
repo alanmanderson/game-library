@@ -1,5 +1,5 @@
 // Room management for Dittle online play.
-import { initialState, applyMove, legalMoves } from '../shared/engine.js';
+import { initialState, applyMove, legalMoves, normalizeVariant } from '../shared/engine.js';
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no ambiguous chars
 
@@ -16,14 +16,16 @@ export class RoomManager {
     this.rooms = new Map(); // code -> room
   }
 
-  createRoom({ mode = 'pvp', aiDepth = 3 } = {}) {
+  createRoom({ mode = 'pvp', aiDepth = 3, variant = 'traditional' } = {}) {
     let code;
     do { code = randomCode(); } while (this.rooms.has(code));
+    const v = normalizeVariant(variant);
     const room = {
       code,
       mode,               // 'pvp' | 'ai'
       aiDepth,
-      state: initialState(),
+      variant: v,         // 'traditional' | 'clash'
+      state: initialState(v),
       players: [null, null], // sockets by player index
       names: ['Player 1', mode === 'ai' ? 'Computer' : 'Player 2'],
       createdAt: Date.now(),

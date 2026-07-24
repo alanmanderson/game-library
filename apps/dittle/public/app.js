@@ -1,4 +1,4 @@
-import { SIZE, countDice } from '/shared/engine.js';
+import { SIZE, countDice, countInRow, sumUpInRow, goalRow } from '/shared/engine.js';
 
 // ---------- DOM ----------
 const $ = (id) => document.getElementById(id);
@@ -16,6 +16,7 @@ const sceneWrap = $('sceneWrap');
 let ws = null;
 let me = 0;                 // my seat
 let mode = 'pvp';
+let variant = 'traditional'; // 'traditional' | 'clash'
 let current = null;         // latest state message
 let selectedFrom = null;    // index of my selected die (start of the move being built)
 let pathTilt = null;        // the single tilt direction chosen so far, or null
@@ -113,10 +114,12 @@ function onMessage(ev) {
     case 'created':
     case 'joined':
       me = msg.you; mode = msg.mode;
+      if (msg.variant) variant = msg.variant;
       showGame();
       break;
     case 'state':
       me = msg.you; mode = msg.mode;
+      variant = msg.variant || msg.state?.variant || variant;
       current = msg;
       resetSelection();
       syncDice(msg.state);
@@ -403,6 +406,7 @@ function render() {
   if (waiting) $('waiting-code').textContent = current.code;
 
   $('room-label').textContent = mode === 'ai' ? 'VS COMPUTER' : `ROOM ${current.code}`;
+  $('kicker').textContent = variant === 'clash' ? 'Dittle · Clash' : 'Dittle · Traditional';
 
   if (builtMe !== me || wells.length === 0) buildBoard();
 
@@ -474,10 +478,20 @@ function render() {
     statusEl.classList.add('opp');
   }
 
-  // Scores (dice remaining).
+  // Scores: dice remaining (clash) or dice-across + up-face total (traditional).
   const oppSeat = 1 - me;
-  $('score-you').textContent = `You — ${countDice(state.board, me)} dice`;
-  $('score-opp').textContent = `${mode === 'ai' ? 'Computer' : (names?.[oppSeat] || 'Opponent')} — ${countDice(state.board, oppSeat)} dice`;
+  const oppName = mode === 'ai' ? 'Computer' : (names?.[oppSeat] || 'Opponent');
+  if (variant === 'clash') {
+    $('score-you').textContent = `You — ${countDice(state.board, me)} dice`;
+    $('score-opp').textContent = `${oppName} — ${countDice(state.board, oppSeat)} dice`;
+  } else {
+    const mineAcross = countInRow(state.board, me, goalRow(me));
+    const oppAcross = countInRow(state.board, oppSeat, goalRow(oppSeat));
+    const mineSum = sumUpInRow(state.board, me, goalRow(me));
+    const oppSum = sumUpInRow(state.board, oppSeat, goalRow(oppSeat));
+    $('score-you').textContent = `You — ${mineAcross}/7 across · ${mineSum} pts`;
+    $('score-opp').textContent = `${oppName} — ${oppAcross}/7 across · ${oppSum} pts`;
+  }
 
   // Game over panel
   const go = $('game-over');
@@ -491,12 +505,15 @@ function render() {
       breakthrough: 'reached the home row',
       elimination: 'captured every die',
       stuck: 'left the opponent with no move',
-      score: 'led on score at the move limit',
+      filled: 'filled the home row',
+      score: 'led on position',
     }[state.endReason] || '';
     let headline = draw ? 'Draw' : (iWon ? 'Victory!' : 'Defeat');
-    if (state.endReason === 'score' && state.score) {
+    if ((state.endReason === 'filled' || state.endReason === 'score') && state.score) {
+      // Show both totals (traditional: home-row up-face sums; adjudicated: position).
       const mine = state.score[me], theirs = state.score[1 - me];
-      headline += ` — score ${mine}–${theirs}`;
+      const label = state.endReason === 'filled' ? 'home-row score' : 'position';
+      headline += ` — ${label} ${mine}–${theirs}`;
     } else if (reasonText && !draw) {
       headline += iWon ? ` — you ${reasonText}` : ` — opponent ${reasonText}`;
     }
@@ -599,16 +616,29 @@ function onCellClick(real) {
 }
 
 // ---------- Home actions ----------
+function selectedVariant() {
+  const el = document.querySelector('input[name="variant"]:checked');
+  return el && el.value === 'clash' ? 'clash' : 'traditional';
+}
+const MODE_DESC = {
+  traditional: 'Race all seven dice across; win on the highest home-row total. Jumps allowed, no captures.',
+  clash: 'First die across wins — but no jumping, and dice clash and eliminate each other.',
+};
+function updateModeDesc() {
+  const d = $('mode-desc');
+  if (d) d.textContent = MODE_DESC[selectedVariant()];
+}
+
 async function startAi() {
   homeError.textContent = '';
   await connect();
   const depth = Number($('ai-depth').value);
-  sendMsg({ type: 'create', mode: 'ai', aiDepth: depth, name: $('name').value.trim() });
+  sendMsg({ type: 'create', mode: 'ai', aiDepth: depth, variant: selectedVariant(), name: $('name').value.trim() });
 }
 async function createRoom() {
   homeError.textContent = '';
   await connect();
-  sendMsg({ type: 'create', mode: 'pvp', name: $('name').value.trim() });
+  sendMsg({ type: 'create', mode: 'pvp', variant: selectedVariant(), name: $('name').value.trim() });
 }
 async function joinRoom() {
   homeError.textContent = '';
@@ -618,6 +648,8 @@ async function joinRoom() {
   sendMsg({ type: 'join', code, name: $('name').value.trim() });
 }
 
+document.querySelectorAll('input[name="variant"]').forEach((el) => el.addEventListener('change', updateModeDesc));
+updateModeDesc();
 $('btn-ai').addEventListener('click', startAi);
 $('btn-create').addEventListener('click', createRoom);
 $('btn-join').addEventListener('click', joinRoom);

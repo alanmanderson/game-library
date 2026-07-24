@@ -11,13 +11,22 @@
     <!-- ===== Home ===== -->
     <section id="home" class="screen">
       <h1 class="logo">DITTLE</h1>
-      <p class="tagline">Tilt your seven dice across the board. First to the far row wins.</p>
+      <p class="tagline">Race your seven dice across the board. Two ways to play.</p>
 
       <div class="card">
         <label class="field">
           <span>Your name</span>
           <input id="name" maxlength="20" placeholder="Player" autocomplete="off" />
         </label>
+
+        <div class="field">
+          <span>Game mode</span>
+          <div class="segmented" id="variant-toggle" role="radiogroup" aria-label="Game mode">
+            <label><input type="radio" name="variant" value="traditional" checked /><span>Traditional</span></label>
+            <label><input type="radio" name="variant" value="clash" /><span>Clash</span></label>
+          </div>
+          <p class="mode-desc" id="mode-desc"></p>
+        </div>
 
         <div class="btn-row">
           <button id="btn-ai" class="primary">Play vs Computer</button>
@@ -49,13 +58,18 @@
       <details class="rules">
         <summary>How to play</summary>
         <ul>
-          <li>Each player has <b>7 dice</b> on their home row, starting with <b>6</b> face-up.</li>
-          <li>On your turn, make one move: <b>tilt</b> or <b>jump</b>. No backward moves, no diagonals.</li>
-          <li><b>Tilt</b> one die one square <b>forward</b> (toward the far side) or <b>sideways</b>. The die rolls, so its top number changes.</li>
-          <li><b>Jump</b> a die in a straight line over one or more dice — <b>yours or the enemy's</b> — landing on the empty square just past a jumped die (jumps chain if there's a gap between dice). A jump doesn't change the die's number and doesn't capture.</li>
-          <li><b>Clash:</b> tilt onto an enemy die and the <b>lower</b> top-number is removed (a tie removes both). You can't land on your own die.</li>
-          <li><b>Surround:</b> a die flanked by two or more enemies compares its number to their <b>sum</b> — the lower side is wiped out.</li>
-          <li><b>Win:</b> get any one die to the <b>opponent's home row</b>, or leave them with no dice / no move.</li>
+          <li>Each player has <b>7 dice</b> on their home row, starting with <b>6</b> face-up. Move one die per turn — <b>forward</b> or <b>sideways</b>, never backward or diagonal. A <b>tilt</b> rolls a die one square, changing its top number.</li>
+        </ul>
+        <p class="rules-mode"><b>Traditional</b> — the full game:</p>
+        <ul>
+          <li>Get <b>all seven</b> of your dice into the opponent's home row. The game ends the moment one player has all seven across.</li>
+          <li>The winner is whoever's dice in the home row show the <b>higher total</b> of top numbers — so arriving with high numbers matters as much as arriving first. Keep tilting a die once it's across to raise its number.</li>
+          <li><b>Jump</b> a die over one or more dice (yours or the enemy's) to the empty square just past — jumps keep the top number and never capture. Pure jumps go straight; a tilt-then-jump may turn (L-shape). <b>No dice are ever removed.</b></li>
+        </ul>
+        <p class="rules-mode"><b>Clash</b> — fast &amp; aggressive:</p>
+        <ul>
+          <li>Get <b>any one</b> die to the opponent's home row and you win immediately.</li>
+          <li><b>No jumping</b> — tilts only. Tilt onto an enemy die and the <b>lower</b> number is removed (a tie removes both). A die flanked by two or more enemies compares its number to their <b>sum</b> — the lower side is wiped out.</li>
         </ul>
       </details>
       <p class="footnote">A faithful digital adaptation of Dittle: Dice Battle. AI opponent uses alpha-beta lookahead over a self-play-trained evaluation.</p>
@@ -72,7 +86,7 @@
       </header>
 
       <div class="headline">
-        <span class="kicker">Dittle</span>
+        <span class="kicker" id="kicker">Dittle</span>
         <div id="status" class="status"></div>
       </div>
 

@@ -11,46 +11,64 @@
 //
 // Starting from the defaults, it does coordinate ascent: nudge one weight at a
 // time, keep the nudge if it raises the win rate. Steps anneal as it converges.
-// Because it optimizes win rate directly (not outcome-correlation, which distorts
-// a linear value model — e.g. it over-values central control), the result is
-// weights that genuinely play better. Finally it validates on a DISJOINT set of
-// openings and only ships the learned weights if they still beat the defaults on
-// unseen games; otherwise it falls back to the defaults so training can never
-// regress. Output: ai/weights.json (loaded by the server).
+// Finally it validates on a DISJOINT set of openings and only ships the learned
+// weights if they still beat the defaults on unseen games; otherwise it falls back
+// to the defaults so training can never regress.
+//
+// BOTH variants are trained (each has its own features + weights). Output:
+// ai/weights.json = { traditional: {weights, meta}, clash: {weights, meta} }.
+//
+// Usage:
+//   node ai/train.js [sweeps]                 # train both variants
+//   node ai/train.js [sweeps] traditional     # train one variant
+//   node ai/train.js [sweeps] clash
+// Env knobs (handy for quick runs): DITTLE_TRAIN_SEEDS, DITTLE_VAL_SEEDS,
+//   DITTLE_RESTARTS, DITTLE_MAX_PLIES.
 
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { initialState, applyMove, legalMoves } from '../shared/engine.js';
-import { search, DEFAULT_WEIGHTS } from '../shared/ai.js';
+import { search, defaultWeights } from '../shared/ai.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT = join(__dirname, 'weights.json');
 
-const KEYS = Object.keys(DEFAULT_WEIGHTS);
+const NUM = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
+const TRAIN_SEEDS = NUM(process.env.DITTLE_TRAIN_SEEDS, 32);
+const VAL_SEEDS = NUM(process.env.DITTLE_VAL_SEEDS, 20);
+const RESTARTS = NUM(process.env.DITTLE_RESTARTS, 2);
+// Cap self-play game length so training stays fast; games that hit it are decided by
+// the engine's positional adjudication.
+const GAME_PLY_CAP = NUM(process.env.DITTLE_MAX_PLIES, 160);
+
+// Known sign of each feature weight, so learned weights stay sensible.
+const SIGN = {
+  material: 'pos1', vulnerability: 'neg',
+  advance: 'pos', lead: 'pos', strength: 'pos', goalThreat: 'pos', center: 'any',
+  across: 'pos', acrossScore: 'pos', nearGoal: 'pos',
+};
+function clampSigns(w) {
+  const o = { ...w };
+  for (const k in o) {
+    if (SIGN[k] === 'pos1') o[k] = Math.max(1, o[k]);
+    else if (SIGN[k] === 'pos') o[k] = Math.max(0, o[k]);
+    else if (SIGN[k] === 'neg') o[k] = Math.min(0, o[k]);
+  }
+  return o;
+}
 
 function makeRng(seed) {
   let s = seed >>> 0;
   return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
 }
 
-// Keep learned weights sensible: rewards non-negative, penalties non-positive.
-function clampSigns(w) {
-  const o = { ...w };
-  o.material = Math.max(1, o.material);
-  o.advance = Math.max(0, o.advance);
-  o.lead = Math.max(0, o.lead);
-  o.goalThreat = Math.max(0, o.goalThreat);
-  o.vulnerability = Math.min(0, o.vulnerability);
-  return o;
-}
-
-// Play one game: white uses wWhite, black uses wBlack. Returns winner (0/1/-1).
-// A few random opening plies (seeded) diversify the games.
-function playGame(wWhite, wBlack, seed, depth) {
+// Play one game of `variant`: white uses wWhite, black uses wBlack. Returns winner
+// (0/1/-1). A few random opening plies (seeded) diversify the games.
+function playGame(wWhite, wBlack, seed, depth, variant) {
   const rng = makeRng(seed);
-  let state = initialState();
-  for (let ply = 0; ply < 200 && state.status === 'playing'; ply++) {
+  let state = initialState(variant);
+  for (let ply = 0; ply < GAME_PLY_CAP && state.status === 'playing'; ply++) {
     const w = state.turn === 0 ? wWhite : wBlack;
     let mv;
     if (ply < 6 && rng() < 0.5) { const lm = legalMoves(state); mv = lm[Math.floor(rng() * lm.length)]; }
@@ -63,12 +81,12 @@ function playGame(wWhite, wBlack, seed, depth) {
 }
 
 // Win rate of `w` vs `benchmark` over a seed panel, playing both colors per seed.
-function winRate(w, benchmark, seeds, depth) {
+function winRate(w, benchmark, seeds, depth, variant) {
   let score = 0, games = 0;
   for (const seed of seeds) {
     for (let color = 0; color < 2; color++) {
-      const winner = color === 0 ? playGame(w, benchmark, seed, depth)
-                                 : playGame(benchmark, w, seed, depth);
+      const winner = color === 0 ? playGame(w, benchmark, seed, depth, variant)
+                                 : playGame(benchmark, w, seed, depth, variant);
       games++;
       if (winner === -1) { score += 0.5; continue; }
       const wWasWhite = color === 0;
@@ -78,24 +96,26 @@ function winRate(w, benchmark, seeds, depth) {
   return score / games;
 }
 
-function train(sweeps = 6, seed = 12345) {
+function trainVariant(variant, sweeps, seed) {
   const t0 = Date.now();
-  const benchmark = { ...DEFAULT_WEIGHTS };
+  const DEFAULTS = defaultWeights(variant);
+  const KEYS = Object.keys(DEFAULTS);
+  const benchmark = { ...DEFAULTS };
   const TRAIN_DEPTH = 2; // fast, many games -> low-variance fitness
   const VAL_DEPTH = 3;   // measure final strength at the runtime default depth
-  const trainSeeds = Array.from({ length: 60 }, (_, i) => (seed + i * 7919) >>> 0);
-  const valSeeds = Array.from({ length: 40 }, (_, i) => (seed + 900000 + i * 6151) >>> 0);
+  const trainSeeds = Array.from({ length: TRAIN_SEEDS }, (_, i) => (seed + i * 7919) >>> 0);
+  const valSeeds = Array.from({ length: VAL_SEEDS }, (_, i) => (seed + 900000 + i * 6151) >>> 0);
   const MARGIN = 0.015; // require a real gain to accept a nudge (beat the noise)
   const rng = makeRng((seed ^ 0x9e3779b9) >>> 0);
 
-  const startFit = winRate(DEFAULT_WEIGHTS, benchmark, trainSeeds, TRAIN_DEPTH);
+  console.log(`\n=== Training '${variant}' (${KEYS.length} weights) ===`);
+  const startFit = winRate(DEFAULTS, benchmark, trainSeeds, TRAIN_DEPTH, variant);
   console.log(`start: win rate vs defaults = ${(startFit * 100).toFixed(1)}% (self-play baseline ~50%)`);
 
-  // Coordinate ascent from a starting weight vector. Slow annealing lets it keep
-  // finding gains for several sweeps before shrinking the step.
+  // Coordinate ascent from a starting weight vector.
   function hillClimb(start) {
     let w = clampSigns({ ...start });
-    let fit = winRate(w, benchmark, trainSeeds, TRAIN_DEPTH);
+    let fit = winRate(w, benchmark, trainSeeds, TRAIN_DEPTH, variant);
     let step = 0.4;
     for (let s = 0; s < sweeps; s++) {
       let improved = false;
@@ -104,7 +124,7 @@ function train(sweeps = 6, seed = 12345) {
         const mag = Math.max(2, Math.abs(base));
         for (const val of [base * (1 + step), base * (1 - step), base + step * mag, base - step * mag]) {
           const cand = clampSigns({ ...w, [k]: val });
-          const f = winRate(cand, benchmark, trainSeeds, TRAIN_DEPTH);
+          const f = winRate(cand, benchmark, trainSeeds, TRAIN_DEPTH, variant);
           if (f > fit + MARGIN) { w = cand; fit = f; improved = true; }
         }
       }
@@ -114,17 +134,15 @@ function train(sweeps = 6, seed = 12345) {
     return { w, fit };
   }
 
-  // First climb from the hand-tuned defaults, then several random restarts
-  // (perturbations of the defaults) to escape local optima. Keep the global best
-  // by training fitness; the held-out validation below is the final gatekeeper.
-  let best = hillClimb(DEFAULT_WEIGHTS);
+  // First climb from the hand-tuned defaults, then random restarts (perturbations of
+  // the defaults) to escape local optima. Keep the global best by training fitness.
+  let best = hillClimb(DEFAULTS);
   console.log(`restart 0 (from defaults): train ${(best.fit * 100).toFixed(1)}%`);
-  const RESTARTS = 4;
   for (let r = 0; r < RESTARTS; r++) {
     const start = {};
     for (const k of KEYS) {
-      const mag = Math.max(2, Math.abs(DEFAULT_WEIGHTS[k]));
-      start[k] = DEFAULT_WEIGHTS[k] + (rng() * 2 - 1) * 0.5 * mag;
+      const mag = Math.max(2, Math.abs(DEFAULTS[k]));
+      start[k] = DEFAULTS[k] + (rng() * 2 - 1) * 0.5 * mag;
     }
     const res = hillClimb(start);
     console.log(`restart ${r + 1}/${RESTARTS}: train ${(res.fit * 100).toFixed(1)}%`);
@@ -134,25 +152,28 @@ function train(sweeps = 6, seed = 12345) {
   const bestFit = best.fit;
 
   // Held-out validation at runtime depth.
-  const learnedVal = winRate(w, benchmark, valSeeds, VAL_DEPTH);
+  const learnedVal = winRate(w, benchmark, valSeeds, VAL_DEPTH, variant);
   const accepted = learnedVal > 0.5 + MARGIN;
   let finalWeights = w;
   if (!accepted) {
-    console.log(
-      `\nValidation: learned ${(learnedVal * 100).toFixed(1)}% vs defaults on unseen openings — not a clear win, keeping defaults.`);
-    finalWeights = { ...DEFAULT_WEIGHTS };
+    console.log(`Validation: learned ${(learnedVal * 100).toFixed(1)}% vs defaults on unseen openings — not a clear win, keeping defaults.`);
+    finalWeights = { ...DEFAULTS };
   } else {
-    console.log(
-      `\nValidation: learned weights beat defaults ${(learnedVal * 100).toFixed(1)}% on unseen openings (depth ${VAL_DEPTH}) — accepted.`);
+    console.log(`Validation: learned weights beat defaults ${(learnedVal * 100).toFixed(1)}% on unseen openings (depth ${VAL_DEPTH}) — accepted.`);
   }
 
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
-  const payload = {
+  console.log(`'${variant}' trained in ${elapsed}s. Final weights:`, finalWeights);
+  return {
     weights: finalWeights,
     meta: {
+      variant,
       method: 'self-play coordinate-ascent policy search',
       sweeps,
       trainSeeds: trainSeeds.length,
+      valSeeds: valSeeds.length,
+      restarts: RESTARTS,
+      gamePlyCap: GAME_PLY_CAP,
       trainDepth: TRAIN_DEPTH,
       valDepth: VAL_DEPTH,
       startWinRateVsDefault: Number(startFit.toFixed(3)),
@@ -164,11 +185,32 @@ function train(sweeps = 6, seed = 12345) {
       trainedAt: new Date().toISOString(),
     },
   };
-  writeFileSync(OUT, JSON.stringify(payload, null, 2));
-  console.log(`\nTrained in ${elapsed}s.`);
-  console.log('Final weights:', finalWeights);
-  console.log('Wrote', OUT);
 }
 
-const sweeps = Number(process.argv[2]) || 6;
-train(sweeps);
+function main() {
+  const sweeps = Number(process.argv[2]) || 5;
+  const only = process.argv[3]; // optional: 'traditional' | 'clash'
+  const t0 = Date.now();
+
+  // Preserve any existing trained entry for a variant we are not training this run
+  // (only the known per-variant keys — never legacy/stray top-level fields).
+  const payload = {};
+  if (existsSync(OUT)) {
+    try {
+      const prev = JSON.parse(readFileSync(OUT, 'utf8'));
+      for (const v of ['traditional', 'clash']) {
+        if (prev?.[v]?.weights) payload[v] = prev[v];
+      }
+    } catch { /* ignore malformed existing file */ }
+  }
+
+  const variants = only === 'traditional' || only === 'clash' ? [only] : ['traditional', 'clash'];
+  for (const variant of variants) {
+    payload[variant] = trainVariant(variant, sweeps, 12345);
+  }
+
+  writeFileSync(OUT, JSON.stringify(payload, null, 2));
+  console.log(`\nAll done in ${((Date.now() - t0) / 1000).toFixed(1)}s. Wrote ${OUT}`);
+}
+
+main();

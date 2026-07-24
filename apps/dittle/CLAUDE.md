@@ -4,7 +4,13 @@ Web-based two-player **Dittle: Dice Battle** with online rooms (4-letter codes) 
 self-play-trained AI opponent. Node 20 + Express + `ws`, with a static vanilla-JS
 frontend served from `public/`. No database — all state is in memory.
 
-Deployed at `dittle.games.alanmanderson.com`.
+Ships **two official variants**, chosen when a game is created (`state.variant`):
+- **`traditional`** — get all 7 dice into the opponent's home row; winner is the higher
+  home-row up-face total. Jumps allowed; **no capturing**.
+- **`clash`** — first die across wins; **no jumping**; dice clash and eliminate each
+  other (direct + surround).
+
+See `Rules.md` for the full rules of both. Deployed at `dittle.games.alanmanderson.com`.
 
 ## Quick start
 
@@ -30,10 +36,11 @@ running server over WebSocket.
 
 | Path | Purpose |
 |------|---------|
-| `shared/engine.js` | Pure rules engine (board, moves, clashes, win/score). Runs in Node **and** the browser. |
-| `shared/ai.js` | Evaluation features + alpha-beta look-ahead search. |
-| `ai/train.js` | Self-play evolutionary trainer → `ai/weights.json`. |
-| `ai/weights.json` | Learned evaluation weights + training metadata. |
+| `Rules.md` | Full rules for both variants (Traditional + Clash). |
+| `shared/engine.js` | Pure, variant-aware rules engine (board, moves, clashes, win/score). Runs in Node **and** the browser. |
+| `shared/ai.js` | Per-variant evaluation features + alpha-beta look-ahead search. |
+| `ai/train.js` | Self-play trainer for both variants → `ai/weights.json`. |
+| `ai/weights.json` | Learned per-variant weights + metadata (`{ traditional, clash }`). |
 | `server/server.js` | Express static host + WebSocket rooms + AI opponent + `/health`. |
 | `server/rooms.js` | In-memory room manager (create/join by 4-letter code). |
 | `server/logservice.js` | Centralized log-service SDK (WARNING+ → `LOG_SERVICE_URL`). |
@@ -48,14 +55,15 @@ running server over WebSocket.
 - **One shared engine.** `shared/engine.js` is imported by the server and served to the
   browser at `/shared/engine.js`, so client and server run identical rules.
 - **AI opponent.** In `mode: 'ai'` rooms the server computes the computer's reply with
-  `bestMove` (alpha-beta minimax over learned weights) after each human move.
+  `bestMove` (alpha-beta minimax over learned weights) after each human move, using the
+  weight set for the room's `variant`.
 - **Rooms** are keyed by a 4-letter code (ambiguous characters excluded) and deleted
   when both seats disconnect. There is no persistence — a restart clears all rooms.
 
 ### WebSocket protocol
 
 Single `ws` endpoint on the same HTTP server. Client → server messages (JSON, keyed by
-`type`): `create` (`mode`, `aiDepth`, `name`), `join` (`code`, `name`), `move` (`move`),
+`type`): `create` (`mode`, `variant`, `aiDepth`, `name`), `join` (`code`, `name`), `move` (`move`),
 `hint`, `rematch`. Server → client: `created`, `joined`, `state` (authoritative state
 plus that seat's `legalMoves` and `yourTurn`), `hint`, `error`, `opponentLeft`.
 

@@ -6,8 +6,8 @@ import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-import { initialState, applyMove, legalMoves, moveKey } from '../shared/engine.js';
-import { bestMove, DEFAULT_WEIGHTS } from '../shared/ai.js';
+import { initialState, applyMove, legalMoves, moveKey, normalizeVariant } from '../shared/engine.js';
+import { bestMove, DEFAULT_WEIGHTS_TRADITIONAL, DEFAULT_WEIGHTS_CLASH } from '../shared/ai.js';
 import { RoomManager } from './rooms.js';
 import { LogService, expressErrorLogger } from './logservice.js';
 
@@ -17,15 +17,28 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 const PORT = process.env.PORT || 3000;
 
-// Load self-play-trained weights if present.
+// Load self-play-trained per-variant weights if present. Returns
+// { traditional, clash } weight vectors, falling back to defaults for anything
+// missing. Supports both the current schema ({ traditional: {weights}, clash: {weights} })
+// and the legacy single-vector schema ({ weights } — treated as clash).
 function loadWeights() {
+  const fallback = {
+    traditional: DEFAULT_WEIGHTS_TRADITIONAL,
+    clash: DEFAULT_WEIGHTS_CLASH,
+  };
   const p = join(ROOT, 'ai', 'weights.json');
   if (existsSync(p)) {
     try {
       const parsed = JSON.parse(readFileSync(p, 'utf8'));
-      if (parsed && parsed.weights) {
+      const out = { ...fallback };
+      let loadedAny = false;
+      for (const v of ['traditional', 'clash']) {
+        if (parsed?.[v]?.weights) { out[v] = parsed[v].weights; loadedAny = true; }
+      }
+      if (!loadedAny && parsed?.weights) { out.clash = parsed.weights; loadedAny = true; } // legacy
+      if (loadedAny) {
         console.log('Loaded self-play-trained AI weights from ai/weights.json');
-        return parsed.weights;
+        return out;
       }
     } catch (e) {
       console.warn('Could not parse weights.json, using defaults:', e.message);
@@ -35,9 +48,10 @@ function loadWeights() {
     }
   }
   console.log('Using default AI weights (run `npm run train` to learn better ones).');
-  return DEFAULT_WEIGHTS;
+  return fallback;
 }
 const AI_WEIGHTS = loadWeights();
+const weightsFor = (variant) => AI_WEIGHTS[normalizeVariant(variant)];
 
 const app = express();
 app.use(express.static(join(ROOT, 'public')));
@@ -65,6 +79,7 @@ function broadcastState(room, lastMoveMeta = null) {
       type: 'state',
       code: room.code,
       mode: room.mode,
+      variant: room.variant,
       you: seat,
       names: room.names,
       occupied: [!!room.players[0], room.mode === 'ai' ? true : !!room.players[1]],
@@ -85,7 +100,7 @@ function maybeAiMove(room) {
   // Compute asynchronously so we don't block the event loop noticeably.
   setTimeout(() => {
     if (room.state.status !== 'playing' || room.state.turn !== 1) return;
-    const { move } = bestMove(room.state, room.aiDepth, AI_WEIGHTS);
+    const { move } = bestMove(room.state, room.aiDepth, weightsFor(room.variant));
     if (!move) return;
     room.state = applyMove(room.state, move);
     broadcastState(room);
@@ -155,12 +170,13 @@ function handleMessage(ws, msg) {
         // depth would let a single message trigger an exponential AI search (DoS).
         const requestedDepth = Math.floor(Number(msg.aiDepth));
         const aiDepth = Number.isFinite(requestedDepth) ? Math.max(1, Math.min(7, requestedDepth)) : 3;
-        const room = rooms.createRoom({ mode: msg.mode === 'ai' ? 'ai' : 'pvp', aiDepth });
+        const variant = normalizeVariant(msg.variant);
+        const room = rooms.createRoom({ mode: msg.mode === 'ai' ? 'ai' : 'pvp', aiDepth, variant });
         room.players[0] = ws;
         if (msg.name) room.names[0] = String(msg.name).slice(0, 20);
         ws.roomCode = room.code;
         ws.seat = 0;
-        send(ws, { type: 'created', code: room.code, you: 0, mode: room.mode });
+        send(ws, { type: 'created', code: room.code, you: 0, mode: room.mode, variant: room.variant });
         broadcastState(room);
         // In AI mode player 0 always moves first, so no immediate AI move.
         break;
@@ -175,7 +191,7 @@ function handleMessage(ws, msg) {
         if (msg.name) room.names[1] = String(msg.name).slice(0, 20);
         ws.roomCode = room.code;
         ws.seat = 1;
-        send(ws, { type: 'joined', code: room.code, you: 1, mode: room.mode });
+        send(ws, { type: 'joined', code: room.code, you: 1, mode: room.mode, variant: room.variant });
         broadcastState(room);
         break;
       }
@@ -191,7 +207,7 @@ function handleMessage(ws, msg) {
         const room = rooms.getRoom(ws.roomCode);
         if (!room || ws.seat === null) break;
         if (room.state.turn !== ws.seat || room.state.status !== 'playing') break;
-        const { move, score } = bestMove(room.state, Math.max(2, room.aiDepth), AI_WEIGHTS);
+        const { move, score } = bestMove(room.state, Math.max(2, room.aiDepth), weightsFor(room.variant));
         send(ws, { type: 'hint', move, score });
         break;
       }
@@ -199,7 +215,7 @@ function handleMessage(ws, msg) {
       case 'rematch': {
         const room = rooms.getRoom(ws.roomCode);
         if (!room) break;
-        room.state = initialState();
+        room.state = initialState(room.variant);
         broadcastState(room);
         break;
       }
