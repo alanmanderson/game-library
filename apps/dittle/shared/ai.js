@@ -21,7 +21,7 @@ export const DEFAULT_WEIGHTS_CLASH = {
   advance: 6,          // total forward progress advantage
   lead: 14,            // most-advanced die (racing toward the goal)
   strength: 3,         // sum of up-faces (higher = wins clashes)
-  goalThreat: 40,      // a die one tilt/jump away from the goal row
+  goalThreat: 40,      // a die one tilt away from the goal row
   vulnerability: -12,  // own dice that are surroundable next turn
   center: 1,           // mild preference for central files
 };
